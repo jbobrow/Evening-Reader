@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// The panel: warmth, glow, contrast, polarity — plus the type controls the reader uses.
+/// The panel. Everything about the light first — warmth, glow, contrast, polarity, the
+/// lattice and the bloom, and the glows kept from them — then, past a rule, the type the
+/// page is set in.
 struct PanelControls: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
@@ -43,39 +45,10 @@ struct PanelControls: View {
                                    options: AmberPalette.Polarity.allCases,
                                    label: \.label,
                                    symbol: { $0.symbol })
-                }
 
-                group("Type") {
-                    labelled("Size", value: String(format: "%.0f pt", settings.bodyPointSize)) {
-                        AmberSlider(value: Binding(get: { settings.textScale },
-                                                   set: { settings.textScale = $0 }),
-                                    range: 0.8...1.9,
-                                    ticks: 7,
-                                    leadingSymbol: "textformat.size.smaller",
-                                    trailingSymbol: "textformat.size.larger")
-                    }
-                    labelled("Leading", value: String(format: "%.2f", settings.lineHeight)) {
-                        AmberSlider(value: Binding(get: { settings.lineHeight },
-                                                   set: { settings.lineHeight = $0 }),
-                                    range: 1.25...2.05,
-                                    leadingSymbol: "arrow.up.and.down.text.horizontal",
-                                    trailingSymbol: "arrow.up.and.down")
-                    }
-                    if showsColumn {
-                        labelled("Column", value: String(format: "%.0f pt", settings.readerColumnPoints)) {
-                            AmberSlider(value: Binding(get: { settings.measure },
-                                                       set: { settings.measure = $0 }),
-                                        leadingSymbol: "arrow.right.and.line.vertical.and.arrow.left",
-                                        trailingSymbol: "arrow.left.and.line.vertical.and.arrow.right")
-                        }
-                    }
-                    AmberSegmented(selection: Binding(get: { settings.typeface },
-                                                      set: { settings.typeface = $0 }),
-                                   options: DisplaySettings.Typeface.allCases,
-                                   label: \.label)
-                }
-
-                group("Panel") {
+                    // The lattice and the bloom are part of what the panel is lit like,
+                    // not a category of their own — under their own "Panel" heading they
+                    // read as a third thing the app does.
                     AmberToggle(isOn: Binding(get: { settings.showTexture },
                                               set: { settings.showTexture = $0 }),
                                 title: "Pixel grid")
@@ -120,6 +93,43 @@ struct PanelControls: View {
                         .disabled(settings.isDefaultPanel)
                         .accessibilityLabel("Reset to default")
                     }
+                }
+
+                // The one division worth drawing. Everything above is the glow — the
+                // lamp, its texture, and the glows kept from it; below is what the page
+                // is set in. A rule and a wider gap say that, where four evenly spaced
+                // headings said only that there were four of them.
+                Hairline()
+                    .padding(.vertical, 8)
+
+                group("Type") {
+                    labelled("Size", value: String(format: "%.0f pt", settings.bodyPointSize)) {
+                        AmberSlider(value: Binding(get: { settings.textScale },
+                                                   set: { settings.textScale = $0 }),
+                                    range: 0.8...1.9,
+                                    ticks: 7,
+                                    leadingSymbol: "textformat.size.smaller",
+                                    trailingSymbol: "textformat.size.larger")
+                    }
+                    labelled("Leading", value: String(format: "%.2f", settings.lineHeight)) {
+                        AmberSlider(value: Binding(get: { settings.lineHeight },
+                                                   set: { settings.lineHeight = $0 }),
+                                    range: 1.25...2.05,
+                                    leadingSymbol: "arrow.up.and.down.text.horizontal",
+                                    trailingSymbol: "arrow.up.and.down")
+                    }
+                    if showsColumn {
+                        labelled("Column", value: String(format: "%.0f pt", settings.readerColumnPoints)) {
+                            AmberSlider(value: Binding(get: { settings.measure },
+                                                       set: { settings.measure = $0 }),
+                                        leadingSymbol: "arrow.right.and.line.vertical.and.arrow.left",
+                                        trailingSymbol: "arrow.left.and.line.vertical.and.arrow.right")
+                        }
+                    }
+                    AmberSegmented(selection: Binding(get: { settings.typeface },
+                                                      set: { settings.typeface = $0 }),
+                                   options: DisplaySettings.Typeface.allCases,
+                                   label: \.label)
                 }
             }
             .padding(22)
