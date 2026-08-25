@@ -1,0 +1,17 @@
+# Derived data. This project builds into ./build via -derivedDataPath, so it is
+# hundreds of megabytes of machine-specific output sitting inside the source tree.
+build/
+
+# Xcode per-user state: window layout, breakpoints, which scheme you last picked.
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/

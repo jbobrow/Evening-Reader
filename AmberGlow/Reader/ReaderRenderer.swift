@@ -1,0 +1,330 @@
+import Foundation
+
+/// Builds the reader document. Everything adjustable lives in CSS custom properties so
+/// the panel and type controls can be applied live, without reloading and losing the
+/// reader's place on the page.
+struct ReaderRenderer {
+
+    static func styleVariables(palette: AmberPalette, settings: DisplaySettings) -> [String: String] {
+        [
+            "--page": palette.pageHex,
+            "--page-dim": palette.pageDimHex,
+            "--page-raised": palette.pageRaisedHex,
+            "--ink": palette.inkHex,
+            "--ink-strong": palette.inkStrongHex,
+            "--ink-muted": palette.inkMutedHex,
+            "--rule": palette.ruleHex,
+            "--size": String(format: "%.2fpx", settings.bodyPointSize),
+            "--lh": String(format: "%.3f", settings.lineHeight),
+            "--measure": String(format: "%.0fpx", settings.readerColumnPoints),
+            "--family": settings.typeface.cssStack,
+            "--grid": settings.showTexture ? "1" : "0",
+            "--img-filter": palette.polarity == .night ? "url(#ag-ink-night)" : "url(#ag-ink)"
+        ]
+    }
+
+    /// JS that pushes a new set of variables into an already-loaded document.
+    static func applyStyleScript(palette: AmberPalette, settings: DisplaySettings) -> String {
+        let pairs = styleVariables(palette: palette, settings: settings)
+            .map { "\"\($0.key)\":\"\($0.value)\"" }
+            .joined(separator: ",")
+        return """
+        window.__ag && window.__ag.apply({\(pairs)});
+        window.__ag && window.__ag.inkMatrix("\(nightInkMatrix(palette))");
+        """
+    }
+
+    /// The night image filter has to carry the ink colour, so unlike the paper one it
+    /// cannot be a constant. Dark parts of a picture become ink, light parts go fully
+    /// transparent and let the page through — the same inversion the type gets, so a
+    /// line drawing reads as amber on black rather than as a white card.
+    static func nightInkMatrix(_ palette: AmberPalette) -> String {
+        let (r, g, b) = palette.rgb(0.045)
+        return String(format: "0 0 0 0 %.4f  0 0 0 0 %.4f  0 0 0 0 %.4f  -0.2126 -0.7152 -0.0722 0 1",
+                      r, g, b)
+    }
+
+    static func document(article: SavedArticle, body: String,
+                         palette: AmberPalette, settings: DisplaySettings) -> String {
+        let vars = styleVariables(palette: palette, settings: settings)
+            .sorted { $0.key < $1.key }
+            .map { "      \($0.key): \($0.value);" }
+            .joined(separator: "\n")
+
+        let dateLine = (article.publishedAt ?? article.addedAt)
+            .formatted(date: .abbreviated, time: .omitted)
+        var meta: [String] = []
+        if let byline = article.byline, !byline.isEmpty { meta.append(escape(byline)) }
+        if let site = article.siteName, !site.isEmpty { meta.append(escape(site)) }
+        else { meta.append(escape(article.host)) }
+        meta.append("\(article.estimatedMinutes) min")
+        meta.append(escape(dateLine))
+
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+        <title>\(escape(article.displayTitle))</title>
+        <style>
+        :root {
+        \(vars)
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        /* The document paints no background of its own. The app's GlowSurface is the
+           only surface in the app, and it carries the backlight bloom and the pixel
+           lattice; a fill here would sit on top of that, flattening the bloom and
+           leaving a seam wherever the web view's bounds end. */
+        html { -webkit-text-size-adjust: none; background: transparent; }
+        body {
+          margin: 0;
+          background: transparent;
+          color: var(--ink);
+          font-family: var(--family);
+          font-size: var(--size);
+          line-height: var(--lh);
+          font-synthesis-weight: none;
+          text-rendering: optimizeLegibility;
+        }
+        ::selection { background: var(--rule); color: var(--ink-strong); }
+
+        .wrap {
+          max-width: var(--measure);
+          margin: 0 auto;
+          padding: 26px 30px 180px;
+        }
+        header.ag-head { margin: 0 0 34px; }
+        header.ag-head h1 {
+          font-size: 2.05em;
+          line-height: 1.16;
+          font-weight: 600;
+          letter-spacing: -0.012em;
+          margin: 0 0 14px;
+          color: var(--ink-strong);
+          text-wrap: balance;
+        }
+        header.ag-head .ag-meta {
+          font-family: -apple-system, ui-sans-serif, sans-serif;
+          font-size: 0.72em;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--ink-muted);
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0 10px;
+        }
+        header.ag-head .ag-meta span:not(:last-child)::after { content: " ·"; }
+        header.ag-head hr { margin: 22px 0 0; }
+
+        p { margin: 0 0 1.1em; }
+        p:first-child { margin-top: 0; }
+        h1, h2, h3, h4, h5, h6 {
+          color: var(--ink-strong);
+          line-height: 1.24;
+          margin: 1.9em 0 0.6em;
+          font-weight: 600;
+          letter-spacing: -0.006em;
+        }
+        h2 { font-size: 1.42em; }
+        h3 { font-size: 1.18em; }
+        h4, h5, h6 { font-size: 1.02em; }
+        a { color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: var(--rule); }
+        strong, b { font-weight: 650; }
+        ul, ol { margin: 0 0 1.1em; padding-left: 1.35em; }
+        li { margin: 0 0 0.42em; }
+        blockquote {
+          margin: 1.5em 0;
+          padding: 0.1em 0 0.1em 1.2em;
+          border-left: 3px solid var(--rule);
+          color: var(--ink-muted);
+          font-style: italic;
+        }
+        hr { border: 0; border-top: 1px solid var(--rule); margin: 2.2em 0; }
+        pre {
+          background: var(--page-dim);
+          border: 1px solid var(--rule);
+          border-radius: 8px;
+          padding: 14px 16px;
+          overflow-x: auto;
+          font-family: ui-monospace, "SF Mono", Menlo, monospace;
+          font-size: 0.84em;
+          line-height: 1.5;
+        }
+        code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.86em; }
+        p > code, li > code { background: var(--page-dim); padding: 0.1em 0.32em; border-radius: 4px; }
+        /* Images join the panel: stripped of their own color, then tinted by the glow.
+           The tint is a blend, so it needs something opaque to land on. The document
+           itself is transparent (the app's GlowSurface is the only surface), so each
+           image carries its own page-coloured tile and isolates the blend to it —
+           otherwise white areas of a diagram would blend with nothing and stay white. */
+        /* Images become ink on the page rather than pictures sitting on it.
+           A blend mode would need something opaque underneath, and anything opaque we
+           could put there is a flat colour, which shows as a rectangle against the
+           backlight bloom. So the filter turns luminance into *alpha* instead: white
+           goes fully transparent, black goes fully opaque. Composited normally over the
+           surface that is really there, that is exactly a multiply — bloom included —
+           and it needs no backdrop and no palette-dependent values. */
+        /* Emoji arrive as colour bitmaps from the system font — the one thing in the
+           type that the ramp does not reach. They get the same luminance-to-ink filter
+           the pictures do, so they read as a mark on the page rather than a sticker. */
+        .ag-emoji {
+          filter: var(--img-filter);
+        }
+        img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          margin: 1.6em auto;
+          filter: contrast(1.04) var(--img-filter);
+          opacity: 0.94;
+        }
+        figure { margin: 1.7em 0; }
+        figcaption ol, figcaption ul, figcaption li { text-align: left; }
+        figcaption {
+          font-family: -apple-system, ui-sans-serif, sans-serif;
+          font-size: 0.76em;
+          line-height: 1.45;
+          color: var(--ink-muted);
+          text-align: center;
+          margin-top: 0.5em;
+        }
+        table { width: 100%; border-collapse: collapse; margin: 1.5em 0; font-size: 0.9em; }
+        th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; }
+        th { background: var(--page-dim); font-weight: 600; }
+        sup, sub { font-size: 0.7em; }
+        </style>
+        </head>
+        <body>
+        <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+          <filter id="ag-ink" color-interpolation-filters="sRGB">
+            <!-- rgb = black, alpha = 1 - luma  ->  page * luma (a multiply) -->
+            <feColorMatrix type="matrix" values="
+              0 0 0 0 0
+              0 0 0 0 0
+              0 0 0 0 0
+              -0.2126 -0.7152 -0.0722 0 1"/>
+          </filter>
+          <filter id="ag-ink-night" color-interpolation-filters="sRGB">
+            <!-- rgb = the ink colour, alpha = 1 - luma. Set live; see inkMatrix(). -->
+            <feColorMatrix id="ag-ink-night-matrix" type="matrix"
+              values="\(nightInkMatrix(palette))"/>
+          </filter>
+        </svg>
+        <div class="wrap">
+        <header class="ag-head">
+          <h1>\(escape(article.displayTitle))</h1>
+          <div class="ag-meta">\(meta.map { "<span>\($0)</span>" }.joined())</div>
+          <hr>
+        </header>
+        <article>
+        \(body)
+        </article>
+        </div>
+        <script>
+        window.__ag = {
+          apply: function (vars) {
+            var root = document.documentElement;
+            for (var key in vars) { root.style.setProperty(key, vars[key]); }
+          },
+          progress: function () {
+            var h = document.documentElement;
+            var max = h.scrollHeight - window.innerHeight;
+            return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+          },
+          inkMatrix: function (values) {
+            var m = document.getElementById("ag-ink-night-matrix");
+            if (m) { m.setAttribute("values", values); }
+          },
+          restore: function (fraction) {
+            var h = document.documentElement;
+            var max = h.scrollHeight - window.innerHeight;
+            if (max > 0 && fraction > 0.001) { window.scrollTo(0, max * fraction); }
+          }
+        };
+        var post = function (name, value) {
+          try { window.webkit.messageHandlers.reader.postMessage({ name: name, value: value }); } catch (e) {}
+        };
+        var ticking = false;
+        window.addEventListener("scroll", function () {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(function () {
+            ticking = false;
+            post("progress", window.__ag.progress());
+          });
+        }, { passive: true });
+        \(SelectionReporter.script(handler: "reader"))
+        \(DocumentPager.script(handler: "reader"))
+
+        // Wrap emoji so the filter above has something to hold on to. Done here rather
+        // than in Swift so no HTML has to be parsed to find the text.
+        (function () {
+          var EMOJI = /\\p{Extended_Pictographic}(\\uFE0F|\\uFE0E)?(\\u200D\\p{Extended_Pictographic}(\\uFE0F|\\uFE0E)?)*/gu;
+          var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+            acceptNode: function (node) {
+              if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+              var p = node.parentNode;
+              if (!p || p.classList.contains("ag-emoji")) return NodeFilter.FILTER_REJECT;
+              var tag = p.nodeName;
+              if (tag === "SCRIPT" || tag === "STYLE") return NodeFilter.FILTER_REJECT;
+              return EMOJI.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+            }
+          });
+          var targets = [];
+          while (walker.nextNode()) { targets.push(walker.currentNode); }
+          targets.forEach(function (node) {
+            var frag = document.createDocumentFragment();
+            var text = node.nodeValue;
+            var last = 0;
+            EMOJI.lastIndex = 0;
+            var m;
+            while ((m = EMOJI.exec(text)) !== null) {
+              if (m.index > last) {
+                frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+              }
+              var span = document.createElement("span");
+              span.className = "ag-emoji";
+              span.textContent = m[0];
+              frag.appendChild(span);
+              last = m.index + m[0].length;
+            }
+            if (last < text.length) {
+              frag.appendChild(document.createTextNode(text.slice(last)));
+            }
+            node.parentNode.replaceChild(frag, node);
+          });
+        })();
+
+        window.addEventListener("load", function () { post("ready", 1); });
+        document.addEventListener("DOMContentLoaded", function () { post("ready", 1); });
+
+        // A bare tap on the page toggles the app's chrome. Anything that is really a
+        // scroll, a link, or a text selection must not count, so the gesture is judged
+        // on distance and duration rather than on the click event alone.
+        var tapX = 0, tapY = 0, tapAt = 0, tapEligible = false;
+        document.addEventListener("pointerdown", function (e) {
+          tapX = e.clientX; tapY = e.clientY; tapAt = Date.now();
+          tapEligible = !(e.target && e.target.closest && e.target.closest("a"));
+        }, { passive: true });
+        document.addEventListener("pointerup", function (e) {
+          if (!tapEligible) return;
+          if (Date.now() - tapAt > 400) return;
+          if (Math.abs(e.clientX - tapX) > 8 || Math.abs(e.clientY - tapY) > 8) return;
+          var sel = window.getSelection ? String(window.getSelection()) : "";
+          if (sel.length) return;
+          post("tap", 1);
+        }, { passive: true });
+        </script>
+        </body>
+        </html>
+        """
+    }
+
+    static func escape(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+}

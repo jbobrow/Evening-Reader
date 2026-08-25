@@ -1,0 +1,105 @@
+import Foundation
+
+/// Prepares arbitrary live web pages for the amber panel.
+///
+/// The color conversion itself is *not* done here. An earlier version applied an SVG
+/// `feColorMatrix` duotone to `<html>`, but page elements that get their own
+/// compositing layer — Wikipedia's sticky table-of-contents and appearance panels are
+/// the canonical example — are composited outside the root's filter and survive it
+/// untouched, leaking white boxes and blue links onto the panel. Since the app's one
+/// rule is that nothing may introduce a second hue, a filter that *usually* works is
+/// not good enough: the grayscale + amber mapping is applied natively to the whole
+/// rendered web view instead (see `BrowseScreen`), which page content cannot escape.
+///
+/// What is left for the DOM is the part that has to happen in page coordinates: the
+/// white base a duotone expects, and the pixel grid.
+struct WebTint {
+
+    static func script(showGrid: Bool) -> String {
+        let gridOpacity = showGrid ? "0.5" : "0"
+
+        return """
+        (function () {
+          // A page that never declares its own background should sit on white, so the
+          // native ramp maps it to the top of the glow rather than to transparent black.
+          var styleID = 'ag-page-style';
+          var style = document.getElementById(styleID);
+          if (!style) {
+            style = document.createElement('style');
+            style.id = styleID;
+            (document.head || document.documentElement).appendChild(style);
+          }
+          style.textContent = [
+            'html { background: #ffffff !important; }',
+            // WebKit's own control bar reaches fullscreen through an internal path, not
+            // through the JS methods overridden below, so it cannot be redirected into
+            // the in-page version — and what it opens is a window the filter cannot
+            // reach. The button is taken away instead; a site's own fullscreen control
+            // still works, because that one does go through JS.
+            'video::-webkit-media-controls-fullscreen-button { display: none !important; }',
+            'html::after {',
+            '  content: ""; position: fixed; inset: 0; pointer-events: none;',
+            '  z-index: 2147483000; mix-blend-mode: multiply; opacity: \(gridOpacity);',
+            '  background-image:',
+            '    repeating-linear-gradient(0deg, rgba(0,0,0,0.055) 0 1px, transparent 1px 2px),',
+            '    repeating-linear-gradient(90deg, rgba(0,0,0,0.055) 0 1px, transparent 1px 2px);',
+            '}'
+          ].join('\\n');
+
+          \(SelectionReporter.script(handler: "browse"))
+
+          \(DocumentPager.script(handler: "browse"))
+
+          // Fullscreen is refused.
+          //
+          // It is presented in a window of its own, above everything the app draws, and
+          // nothing can filter that window's contents from outside — a video that went
+          // fullscreen would be the only thing on screen in full colour. Every route to
+          // it is closed here, and video is pinned inline instead.
+          (function () {
+            if (window.__agNoFullscreen) return;
+            window.__agNoFullscreen = true;
+
+            var refuse = function () { return Promise.reject(new Error("disabled")); };
+            var ignore = function () {};
+
+            Element.prototype.requestFullscreen = refuse;
+            Element.prototype.webkitRequestFullscreen = ignore;
+            Element.prototype.webkitRequestFullScreen = ignore;
+            if (window.HTMLVideoElement) {
+              HTMLVideoElement.prototype.webkitEnterFullscreen = ignore;
+              HTMLVideoElement.prototype.webkitEnterFullScreen = ignore;
+            }
+            // Pages check these to decide whether to offer the control at all.
+            try {
+              Object.defineProperty(document, "fullscreenEnabled",
+                { configurable: true, get: function () { return false; } });
+              Object.defineProperty(document, "webkitFullscreenEnabled",
+                { configurable: true, get: function () { return false; } });
+            } catch (e) {}
+
+            var pin = function () {
+              var list = document.getElementsByTagName("video");
+              for (var i = 0; i < list.length; i++) {
+                list[i].setAttribute("playsinline", "");
+                list[i].setAttribute("webkit-playsinline", "");
+              }
+            };
+            pin();
+            if (window.MutationObserver && document.documentElement) {
+              new MutationObserver(pin).observe(document.documentElement,
+                                                { childList: true, subtree: true });
+            }
+          })();
+
+
+          // Remove the retired duotone plumbing if it is still in the document from a
+          // page that was tinted before this build.
+          ['ag-duotone-svg', 'ag-duotone-style'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el && el.parentNode) { el.parentNode.removeChild(el); }
+          });
+        })();
+        """
+    }
+}
