@@ -19,7 +19,8 @@ struct ReaderRenderer {
             "--measure": String(format: "%.0fpx", settings.readerColumnPoints),
             "--family": settings.typeface.cssStack,
             "--grid": settings.showTexture ? "1" : "0",
-            "--img-filter": palette.polarity == .night ? "url(#ag-ink-night)" : "url(#ag-ink)"
+            "--img-filter": palette.polarity == .night ? "url(#ag-ink-night)" : "url(#ag-ink)",
+            "--img-photo-filter": palette.polarity == .night ? "url(#ag-photo-night)" : "url(#ag-ink)"
         ]
     }
 
@@ -30,17 +31,27 @@ struct ReaderRenderer {
             .joined(separator: ",")
         return """
         window.__ag && window.__ag.apply({\(pairs)});
-        window.__ag && window.__ag.inkMatrix("\(nightInkMatrix(palette))");
+        window.__ag && window.__ag.nightMatrices("\(nightInkMatrix(palette))",
+                                                 "\(nightPhotoMatrix(palette))");
         """
     }
 
-    /// The night image filter has to carry the ink colour, so unlike the paper one it
-    /// cannot be a constant. Dark parts of a picture become ink, light parts go fully
-    /// transparent and let the page through — the same inversion the type gets, so a
-    /// line drawing reads as amber on black rather than as a white card.
+    /// Night, for drawings: rgb = the ink colour, alpha = 1 - luma. Dark strokes become
+    /// ink and the paper around them goes transparent, which is the same inversion the
+    /// type gets — a line drawing reads as amber on black instead of as a white card.
     static func nightInkMatrix(_ palette: AmberPalette) -> String {
         let (r, g, b) = palette.rgb(0.045)
         return String(format: "0 0 0 0 %.4f  0 0 0 0 %.4f  0 0 0 0 %.4f  -0.2126 -0.7152 -0.0722 0 1",
+                      r, g, b)
+    }
+
+    /// Night, for photographs: rgb = the ink colour, alpha = luma. The picture stays a
+    /// positive — light stays light — and simply lands on the ramp. Inverting a
+    /// photograph turns a sky black and a shadow bright, which is unreadable; it only
+    /// flatters drawings, where the paper is not part of the picture.
+    static func nightPhotoMatrix(_ palette: AmberPalette) -> String {
+        let (r, g, b) = palette.rgb(0.045)
+        return String(format: "0 0 0 0 %.4f  0 0 0 0 %.4f  0 0 0 0 %.4f  0.2126 0.7152 0.0722 0 0",
                       r, g, b)
     }
 
@@ -185,6 +196,9 @@ struct ReaderRenderer {
           filter: contrast(1.04) var(--img-filter);
           opacity: 0.94;
         }
+        /* Photographs opt out of the inversion. On paper both filters are the same, so
+           this only parts company at night. */
+        img.ag-photo { filter: contrast(1.04) var(--img-photo-filter); }
         figure { margin: 1.7em 0; }
         figcaption ol, figcaption ul, figcaption li { text-align: left; }
         figcaption {
@@ -212,9 +226,14 @@ struct ReaderRenderer {
               -0.2126 -0.7152 -0.0722 0 1"/>
           </filter>
           <filter id="ag-ink-night" color-interpolation-filters="sRGB">
-            <!-- rgb = the ink colour, alpha = 1 - luma. Set live; see inkMatrix(). -->
+            <!-- Drawings: rgb = ink, alpha = 1 - luma. Set live; see nightMatrices(). -->
             <feColorMatrix id="ag-ink-night-matrix" type="matrix"
               values="\(nightInkMatrix(palette))"/>
+          </filter>
+          <filter id="ag-photo-night" color-interpolation-filters="sRGB">
+            <!-- Photographs: rgb = ink, alpha = luma, so the picture stays a positive. -->
+            <feColorMatrix id="ag-photo-night-matrix" type="matrix"
+              values="\(nightPhotoMatrix(palette))"/>
           </filter>
         </svg>
         <div class="wrap">
@@ -238,9 +257,11 @@ struct ReaderRenderer {
             var max = h.scrollHeight - window.innerHeight;
             return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
           },
-          inkMatrix: function (values) {
-            var m = document.getElementById("ag-ink-night-matrix");
-            if (m) { m.setAttribute("values", values); }
+          nightMatrices: function (line, photo) {
+            var a = document.getElementById("ag-ink-night-matrix");
+            if (a) { a.setAttribute("values", line); }
+            var b = document.getElementById("ag-photo-night-matrix");
+            if (b) { b.setAttribute("values", photo); }
           },
           restore: function (fraction) {
             var h = document.documentElement;
@@ -262,6 +283,84 @@ struct ReaderRenderer {
         }, { passive: true });
         \(SelectionReporter.script(handler: "reader"))
         \(DocumentPager.script(handler: "reader"))
+
+        // Which pictures may be inverted at night.
+        //
+        // Inverting suits a drawing, where the paper is not part of the picture and the
+        // strokes are the whole of it. It ruins a photograph: the sky goes black, the
+        // shadows light up, and the subject is unreadable. So each image is looked at
+        // once and marked, and only the drawings keep the inversion.
+        //
+        // Two signals, either of which is enough. Ink on paper is bimodal — nearly every
+        // pixel sits hard against black or against white, with only the antialiased
+        // edges in between. Flat artwork like a chart may not be bimodal but has very
+        // few distinct tones. A photograph is neither.
+        (function () {
+          var LINE = "ag-line", PHOTO = "ag-photo";
+
+          var judge = function (img) {
+            try {
+              var w = Math.max(1, Math.min(96, img.naturalWidth || 0));
+              var h = Math.max(1, Math.min(96, img.naturalHeight || 0));
+              var canvas = document.createElement("canvas");
+              canvas.width = w; canvas.height = h;
+              var ctx = canvas.getContext("2d", { willReadFrequently: true });
+              // Nearest-neighbour, not averaged. Scaling a dithered engraving down with
+              // smoothing on blends its blacks and whites into a spread of greys, and a
+              // drawing then measures exactly like a photograph — which is the one thing
+              // this has to tell apart.
+              ctx.imageSmoothingEnabled = false;
+              ctx.webkitImageSmoothingEnabled = false;
+              ctx.drawImage(img, 0, 0, w, h);
+              var data = ctx.getImageData(0, 0, w, h).data;
+              var seen = new Uint8Array(256), distinct = 0, mid = 0, total = 0;
+              for (var i = 0; i < data.length; i += 4) {
+                if (data[i + 3] < 8) continue;          // transparent, not part of the art
+                var l = (data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722) | 0;
+                if (!seen[l]) { seen[l] = 1; distinct++; }
+                if (l >= 64 && l < 192) mid++;
+                total++;
+              }
+              if (!total) return PHOTO;
+              // Mid-tone density is what tells these apart. Counting distinct levels does
+              // not: a line engraving saved as JPEG carries ringing artifacts across the
+              // whole histogram, and measures 203 distinct levels against a photograph's
+              // 253. Where they do differ is the middle of the range — that engraving
+              // puts 10% of its pixels there, the photograph 59%, because ink on paper is
+              // mostly ink or mostly paper and a photograph lives in the greys.
+              return (mid / total < 0.30 || distinct <= 16) ? LINE : PHOTO;
+            } catch (e) {
+              // Cross-origin images taint the canvas and cannot be read. Fall back to
+              // what the file type implies: drawings tend to arrive as SVG, GIF or PNG,
+              // photographs as JPEG.
+              var src = String(img.currentSrc || img.src || "").toLowerCase();
+              return /\\.(svg|gif|png)(\\?|#|$)/.test(src) ? LINE : PHOTO;
+            }
+          };
+
+          var mark = function (img) {
+            if (img.__agJudged) return;
+            if (!img.complete || !img.naturalWidth) return;
+            img.__agJudged = true;
+            img.classList.add(judge(img));
+          };
+
+          var sweep = function () {
+            var list = document.getElementsByTagName("img");
+            for (var i = 0; i < list.length; i++) {
+              var img = list[i];
+              mark(img);
+              if (!img.__agBound) {
+                img.__agBound = true;
+                img.addEventListener("load", function () { mark(this); }, { once: true });
+              }
+            }
+          };
+
+          sweep();
+          document.addEventListener("DOMContentLoaded", sweep);
+          window.addEventListener("load", sweep);
+        })();
 
         // Wrap emoji so the filter above has something to hold on to. Done here rather
         // than in Swift so no HTML has to be parsed to find the text.
