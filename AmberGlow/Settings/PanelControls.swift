@@ -8,6 +8,11 @@ struct PanelControls: View {
     @Environment(\.amber) private var amber
     @Environment(\.horizontalSizeClass) private var sizeClass
 
+    /// Which line is in the window. Starts somewhere different each time the panel is
+    /// opened, then walks the list in order, so "Show another" always gives another and
+    /// the reader sees all ten before seeing any twice.
+    @State private var quoteIndex = Int.random(in: 0..<SpecimenQuote.all.count)
+
     /// The column runs from 600 to 860 points, and a phone is narrower than either — the
     /// text already fills the glass, so the control would be a slider that does nothing.
     /// It comes back the moment there is a page wide enough for it to bite on.
@@ -130,6 +135,8 @@ struct PanelControls: View {
                                                       set: { settings.typeface = $0 }),
                                    options: DisplaySettings.Typeface.allCases,
                                    label: \.label)
+
+                    specimen
                 }
             }
             .padding(22)
@@ -138,6 +145,88 @@ struct PanelControls: View {
     }
 
     // MARK: - Pieces
+
+    /// A window onto the page, under the controls that set it.
+    ///
+    /// The panel covers the page it is describing — on a phone entirely — so "17 pt" and
+    /// "1.62" have nothing to refer to while they are being moved. This is the page in
+    /// miniature: the same ramp, the same size, leading and face, so a change can be read
+    /// here rather than guessed at and checked once the panel is out of the way.
+    ///
+    /// It answers to the glow controls as well as the type ones, since every colour in it
+    /// comes from the same palette. That is worth having and costs nothing.
+    private var specimen: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                AmberCaption(text: "Sample")
+                Spacer()
+                Button("Show another") {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        quoteIndex = (quoteIndex + 1) % SpecimenQuote.all.count
+                    }
+                }
+                .buttonStyle(AmberButtonStyle(kind: .quiet, size: 12))
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(quote.text)
+                    .font(.system(size: settings.bodyPointSize,
+                                  design: settings.typeface.design))
+                    .lineSpacing(specimenLineSpacing)
+                    .foregroundStyle(amber.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    // Four lines is enough to judge a face and its leading, and keeps the
+                    // window a window: the longest of these at 32pt runs to eight, which
+                    // is no longer a sample of the page so much as a page.
+                    .lineLimit(4)
+                    .frame(maxWidth: .infinity, minHeight: specimenTextHeight,
+                           alignment: .topLeading)
+                    .contentTransition(.opacity)
+
+                // Set the way the reader sets a byline, so the window reads as a small
+                // page rather than as a swatch with a caption.
+                Text(quote.credit)
+                    .font(.system(size: 10, weight: .medium))
+                    .tracking(0.6)
+                    .textCase(.uppercase)
+                    .foregroundStyle(amber.inkMuted)
+                    .contentTransition(.opacity)
+            }
+            .padding(16)
+            .background {
+                ZStack {
+                    amber.color(0.88)
+                    if settings.showTexture { PixelGrid() }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(amber.rule, lineWidth: 1)
+            }
+        }
+    }
+
+    private var quote: SpecimenQuote { SpecimenQuote.all[quoteIndex] }
+
+    /// Four lines of the face at its current size, held whatever the quote is. The lines
+    /// run from two to four, and a pane that resizes every time it is refilled is not a
+    /// window.
+    private var specimenTextHeight: CGFloat {
+        let font = settings.typeface.uiFont(size: settings.bodyPointSize)
+        return font.lineHeight * 4 + specimenLineSpacing * 3
+    }
+
+    /// SwiftUI's `lineSpacing` is the gap *added* between lines; the reader's CSS
+    /// `line-height` is the whole line box. Taking the face's own line height off the one
+    /// gives the other, so the specimen is leaded like the page rather than merely near
+    /// it — which matters, since leading is one of the things it is here to show.
+    private var specimenLineSpacing: CGFloat {
+        let size = settings.bodyPointSize
+        let natural = settings.typeface.uiFont(size: size).lineHeight
+        return max(0, size * settings.lineHeight - natural)
+    }
+
 
     /// The whole palette, end to end — the ramp every color in the app comes from.
     private var ramp: some View {
@@ -204,4 +293,48 @@ struct PanelControls: View {
             content()
         }
     }
+}
+
+/// The lines the specimen is set in.
+///
+/// This is the one piece of writing in the app that is the app's own choice rather than
+/// the reader's, so it should be worth meeting: ten that lift rather than merely fill the
+/// space. All are from women whose work is long out of copyright, which is what makes
+/// them ours to ship — the tempting modern ones are not.
+struct SpecimenQuote {
+    let text: String
+    let credit: String
+
+    static let all: [SpecimenQuote] = [
+        SpecimenQuote(
+            text: "Lock up your libraries if you like; but there is no gate, no lock, no bolt that you can set upon the freedom of my mind.",
+            credit: "Virginia Woolf · A Room of One's Own"),
+        SpecimenQuote(
+            text: "Isn't it nice to think that tomorrow is a new day with no mistakes in it yet?",
+            credit: "L. M. Montgomery · Anne of Green Gables"),
+        SpecimenQuote(
+            text: "There are two ways of spreading light: to be the candle or the mirror that reflects it.",
+            credit: "Edith Wharton · Vesalius in Zante"),
+        SpecimenQuote(
+            text: "If you look the right way, you can see that the whole world is a garden.",
+            credit: "Frances Hodgson Burnett · The Secret Garden"),
+        SpecimenQuote(
+            text: "I am not afraid of storms, for I am learning how to sail my ship.",
+            credit: "Louisa May Alcott · Little Women"),
+        SpecimenQuote(
+            text: "I am no bird; and no net ensnares me: I am a free human being with an independent will.",
+            credit: "Charlotte Brontë · Jane Eyre"),
+        SpecimenQuote(
+            text: "What do we live for, if it is not to make life less difficult to each other?",
+            credit: "George Eliot · Middlemarch"),
+        SpecimenQuote(
+            text: "That is happiness; to be dissolved into something complete and great.",
+            credit: "Willa Cather · My Ántonia"),
+        SpecimenQuote(
+            text: "She was becoming herself and daily casting aside that fictitious self which we assume like a garment with which to appear before the world.",
+            credit: "Kate Chopin · The Awakening"),
+        SpecimenQuote(
+            text: "I declare after all there is no enjoyment like reading! How much sooner one tires of any thing than of a book!",
+            credit: "Jane Austen · Pride and Prejudice")
+    ]
 }

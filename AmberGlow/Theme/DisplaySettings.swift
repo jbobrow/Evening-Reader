@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Observation
 
 /// A remembered glow. Only the panel settings — type and texture are separate concerns
@@ -40,6 +41,19 @@ final class DisplaySettings {
             case .mono: return .monospaced
             }
         }
+        /// The same face `design` selects, as a `UIFont`. The specimen needs it to know
+        /// how tall a line of this face actually is — SwiftUI will not say.
+        func uiFont(size: CGFloat) -> UIFont {
+            switch self {
+            case .sans: return .systemFont(ofSize: size)
+            case .mono: return .monospacedSystemFont(ofSize: size, weight: .regular)
+            case .serif:
+                let base = UIFont.systemFont(ofSize: size)
+                guard let serif = base.fontDescriptor.withDesign(.serif) else { return base }
+                return UIFont(descriptor: serif, size: size)
+            }
+        }
+
         /// CSS stack used inside the reader.
         var cssStack: String {
             switch self {
