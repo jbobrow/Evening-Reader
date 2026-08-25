@@ -26,6 +26,10 @@ struct DetailPane: View {
     @State private var pageHeight: CGFloat = 0
     /// How much room the scrubber is taking, so the ground under it can match.
     @State private var scrubberHeight: CGFloat = 0
+    /// Drives a PDF's scrolling, as `bridge` drives an article's.
+    @State private var pdfPager = PDFPager()
+    /// A PDF's length in points. Its pages are its own, so the scrubber cannot infer it.
+    @State private var documentLength: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -106,8 +110,51 @@ struct DetailPane: View {
         switch article.state {
         case .ready:
             if article.isPDF {
-                PDFReaderView(fileURL: library.documentURL(for: article))
-                    .id(article.id)
+                // The same furniture an article gets. A PDF is a different kind of
+                // document, not a different kind of reading: where you are and how to
+                // travel are the same two questions, so they are answered by the same
+                // control. The one difference is what a page means — see the pager.
+                ZStack(alignment: .bottomTrailing) {
+                    PDFReaderView(fileURL: library.documentURL(for: article),
+                                  pageCount: article.pageCount,
+                                  initialProgress: article.lastScroll,
+                                  onProgress: { p in
+                                      liveProgress = p
+                                      library.setScroll(p, for: article)
+                                  },
+                                  onPages: { page, total, percent, length in
+                                      self.page = page
+                                      self.pageCount = total
+                                      self.percent = percent
+                                      self.documentLength = length
+                                  },
+                                  pager: pdfPager)
+                        .id(article.id)
+                        .task(id: article.id) { liveProgress = article.lastScroll }
+                        .overlay {
+                            if pageCount > 1, isCompact {
+                                ScrubberGround(height: scrubberHeight)
+                            }
+                        }
+                        .ignoresSafeArea(.container, edges: .bottom)
+
+                    if pageCount > 1 {
+                        PageScrubber(page: page,
+                                     total: pageCount,
+                                     percent: percent,
+                                     style: Binding(get: { settings.progressStyle },
+                                                    set: { settings.progressStyle = $0 }),
+                                     available: pageHeight,
+                                     documentLength: documentLength) { velocity in
+                            pdfPager.autoScroll(velocity)
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 18)
+                    }
+                }
+                .background { HeightReader(height: $pageHeight) }
+                .onPreferenceChange(ScrubberFootprint.self) { scrubberHeight = $0 }
+                .onDisappear { pdfPager.stop() }
             } else if let body = library.body(for: article) {
                 // The page runs to the physical bottom of the glass; the scrubber does
                 // not. It is a control, so it stays a sibling of the web view rather than

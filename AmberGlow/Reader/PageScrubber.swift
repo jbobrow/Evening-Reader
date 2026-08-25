@@ -86,6 +86,11 @@ struct PageScrubber: View {
     @Binding var style: DisplaySettings.ProgressStyle
     /// Height of the page the control has to live in.
     var available: CGFloat
+    /// How long the document is, in points, where the page knows. Zero means "work it
+    /// out from the page count", which is right for an article, where a page *is* a
+    /// screenful. It is not right for a PDF, whose pages are its own and, set to the
+    /// width of a phone, are a good deal shorter than the glass.
+    var documentLength: CGFloat = 0
     /// Points per second, signed. Zero stops.
     var scroll: (Double) -> Void
 
@@ -139,11 +144,11 @@ struct PageScrubber: View {
     /// length of the document instead makes a full pull mean the same thing on both.
     private let fullPullSeconds: Double = 5
 
-    /// Points per second at the end of the pull. `total` is the document measured in
-    /// screenfuls, which is the pager's own unit, so the two multiply out to its length.
+    /// Points per second at the end of the pull.
     private var maxSpeed: Double {
         let viewport = max(320, Double(available))
-        return max(1500, viewport * Double(total) / fullPullSeconds)
+        let length = documentLength > 0 ? Double(documentLength) : viewport * Double(total)
+        return max(1500, length / fullPullSeconds)
     }
 
     var body: some View {
