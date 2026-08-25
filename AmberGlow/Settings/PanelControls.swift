@@ -4,6 +4,12 @@ import SwiftUI
 struct PanelControls: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// The column runs from 600 to 860 points, and a phone is narrower than either — the
+    /// text already fills the glass, so the control would be a slider that does nothing.
+    /// It comes back the moment there is a page wide enough for it to bite on.
+    private var showsColumn: Bool { sizeClass != .compact }
 
     var body: some View {
         ScrollView {
@@ -55,11 +61,13 @@ struct PanelControls: View {
                                     leadingSymbol: "arrow.up.and.down.text.horizontal",
                                     trailingSymbol: "arrow.up.and.down")
                     }
-                    labelled("Column", value: String(format: "%.0f pt", settings.readerColumnPoints)) {
-                        AmberSlider(value: Binding(get: { settings.measure },
-                                                   set: { settings.measure = $0 }),
-                                    leadingSymbol: "arrow.right.and.line.vertical.and.arrow.left",
-                                    trailingSymbol: "arrow.left.and.line.vertical.and.arrow.right")
+                    if showsColumn {
+                        labelled("Column", value: String(format: "%.0f pt", settings.readerColumnPoints)) {
+                            AmberSlider(value: Binding(get: { settings.measure },
+                                                       set: { settings.measure = $0 }),
+                                        leadingSymbol: "arrow.right.and.line.vertical.and.arrow.left",
+                                        trailingSymbol: "arrow.left.and.line.vertical.and.arrow.right")
+                        }
                     }
                     AmberSegmented(selection: Binding(get: { settings.typeface },
                                                       set: { settings.typeface = $0 }),

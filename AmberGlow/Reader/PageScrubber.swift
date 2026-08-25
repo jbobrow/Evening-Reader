@@ -84,6 +84,8 @@ struct PageScrubber: View {
     /// Long-pressing the pill switches this, so the choice lives on the thing it
     /// describes rather than in a settings panel two taps away.
     @Binding var style: DisplaySettings.ProgressStyle
+    /// Height of the page the control has to live in.
+    var available: CGFloat
     /// Points per second, signed. Zero stops.
     var scroll: (Double) -> Void
 
@@ -98,21 +100,51 @@ struct PageScrubber: View {
     @State private var pressTimer: Task<Void, Never>?
     @State private var pressHandled = false
 
-    /// How far above the pill the thumb settles.
-    private let rest: CGFloat = 188
+    /// How far above the pill the thumb settles, where there is room for it.
+    private let restAtFullSize: CGFloat = 188
     /// Travel at which the speed curve tops out — reached as the thumb meets the
     /// outermost guide line, so the marks read as the speed range. Held short of `rest`
     /// so a full downward pull still stops clear of the pill rather than landing on it.
-    private let fullTravel: CGFloat = 110
+    private let travelAtFullSize: CGFloat = 110
     /// The guide track's full span. Its gap is symmetric, so its centre is the thumb's,
     /// and it is sized so the outermost mark sits at `fullTravel`.
-    private let trackHeight: CGFloat = 264
+    private let trackAtFullSize: CGFloat = 264
+
+    /// Everything above the pill, drawn full size where the page can hold it and shrunk
+    /// where it cannot. A phone in landscape leaves barely 330pt of page, and the track
+    /// wants 376 — unscaled it would climb over the chrome at the top. The parts scale
+    /// together, so the guide marks go on reading as the speed range rather than drifting
+    /// away from the travel they describe.
+    private var scale: CGFloat {
+        let needed = restAtFullSize + trackAtFullSize / 2 + 56
+        guard available > 0, available < needed else { return 1 }
+        return max(0.55, available / needed)
+    }
+
+    private var rest: CGFloat { restAtFullSize * scale }
+    private var fullTravel: CGFloat { travelAtFullSize * scale }
+    private var trackHeight: CGFloat { trackAtFullSize * scale }
     /// How far the readout reaches leftward while held, to clear the finger.
     private let reach: CGFloat = 118
     private let deadZone: CGFloat = 10
-    private let maxSpeed: Double = 5200
     /// Seconds of stillness before the track puts itself away.
     private let idleTimeout: Double = 3.0
+
+    /// Roughly how long a full pull takes to cross the whole document.
+    ///
+    /// Speed cannot be a fixed number of points per second. The same article set to a
+    /// phone's column is several times the scroll extent it has on a wide panel — the
+    /// measure is half as wide, so the text is twice as long — and a rate that reads as
+    /// brisk on the iPad barely moves the page on the phone. Tying the speed to the
+    /// length of the document instead makes a full pull mean the same thing on both.
+    private let fullPullSeconds: Double = 5
+
+    /// Points per second at the end of the pull. `total` is the document measured in
+    /// screenfuls, which is the pager's own unit, so the two multiply out to its length.
+    private var maxSpeed: Double {
+        let viewport = max(320, Double(available))
+        return max(1500, viewport * Double(total) / fullPullSeconds)
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -130,6 +162,19 @@ struct PageScrubber: View {
             if styleMenu { chooser } else { pill }
         }
         .frame(height: isOpen ? rest + trackHeight / 2 + 56 : 46, alignment: .bottom)
+        // How much room this is taking, for the ground drawn beneath it. Measured rather
+        // than computed so it follows the spring rather than jumping ahead of it.
+        //
+        // Nothing while the pill is at rest. The ground is for the open track — a tall
+        // thing standing over a page it has to be read against. The pill on its own is a
+        // small enough mark to carry its own border, and a pool sitting under it always
+        // would be a permanent bright patch in the corner of every page.
+        .background {
+            GeometryReader { geo in
+                Color.clear.preference(key: ScrubberFootprint.self,
+                                       value: isOpen ? geo.size.height : 0)
+            }
+        }
         .animation(.spring(response: 0.42, dampingFraction: 0.72), value: isOpen)
         .onChange(of: percent) { _, _ in
             // A scroll the reader made themselves — put the track away.
@@ -297,7 +342,7 @@ struct PageScrubber: View {
             marks(reversed: true)
             // Flexible, and the halves above and below it are identical, which is what
             // makes the VStack's centre the centre of this gap.
-            Spacer(minLength: 120)
+            Spacer(minLength: 120 * scale)
             marks(reversed: false)
             chevron("chevron.down")
         }
@@ -316,7 +361,7 @@ struct PageScrubber: View {
     /// Lines lengthen as they get further out, so the speed ramp is legible at a glance.
     private func marks(reversed: Bool) -> some View {
         let steps = Array(0..<5)
-        return VStack(spacing: 10) {
+        return VStack(spacing: 10 * scale) {
             ForEach(reversed ? steps.reversed() : steps, id: \.self) { i in
                 let t = Double(i) / 4.0
                 Capsule()
@@ -391,5 +436,54 @@ struct PageScrubber: View {
         guard distance > Double(deadZone) else { return 0 }
         let t = min(1, (distance - Double(deadZone)) / Double(fullTravel - deadZone))
         return t * t * maxSpeed * (travel > 0 ? 1 : -1)
+    }
+}
+
+/// How much room the scrubber is taking, or zero when it is closed and wants no ground.
+/// Reported upward because the ground beneath it has to be drawn by the page rather than
+/// by the control — see `ScrubberGround`.
+struct ScrubberFootprint: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// The ground the scrubber sits on: the panel's own surface, brought back up over the
+/// page and masked to a soft pool, so the readout is not left competing with whatever
+/// paragraph happens to be behind it.
+///
+/// It is a second copy of `GlowSurface`, not a fill of the page colour, because the page
+/// is not a flat colour. The surface carries the backlight bloom over it and the pixel
+/// lattice through it, so it is *brighter* than `color(0.88)` across most of the glass —
+/// and painting that colour on top of it therefore comes out darker than the page it is
+/// meant to disappear into. Drawing the same surface again cannot drift from it at any
+/// glow, warmth or polarity: where the mask is solid the page is replaced by itself, so
+/// the text under it goes and nothing else changes, and the falloff is a cross-fade
+/// between two identical colours rather than a wash of a third one.
+///
+/// That is also why it lives out here rather than inside the control. It has to be laid
+/// over the page at the page's own size — a copy sized to the pool would centre the bloom
+/// on the pool, and come out brighter than its surroundings instead of darker.
+struct ScrubberGround: View {
+    /// How tall the control is right now, so the pool covers it and no more.
+    var height: CGFloat
+
+    var body: some View {
+        GlowSurface()
+            .compositingGroup()
+            .mask(alignment: .bottomTrailing) {
+                RoundedRectangle(cornerRadius: 70, style: .continuous)
+                    .fill(.white)
+                    .frame(width: 240, height: height + 120)
+                    // Off the right edge and off the bottom rather than curving back in.
+                    // There is no page out there to keep, and a shape that closes on
+                    // every side reads as an object laid on the page instead of the page
+                    // simply being all there is in that corner.
+                    .padding(.trailing, -90)
+                    .padding(.bottom, -50)
+                    .blur(radius: 28)
+            }
+            .allowsHitTesting(false)
     }
 }

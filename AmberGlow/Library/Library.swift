@@ -23,9 +23,21 @@ final class Library {
         }
     }
 
+    /// Where the library is living.
+    enum SyncState {
+        /// Still asking iCloud where its container is.
+        case searching
+        /// Only on this device: iCloud is off, or no account is signed in.
+        case local
+        case cloud
+    }
+
+    private(set) var syncState: SyncState = .searching
+
     private let store: ArticleStore
     @ObservationIgnored private let cloud = CloudLibrary()
     @ObservationIgnored private var cloudObserver: NSObjectProtocol?
+    @ObservationIgnored private var syncing = false
 
     init(store: ArticleStore = .shared) {
         self.store = store
@@ -227,24 +239,53 @@ final class Library {
 
     /// Move the library into iCloud if it is available, then keep up with it.
     ///
-    /// Called once at launch. Everything before this point works against the local copy,
-    /// so a slow or absent iCloud never delays the first read.
+    /// Everything before this point works against the local copy, so a slow or absent
+    /// iCloud never delays the first read.
+    ///
+    /// It keeps asking, which matters more than it looks.
+    /// `url(forUbiquityContainerIdentifier:)` returns nil both when iCloud is genuinely
+    /// unavailable and when the container has simply not been provisioned on this device
+    /// yet — and a first launch on a new device is exactly when provisioning is still in
+    /// flight, which is exactly when the reader is expecting to find the library they
+    /// already have somewhere else. Asking once and giving up leaves them looking at an
+    /// empty shelf with nothing to explain it.
     func startSync() async {
-        guard await store.adoptCloud() else { return }
-        store.drainInbox()
-        refreshFromDisk()
-        cloud.watch()
-        cloudObserver = NotificationCenter.default.addObserver(
-            forName: CloudLibrary.didChange, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshFromDisk() }
+        guard syncState != .cloud, !syncing else { return }
+        syncing = true
+        defer { syncing = false }
+
+        var delay: UInt64 = 1
+        for attempt in 0..<7 {
+            if await store.adoptCloud() {
+                syncState = .cloud
+                store.drainInbox()
+                refreshFromDisk()
+                cloud.watch()
+                cloudObserver = NotificationCenter.default.addObserver(
+                    forName: CloudLibrary.didChange, object: nil, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.refreshFromDisk() }
+                }
+                return
+            }
+            // Don't sleep past the last attempt; the answer is already in.
+            guard attempt < 6 else { break }
+            try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
+            delay = min(delay * 2, 30)
         }
+        syncState = .local
     }
 
     /// On returning to the app, take anything the share extension queued while away.
+    ///
+    /// Also worth another look for iCloud: the reader may have gone to Settings and
+    /// turned it on, which is the likeliest thing to have happened while they were away.
     func pickUpInbox() {
         store.drainInbox()
         refreshFromDisk()
+        if syncState != .cloud {
+            Task { await startSync() }
+        }
     }
 
     func addFromClipboard() {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The keys the panel's own keyboard can send.
 enum AmberKey: Hashable {
@@ -33,6 +34,11 @@ struct AmberKeyboard: View {
     var showsTexture: Bool
     var showsDotCom: Bool
     var goLabel: String
+    /// Width of the board, handed down from UIKit. The keyboard is a field's `inputView`,
+    /// so it is not in the app's view tree and has no size class to read — and measuring
+    /// itself from the inside feeds a layout change back into the layout being computed,
+    /// which is enough to stop the input view being presented at all.
+    var boardWidth: CGFloat
     var onKey: (AmberKey) -> Void
 
     @State private var plane: Plane = .letters
@@ -40,6 +46,28 @@ struct AmberKeyboard: View {
     @State private var capsLocked = false
 
     private var amber: AmberPalette { palette }
+
+    // MARK: - Metrics
+
+    /// Width available to a row of keys, once the board's own padding is taken off.
+    private var rowWidth: CGFloat { max(0, boardWidth - 12) }
+
+    /// What one letter key in the top row comes out at — ten of them and nine gaps.
+    private var keyWidth: CGFloat { max(0, (rowWidth - 9 * gap) / 10) }
+
+    private let gap: CGFloat = 6
+
+    /// Shift and backspace take whatever is left of the third row once its seven letters
+    /// have kept the width the top row gave them, so a key is the same size wherever it
+    /// sits. On a wide panel that would leave two enormous slabs, so they stop at 74.
+    private var modifierWidth: CGFloat {
+        guard keyWidth > 0 else { return 74 }
+        return max(38, min(74, (rowWidth - 8 * gap - 7 * keyWidth) / 2))
+    }
+
+    /// True where the bottom row's fixed keys would not leave the space bar room to be
+    /// a space bar — every phone in portrait.
+    private var isNarrow: Bool { boardWidth > 0 && boardWidth < 500 }
 
     // MARK: - Layout
 
@@ -64,7 +92,7 @@ struct AmberKeyboard: View {
         VStack(spacing: 7) {
             editStrip
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                HStack(spacing: 6) {
+                HStack(spacing: gap) {
                     if index == 2 { leadingRowKey }
                     ForEach(row, id: \.self) { key in
                         AmberKeyCap(label: display(key), palette: amber) {
@@ -96,7 +124,7 @@ struct AmberKeyboard: View {
 
     /// Where Select All / Cut / Copy / Paste live, in place of the grey shortcuts bar.
     private var editStrip: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: gap) {
             stripKey("Select All", .selectAll)
             stripKey("Cut", .cut)
             stripKey("Copy", .copy)
@@ -128,7 +156,8 @@ struct AmberKeyboard: View {
     private var leadingRowKey: some View {
         if plane == .letters {
             AmberKeyCap(symbol: capsLocked ? "capslock.fill" : (shifted ? "shift.fill" : "shift"),
-                        palette: amber, kind: .modifier, width: 74, isActive: shifted || capsLocked) {
+                        palette: amber, kind: .modifier, width: modifierWidth,
+                        isActive: shifted || capsLocked) {
                 if capsLocked { capsLocked = false; shifted = false }
                 else if shifted { capsLocked = true }
                 else { shifted = true }
@@ -136,7 +165,7 @@ struct AmberKeyboard: View {
             }
         } else {
             AmberKeyCap(label: plane == .numbers ? "#+=" : "123",
-                        palette: amber, kind: .modifier, width: 74) {
+                        palette: amber, kind: .modifier, width: modifierWidth) {
                 plane = plane == .numbers ? .symbols : .numbers
                 onKey(.plane(plane))
             }
@@ -145,30 +174,40 @@ struct AmberKeyboard: View {
 
     private var backspaceKey: some View {
         AmberKeyCap(symbol: "delete.left", palette: amber, kind: .modifier,
-                    width: 74, repeats: true) { onKey(.backspace) }
+                    width: modifierWidth, repeats: true) { onKey(.backspace) }
     }
 
     private var bottomRow: some View {
-        HStack(spacing: 6) {
+        // On a phone the fixed keys add up to more than the row has, and the space bar is
+        // what gets squeezed out. The keys that stay step down, and the one that puts the
+        // keyboard away goes entirely: on a phone it is the least earned key on the board,
+        // since the Go key already finishes the field and a tap outside already dismisses
+        // it. What it leaves behind goes to the space bar.
+        HStack(spacing: gap) {
             AmberKeyCap(label: plane == .letters ? "123" : "ABC",
-                        palette: amber, kind: .modifier, width: 74) {
+                        palette: amber, kind: .modifier, width: modifierWidth) {
                 plane = plane == .letters ? .numbers : .letters
                 onKey(.plane(plane))
             }
             if showsDotCom {
-                AmberKeyCap(label: ".", palette: amber, kind: .modifier, width: 52) {
+                AmberKeyCap(label: ".", palette: amber, kind: .modifier,
+                            width: isNarrow ? keyWidth : 52) {
                     onKey(.char("."))
                 }
             }
             AmberKeyCap(label: "space", palette: amber, kind: .space) { onKey(.space) }
             if showsDotCom {
-                AmberKeyCap(label: ".com", palette: amber, kind: .modifier, width: 74) {
+                AmberKeyCap(label: ".com", palette: amber, kind: .modifier,
+                            width: isNarrow ? 62 : 74) {
                     onKey(.dotCom)
                 }
             }
-            AmberKeyCap(label: goLabel, palette: amber, kind: .go, width: 92) { onKey(.go) }
-            AmberKeyCap(symbol: "keyboard.chevron.compact.down",
-                        palette: amber, kind: .modifier, width: 60) { onKey(.hide) }
+            AmberKeyCap(label: goLabel, palette: amber, kind: .go,
+                        width: isNarrow ? 72 : 92) { onKey(.go) }
+            if !isNarrow {
+                AmberKeyCap(symbol: "keyboard.chevron.compact.down",
+                            palette: amber, kind: .modifier, width: 60) { onKey(.hide) }
+            }
         }
     }
 
@@ -272,5 +311,20 @@ struct AmberKeyCap: View {
     private func stopRepeating() {
         repeater?.invalidate()
         repeater = nil
+    }
+}
+
+/// Carries the board's width out to the keyboard. UIKit is what decides how wide an
+/// input view is, and it is the only party that knows — the keyboard lives in the
+/// keyboard's window, not the app's, so a size class never reaches it.
+final class AmberInputContainer: UIInputView {
+    var onWidthChange: ((CGFloat) -> Void)?
+    private var reported: CGFloat = 0
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0, bounds.width != reported else { return }
+        reported = bounds.width
+        onWidthChange?(bounds.width)
     }
 }

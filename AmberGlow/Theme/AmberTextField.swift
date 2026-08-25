@@ -88,7 +88,9 @@ struct AmberTextField: UIViewRepresentable {
         var parent: AmberTextField
         weak var field: UITextField?
         private var host: UIHostingController<AmberKeyboard>?
-        private var container: UIInputView?
+        private var container: AmberInputContainer?
+        /// The board's width, as UIKit lays it out. The keys are sized from it.
+        private var boardWidth: CGFloat = 0
 
         init(_ parent: AmberTextField) { self.parent = parent }
 
@@ -102,8 +104,15 @@ struct AmberTextField: UIViewRepresentable {
             // light system backdrop, which shows as a pale band above and below the keys
             // and around the home indicator — the one place a second colour could still
             // get in. `.default` style means no system material, just our fill.
-            let container = UIInputView(frame: CGRect(x: 0, y: 0, width: 0, height: Self.height),
-                                        inputViewStyle: .default)
+            let container = AmberInputContainer(
+                frame: CGRect(x: 0, y: 0, width: 0, height: Self.height),
+                inputViewStyle: .default
+            )
+            container.onWidthChange = { [weak self] width in
+                guard let self, self.boardWidth != width else { return }
+                self.boardWidth = width
+                self.host?.rootView = self.keyboard(for: self.parent)
+            }
             container.backgroundColor = UIColor(parent.palette.color(0.80))
             container.allowsSelfSizing = true
             container.translatesAutoresizingMaskIntoConstraints = true
@@ -135,7 +144,8 @@ struct AmberTextField: UIViewRepresentable {
             AmberKeyboard(palette: parent.palette,
                           showsTexture: parent.showsTexture,
                           showsDotCom: parent.showsDotCom,
-                          goLabel: parent.goLabel) { [weak self] key in
+                          goLabel: parent.goLabel,
+                          boardWidth: boardWidth) { [weak self] key in
                 self?.handle(key)
             }
         }

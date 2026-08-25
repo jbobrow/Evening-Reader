@@ -109,7 +109,9 @@ struct AmberConfirm: View {
             .padding(.top, 2)
         }
         .padding(22)
-        .frame(width: 380)
+        // Wide enough to give the message a decent measure, but never wider than the
+        // glass — on a phone the offered width is the whole screen.
+        .frame(maxWidth: 380)
         .background {
             ZStack {
                 amber.color(0.93)

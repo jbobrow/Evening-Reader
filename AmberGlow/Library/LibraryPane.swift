@@ -219,11 +219,47 @@ struct LibraryPane: View {
                     .font(.system(size: 13))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(amber.inkFaint)
+                    // The pane is as wide as the phone, and a line of 13pt run right
+                    // across it is a paragraph of a sentence.
+                    .frame(maxWidth: 300)
                 Button("Add a link", action: onAdd)
                     .buttonStyle(AmberButtonStyle(kind: .solid, size: 14))
                     .padding(.top, 4)
             }
+            syncNote
         }
+    }
+
+    /// Where the library is living. Worth saying only when the shelf is empty, which is
+    /// the one moment the question comes up: on a new device an empty library and a
+    /// library that has not arrived yet look exactly alike, and the difference is the
+    /// whole of what the reader is trying to find out.
+    @ViewBuilder
+    private var syncNote: some View {
+        switch library.syncState {
+        case .cloud:
+            EmptyView()
+        case .searching:
+            noteRow(symbol: "icloud", text: "Looking for your iCloud library…")
+        case .local:
+            noteRow(symbol: "icloud.slash",
+                    text: "iCloud isn't available, so this library stays on this device. Turn on iCloud Drive for Amber Glow in Settings to see what you saved elsewhere.")
+        }
+    }
+
+    private func noteRow(symbol: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: symbol)
+                .font(.system(size: 11))
+            Text(text)
+                .font(.system(size: 12))
+                .lineSpacing(2)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(amber.inkFaint)
+        .frame(maxWidth: 300)
+        .padding(.top, 18)
     }
 }
 

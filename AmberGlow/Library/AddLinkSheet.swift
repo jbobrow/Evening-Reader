@@ -12,11 +12,37 @@ struct FittedSheet: ViewModifier {
     }
 }
 
+/// How the add panel gets on screen.
+///
+/// On a wide panel it is a fitted card floating over the page. A phone cannot have that:
+/// a sheet there is a card presentation, which brings the system's own furniture with it
+/// — the page behind shrinks onto a black backdrop, and the status bar comes back over
+/// the top. Both are colours the app does not own. Full screen has none of that, and the
+/// app goes on painting every pixel.
+struct AddLinkPresentation<Sheet: View>: ViewModifier {
+    let isCompact: Bool
+    @Binding var isPresented: Bool
+    @ViewBuilder var sheet: () -> Sheet
+
+    func body(content: Content) -> some View {
+        if isCompact {
+            content.fullScreenCover(isPresented: $isPresented, content: sheet)
+        } else {
+            content.sheet(isPresented: $isPresented) {
+                sheet()
+                    .presentationBackground { GlowSurface(level: 0.9) }
+                    .modifier(FittedSheet())
+            }
+        }
+    }
+}
+
 struct AddLinkSheet: View {
     @Environment(\.amber) private var amber
     @Environment(\.dismiss) private var dismiss
     @Environment(Library.self) private var library
     @Environment(DisplaySettings.self) private var settings
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     let onAdd: (URL) -> Void
 
@@ -24,8 +50,26 @@ struct AddLinkSheet: View {
     @State private var problem: String?
     @State private var focused = false
 
+    private var isCompact: Bool { sizeClass == .compact }
+
+    /// A card on a wide panel, the whole glass on a phone — where 460pt is wider than
+    /// the screen and a fixed width would hang off both edges.
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        if isCompact {
+            VStack(spacing: 0) {
+                form
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(GlowSurface(level: 0.9))
+            .statusBarHidden(true)
+        } else {
+            form.frame(width: 460)
+        }
+    }
+
+    private var form: some View {
+        VStack(alignment: .leading, spacing: isCompact ? 16 : 18) {
             HStack {
                 Text("Add a link")
                     .font(.system(size: 22, weight: .semibold, design: .serif))
@@ -79,7 +123,7 @@ struct AddLinkSheet: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 AmberCaption(text: "Bringing in Safari's Reading List")
-                Text("iPadOS keeps the Reading List private to Safari, so it can't be imported directly. In Safari, open a saved page, tap Share, and choose **Save to Amber Glow** — the article lands in this library, stripped down and lit.")
+                Text("iOS keeps the Reading List private to Safari, so it can't be imported directly. In Safari, open a saved page, tap Share, and choose **Save to Amber Glow** — the article lands in this library, stripped down and lit.")
                     .font(.system(size: 13))
                     .lineSpacing(3)
                     .foregroundStyle(amber.inkMuted)
@@ -90,8 +134,7 @@ struct AddLinkSheet: View {
                 }
             }
         }
-        .padding(26)
-        .frame(width: 460)
+        .padding(isCompact ? 22 : 26)
         .onAppear { focused = true }
     }
 

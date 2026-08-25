@@ -304,3 +304,19 @@ struct AmberCard<Content: View>: View {
             )
     }
 }
+
+// MARK: - Measuring
+
+/// Reports the height of whatever it is put behind. A background never takes touches, so
+/// this can measure a view without standing between it and the finger.
+struct HeightReader: View {
+    @Binding var height: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            Color.clear
+                .onAppear { height = geo.size.height }
+                .onChange(of: geo.size.height) { _, new in height = new }
+        }
+    }
+}

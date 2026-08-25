@@ -7,6 +7,7 @@ struct BrowseScreen: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     let initialURL: URL?
     var onSaved: (SavedArticle) -> Void
@@ -15,6 +16,10 @@ struct BrowseScreen: View {
     @State private var address = ""
     @State private var savedFlash = false
     @State private var addressFocused = false
+    /// Height of the page area, so the scrubber can size its track to it.
+    @State private var pageHeight: CGFloat = 0
+    /// How much room the scrubber is taking, so the ground under it can match.
+    @State private var scrubberHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,63 +34,77 @@ struct BrowseScreen: View {
             } else {
                 Hairline()
             }
-            BrowserWebViewHost(model: model,
-                               palette: settings.palette,
-                               showsTexture: settings.showTexture)
-                // The one rule of the panel is that nothing introduces a second hue.
-                // Doing this natively rather than with a CSS filter is what makes that
-                // a guarantee: page elements on their own compositing layer escape a
-                // filter on `<html>`, but nothing in the page can escape a filter on
-                // the rendered view. Luminance first, then squeezed into the ink..page
-                // span so text lands on the ramp's ink rather than pure black, then
-                // multiplied onto the emitter color.
-                .grayscale(1)
-                // Night flips the page over. A web page is written for a light ground,
-                // so left alone its white becomes the darkest thing on screen and its
-                // black text disappears into the panel. A negative contrast is an
-                // inversion, so the flip folds into the same mapping rather than needing
-                // a `.colorInvert()` that would change the view's identity — and
-                // rebuilding the web view on every polarity change would drop the page.
-                .contrast(tintSign * (1 - tintFloor))
-                .brightness(tintFloor / 2)
-                .colorMultiply(tintColor)
-                // The page is opaque and covers the panel's own surface, so the lamp is
-                // painted back on over the top — otherwise browsing is a flat field
-                // while everything else in the app is lit.
-                .overlay { BacklightBloom(level: isNight ? 0.0 : pageLevel) }
-                .overlay(alignment: .bottomTrailing) {
-                    if model.pageCount > 1 {
-                        PageScrubber(page: model.page,
-                                     total: model.pageCount,
-                                     percent: model.percent,
-                                     style: Binding(get: { settings.progressStyle },
-                                                    set: { settings.progressStyle = $0 })) { velocity in
-                            model.autoScroll(velocity)
+            // Same split as the reader: the page runs to the bezel, the scrubber stays
+            // inside the safe area so it is not sitting on the home indicator.
+            ZStack(alignment: .bottomTrailing) {
+                BrowserWebViewHost(model: model,
+                                   palette: settings.palette,
+                                   showsTexture: settings.showTexture)
+                    // The one rule of the panel is that nothing introduces a second hue.
+                    // Doing this natively rather than with a CSS filter is what makes that
+                    // a guarantee: page elements on their own compositing layer escape a
+                    // filter on `<html>`, but nothing in the page can escape a filter on
+                    // the rendered view. Luminance first, then squeezed into the ink..page
+                    // span so text lands on the ramp's ink rather than pure black, then
+                    // multiplied onto the emitter color.
+                    .grayscale(1)
+                    // Night flips the page over. A web page is written for a light ground,
+                    // so left alone its white becomes the darkest thing on screen and its
+                    // black text disappears into the panel. A negative contrast is an
+                    // inversion, so the flip folds into the same mapping rather than needing
+                    // a `.colorInvert()` that would change the view's identity — and
+                    // rebuilding the web view on every polarity change would drop the page.
+                    .contrast(tintSign * (1 - tintFloor))
+                    .brightness(tintFloor / 2)
+                    .colorMultiply(tintColor)
+                    // The page is opaque and covers the panel's own surface, so the lamp is
+                    // painted back on over the top — otherwise browsing is a flat field
+                    // while everything else in the app is lit.
+                    .overlay { BacklightBloom(level: isNight ? 0.0 : pageLevel) }
+                    // The scrubber's ground. On the page rather than on the control, so
+                    // it can be the page — see `ScrubberGround`.
+                    .overlay {
+                        if model.pageCount > 1, isCompact, scrubberHeight > 0 {
+                            ScrubberGround(height: scrubberHeight)
+                                .transition(.opacity.animation(.easeOut(duration: 0.22)))
                         }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 18)
                     }
-                }
-                // App-drawn edit callout; the system one is suppressed because it is
-                // presented in its own window and cannot be given a colour.
-                .overlay {
-                    GeometryReader { geo in
-                        if let selection = model.selection {
-                            AmberEditMenuOverlay(
-                                selection: selection,
-                                container: geo.size,
-                                actions: menuActions(for: selection)
-                            ) { action in
-                                WebEditor.perform(action, on: model, selection: selection,
-                                                  search: { model.submit($0) })
-                                model.selection = nil
+                    // App-drawn edit callout; the system one is suppressed because it is
+                    // presented in its own window and cannot be given a colour.
+                    .overlay {
+                        GeometryReader { geo in
+                            if let selection = model.selection {
+                                AmberEditMenuOverlay(
+                                    selection: selection,
+                                    container: geo.size,
+                                    actions: menuActions(for: selection)
+                                ) { action in
+                                    WebEditor.perform(action, on: model, selection: selection,
+                                                      search: { model.submit($0) })
+                                    model.selection = nil
+                                }
                             }
                         }
                     }
+                    // Run to the physical bottom of the glass; otherwise the page stops at
+                    // the home-indicator inset and leaves a ledge.
+                    .ignoresSafeArea(.container, edges: .bottom)
+
+                if model.pageCount > 1 {
+                    PageScrubber(page: model.page,
+                                 total: model.pageCount,
+                                 percent: model.percent,
+                                 style: Binding(get: { settings.progressStyle },
+                                                set: { settings.progressStyle = $0 }),
+                                 available: pageHeight) { velocity in
+                        model.autoScroll(velocity)
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 18)
                 }
-                // Run to the physical bottom of the glass; otherwise the page stops at
-                // the home-indicator inset and leaves a ledge.
-                .ignoresSafeArea(.container, edges: .bottom)
+            }
+            .background { HeightReader(height: $pageHeight) }
+            .onPreferenceChange(ScrubberFootprint.self) { scrubberHeight = $0 }
         }
         .background(GlowSurface(level: 0.88))
         .statusBarHidden(true)
@@ -117,6 +136,8 @@ struct BrowseScreen: View {
     /// Where black ink lands, as a fraction of the page level.
     private let inkFloor = 0.045
 
+    private var isCompact: Bool { sizeClass == .compact }
+
     private var isNight: Bool { settings.polarity == .night }
 
     /// Negative inverts, which is what night needs.
@@ -136,66 +157,110 @@ struct BrowseScreen: View {
         return ink > 0 ? min(1, page / ink) : inkFloor
     }
 
+    /// Seven controls and an address field do not fit across a phone. On a narrow panel
+    /// the row splits in two: the field gets the top line to itself, and the travel and
+    /// save controls sit under it, pushed to the ends they belong to.
+    @ViewBuilder
     private var bar: some View {
-        HStack(spacing: 4) {
-            AmberIconButton(symbol: "xmark") { dismiss() }
-            AmberIconButton(symbol: "chevron.left") { model.web.goBack() }
-                .opacity(model.canGoBack ? 1 : 0.3)
-                .disabled(!model.canGoBack)
-            AmberIconButton(symbol: "chevron.right") { model.web.goForward() }
-                .opacity(model.canGoForward ? 1 : 0.3)
-                .disabled(!model.canGoForward)
-
-            HStack(spacing: 8) {
-                Image(systemName: model.isLoading ? "arrow.triangle.2.circlepath" : "lock")
-                    .font(.system(size: 11))
-                    .foregroundStyle(amber.inkFaint)
-                AmberTextField(text: $address,
-                               isFocused: $addressFocused,
-                               placeholder: "Search or enter address",
-                               palette: settings.palette,
-                               showsTexture: settings.showTexture,
-                               showsDotCom: true,
-                               goLabel: "Go",
-                               monospaced: true,
-                               fontSize: 13,
-                               onSubmit: { model.submit(address) })
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 18)
-                if model.isLoading {
-                    Button { model.web.stopLoading() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(amber.inkFaint)
-                    }
-                    .buttonStyle(.plain)
-                } else if model.currentURL != nil {
-                    Button { model.web.reload() } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12))
-                            .foregroundStyle(amber.inkFaint)
-                    }
-                    .buttonStyle(.plain)
+        if isCompact {
+            VStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    closeButton
+                    addressField
+                }
+                HStack(spacing: 4) {
+                    backButton
+                    forwardButton
+                    Spacer(minLength: 12)
+                    saveButton
+                    readButton
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(amber.color(0.79))
-                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(amber.rule, lineWidth: 1))
-            )
+            .padding(.vertical, 8)
+        } else {
+            HStack(spacing: 4) {
+                closeButton
+                backButton
+                forwardButton
+                addressField
+                saveButton
+                readButton
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+    }
 
-            Button(savedFlash ? "Saved" : "Save") { save(openReader: false) }
-                .buttonStyle(AmberButtonStyle(kind: .outline, size: 13))
-                .disabled(model.currentURL == nil)
-            Button("Read") { save(openReader: true) }
-                .buttonStyle(AmberButtonStyle(kind: .solid, size: 13))
-                .disabled(model.currentURL == nil)
+    private var closeButton: some View {
+        AmberIconButton(symbol: "xmark") { dismiss() }
+    }
+
+    private var backButton: some View {
+        AmberIconButton(symbol: "chevron.left") { model.web.goBack() }
+            .opacity(model.canGoBack ? 1 : 0.3)
+            .disabled(!model.canGoBack)
+    }
+
+    private var forwardButton: some View {
+        AmberIconButton(symbol: "chevron.right") { model.web.goForward() }
+            .opacity(model.canGoForward ? 1 : 0.3)
+            .disabled(!model.canGoForward)
+    }
+
+    private var saveButton: some View {
+        Button(savedFlash ? "Saved" : "Save") { save(openReader: false) }
+            .buttonStyle(AmberButtonStyle(kind: .outline, size: 13))
+            .disabled(model.currentURL == nil)
+    }
+
+    private var readButton: some View {
+        Button("Read") { save(openReader: true) }
+            .buttonStyle(AmberButtonStyle(kind: .solid, size: 13))
+            .disabled(model.currentURL == nil)
+    }
+
+    private var addressField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: model.isLoading ? "arrow.triangle.2.circlepath" : "lock")
+                .font(.system(size: 11))
+                .foregroundStyle(amber.inkFaint)
+            AmberTextField(text: $address,
+                           isFocused: $addressFocused,
+                           placeholder: "Search or enter address",
+                           palette: settings.palette,
+                           showsTexture: settings.showTexture,
+                           showsDotCom: true,
+                           goLabel: "Go",
+                           monospaced: true,
+                           fontSize: 13,
+                           onSubmit: { model.submit(address) })
+                .frame(maxWidth: .infinity)
+                .frame(height: 18)
+            if model.isLoading {
+                Button { model.web.stopLoading() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(amber.inkFaint)
+                }
+                .buttonStyle(.plain)
+            } else if model.currentURL != nil {
+                Button { model.web.reload() } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12))
+                        .foregroundStyle(amber.inkFaint)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(amber.color(0.79))
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(amber.rule, lineWidth: 1))
+        )
     }
 
     private func menuActions(for selection: WebSelection) -> [EditAction] {

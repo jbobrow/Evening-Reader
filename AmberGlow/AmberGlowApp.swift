@@ -29,6 +29,7 @@ struct RootView: View {
     @Environment(Library.self) private var library
     @Environment(\.amber) private var amber
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var selection: SavedArticle.ID?
     @State private var showLibrary = true
@@ -56,6 +57,11 @@ struct RootView: View {
         let url: URL?
     }
 
+    /// A phone, or a window narrow enough to behave like one: the drawer takes the whole
+    /// width instead of leaving a sliver of the page beside it, and the panels that float
+    /// over the page stop being fixed-width cards.
+    private var isCompact: Bool { sizeClass == .compact }
+
     private var selected: SavedArticle? {
         guard let selection else { return nil }
         return library.articles.first { $0.id == selection }
@@ -63,7 +69,11 @@ struct RootView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let drawerWidth = min(380, geo.size.width * 0.86)
+            // On a phone the drawer is the screen. At 86% it would leave a 55pt ribbon of
+            // the page down the right edge — too narrow to read and too wide to ignore,
+            // and the reader behind it is a different article from the one you are
+            // choosing. Full width makes it a push instead of a peek.
+            let drawerWidth = isCompact ? geo.size.width : min(380, geo.size.width * 0.86)
             // -drawerWidth is fully closed, 0 is fully open; the drag rides in between.
             let offset = min(0, max(-drawerWidth,
                                     (showLibrary ? 0 : -drawerWidth) + drawerDrag))
@@ -103,7 +113,7 @@ struct RootView: View {
                     .simultaneousGesture(drawerDragGesture(width: drawerWidth))
                     .zIndex(2)
 
-                glowOverlay(available: geo.size.height)
+                glowOverlay(in: geo.size)
                     .zIndex(3)
 
                 confirmDeleteOverlay
@@ -111,17 +121,14 @@ struct RootView: View {
             }
         }
         .statusBarHidden(true)
-        .sheet(isPresented: $showAdd) {
+        .modifier(AddLinkPresentation(isCompact: isCompact, isPresented: $showAdd) {
             AddLinkSheet { url in
-                let article = library.add(url: url)
-                selection = article.id
+                open(library.add(url: url))
             }
-            .presentationBackground { GlowSurface(level: 0.9) }
-            .modifier(FittedSheet())
-        }
+        })
         .fullScreenCover(item: $browseTarget) { target in
             BrowseScreen(initialURL: target.url) { saved in
-                selection = saved.id
+                open(saved)
             }
         }
         .onOpenURL(perform: handle)
@@ -133,6 +140,20 @@ struct RootView: View {
             library.refreshFromDisk()
             await library.startSync()
         }
+    }
+
+    /// Show an article.
+    ///
+    /// Selecting from the list already puts the drawer away, but a selection made
+    /// anywhere else — saving a link, or reading a page found in the browser — has to do
+    /// it too. On a phone the drawer is the whole screen, so leaving it open lands the
+    /// reader on the article and then covers it with the library, which reads as nothing
+    /// having happened at all. A wide panel shows the article beside the drawer, so there
+    /// it stays put.
+    private func open(_ article: SavedArticle) {
+        selection = article.id
+        guard isCompact else { return }
+        withAnimation(.drawer) { showLibrary = false }
     }
 
     // MARK: - Drawer
@@ -223,6 +244,7 @@ struct RootView: View {
                     },
                     cancel: dismissConfirm
                 )
+                .padding(.horizontal, 20)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -244,19 +266,20 @@ struct RootView: View {
     /// a hairline and flashes white for a frame on dismissal — neither is survivable in a
     /// panel whose whole premise is that no second color exists.
     @ViewBuilder
-    private func glowOverlay(available: CGFloat) -> some View {
+    private func glowOverlay(in size: CGSize) -> some View {
         if let anchor = glowPanel {
             let top: CGFloat = chromeVisible ? 54 : 16
+            let width = min(380, size.width - 24)
             ZStack(alignment: anchor == .library ? .topLeading : .topTrailing) {
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture { withAnimation(.drawer) { glowPanel = nil } }
 
                 PanelControls()
-                    .frame(width: 380)
+                    .frame(width: width)
                     // As tall as the glass allows, so the panel is not cut mid-control
                     // when there is room to show the whole thing.
-                    .frame(maxHeight: max(320, available - top - 24))
+                    .frame(maxHeight: max(320, size.height - top - 24))
                     .background {
                         ZStack {
                             amber.color(0.93)
@@ -287,7 +310,7 @@ struct RootView: View {
               let target = URL(string: raw) else { return }
         let article = library.add(url: target)
         if comps.host == "read" || comps.path.contains("read") {
-            selection = article.id
+            open(article)
         }
     }
 }

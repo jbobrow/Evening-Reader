@@ -25,8 +25,14 @@ final class WebKeyboardBridge {
     /// Held directly: once the class is swapped its name no longer matches the lookup.
     private weak var content: UIView?
     private var host: UIHostingController<AmberKeyboard>?
-    private var container: UIInputView?
+    private var container: AmberInputContainer?
     private var attachedTo: ObjectIdentifier?
+    /// What the keyboard is currently drawn with, so a width change can re-render it
+    /// without the caller having to hand the palette over again.
+    private var palette = AmberPalette()
+    private var showsTexture = true
+    /// The board's width, as UIKit lays it out. The keys are sized from it.
+    private var boardWidth: CGFloat = 0
 
     /// Set false to leave web fields on the system keyboard.
     static var isEnabled = true
@@ -67,6 +73,8 @@ final class WebKeyboardBridge {
     }
 
     func refresh(palette: AmberPalette, showsTexture: Bool) {
+        self.palette = palette
+        self.showsTexture = showsTexture
         host?.rootView = keyboard(palette: palette, showsTexture: showsTexture)
         container?.backgroundColor = UIColor(palette.color(0.80))
     }
@@ -77,8 +85,16 @@ final class WebKeyboardBridge {
         host.view.backgroundColor = .clear
         host.sizingOptions = []
 
-        let container = UIInputView(frame: CGRect(x: 0, y: 0, width: 0, height: Self.height),
-                                    inputViewStyle: .default)
+        let container = AmberInputContainer(
+            frame: CGRect(x: 0, y: 0, width: 0, height: Self.height),
+            inputViewStyle: .default
+        )
+        container.onWidthChange = { [weak self] width in
+            guard let self, self.boardWidth != width else { return }
+            self.boardWidth = width
+            self.host?.rootView = self.keyboard(palette: self.palette,
+                                                showsTexture: self.showsTexture)
+        }
         container.backgroundColor = UIColor(palette.color(0.80))
         container.allowsSelfSizing = true
         container.autoresizingMask = [.flexibleWidth]
@@ -100,7 +116,8 @@ final class WebKeyboardBridge {
         AmberKeyboard(palette: palette,
                       showsTexture: showsTexture,
                       showsDotCom: false,
-                      goLabel: "Go") { [weak self] key in
+                      goLabel: "Go",
+                      boardWidth: boardWidth) { [weak self] key in
             self?.handle(key)
         }
     }

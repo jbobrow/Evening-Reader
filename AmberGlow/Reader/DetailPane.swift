@@ -4,6 +4,7 @@ struct DetailPane: View {
     @Environment(Library.self) private var library
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     let article: SavedArticle?
     @Binding var showLibrary: Bool
@@ -21,6 +22,10 @@ struct DetailPane: View {
     /// Continuous, unlike the persisted `lastScroll`, which only moves in whole percent
     /// steps — that threshold is right for writing to disk and wrong for drawing a bar.
     @State private var liveProgress: Double = 0
+    /// Height of the page area, so the scrubber can size its track to it.
+    @State private var pageHeight: CGFloat = 0
+    /// How much room the scrubber is taking, so the ground under it can match.
+    @State private var scrubberHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +42,8 @@ struct DetailPane: View {
             }
         }
     }
+
+    private var isCompact: Bool { sizeClass == .compact }
 
     private func searchURL(for text: String) -> URL {
         var components = URLComponents(string: "https://duckduckgo.com/")!
@@ -102,63 +109,83 @@ struct DetailPane: View {
                 PDFReaderView(fileURL: library.documentURL(for: article))
                     .id(article.id)
             } else if let body = library.body(for: article) {
-                ReaderWebView(
-                    article: article,
-                    body: body,
-                    palette: settings.palette,
-                    settings: settings,
-                    onProgress: { p in
-                        liveProgress = p
-                        library.setScroll(p, for: article)
-                    },
-                    onOpenLink: onOpenLink,
-                    onTap: toggleChrome,
-                    onSelection: { found in
-                        withAnimation(.easeOut(duration: 0.14)) { selection = found }
-                    },
-                    onPages: { page, total, percent in
-                        self.page = page
-                        self.pageCount = total
-                        self.percent = percent
-                    },
-                    bridge: bridge
-                )
-                .id(article.id)
-                .task(id: article.id) { liveProgress = article.lastScroll }
-                .overlay(alignment: .bottomTrailing) {
+                // The page runs to the physical bottom of the glass; the scrubber does
+                // not. It is a control, so it stays a sibling of the web view rather than
+                // an overlay on it — that keeps it inside the safe area and off the home
+                // indicator, which on a phone reaches 34pt up from the bezel.
+                ZStack(alignment: .bottomTrailing) {
+                    ReaderWebView(
+                        article: article,
+                        body: body,
+                        palette: settings.palette,
+                        settings: settings,
+                        onProgress: { p in
+                            liveProgress = p
+                            library.setScroll(p, for: article)
+                        },
+                        onOpenLink: onOpenLink,
+                        onTap: toggleChrome,
+                        onSelection: { found in
+                            withAnimation(.easeOut(duration: 0.14)) { selection = found }
+                        },
+                        onPages: { page, total, percent in
+                            self.page = page
+                            self.pageCount = total
+                            self.percent = percent
+                        },
+                        bridge: bridge
+                    )
+                    .id(article.id)
+                    .task(id: article.id) { liveProgress = article.lastScroll }
+                    // The ground goes on the page, not on the control, so it can be the
+                    // page — and it runs to the bezel with it, so the pool has no edge
+                    // where the safe area starts. Under the callout, so a selection made
+                    // down in that corner still reads.
+                    .overlay {
+                        if pageCount > 1, isCompact, scrubberHeight > 0 {
+                            ScrubberGround(height: scrubberHeight)
+                                .transition(.opacity.animation(.easeOut(duration: 0.22)))
+                        }
+                    }
+                    // The callout is drawn by the app, over the page, because the system
+                    // one is presented in its own window and cannot be given a colour.
+                    .overlay {
+                        GeometryReader { geo in
+                            if let selection {
+                                AmberEditMenuOverlay(
+                                    selection: selection,
+                                    container: geo.size,
+                                    actions: [.copy, .search]
+                                ) { action in
+                                    WebEditor.perform(action, on: bridge, selection: selection,
+                                                      search: { onOpenLink(searchURL(for: $0)) })
+                                    withAnimation(.easeOut(duration: 0.14)) { self.selection = nil }
+                                }
+                            }
+                        }
+                    }
+                    // The web view is otherwise inset by the home-indicator safe area,
+                    // which left a visible ledge where the document's fill stopped.
+                    .ignoresSafeArea(.container, edges: .bottom)
+
                     if pageCount > 1 {
                         PageScrubber(page: page,
                                      total: pageCount,
                                      percent: percent,
                                      style: Binding(get: { settings.progressStyle },
-                                                    set: { settings.progressStyle = $0 })) { velocity in
+                                                    set: { settings.progressStyle = $0 }),
+                                     available: pageHeight) { velocity in
                             bridge.runJavaScript("window.__agPager && window.__agPager.autoScroll(\(velocity));")
                         }
                         .padding(.trailing, 16)
                         .padding(.bottom, 18)
                     }
                 }
-                // The callout is drawn by the app, over the page, because the system one
-                // is presented in its own window and cannot be given a colour.
-                .overlay {
-                    GeometryReader { geo in
-                        if let selection {
-                            AmberEditMenuOverlay(
-                                selection: selection,
-                                container: geo.size,
-                                actions: [.copy, .search]
-                            ) { action in
-                                WebEditor.perform(action, on: bridge, selection: selection,
-                                                  search: { onOpenLink(searchURL(for: $0)) })
-                                withAnimation(.easeOut(duration: 0.14)) { self.selection = nil }
-                            }
-                        }
-                    }
-                }
-                // Run the page to the physical bottom of the glass. The web view is
-                // otherwise inset by the home-indicator safe area, which used to leave a
-                // visible ledge where the document's fill stopped.
-                .ignoresSafeArea(.container, edges: .bottom)
+                // Measured from behind rather than around: the scrubber's tap is a
+                // zero-distance drag competing with WebKit's own recognisers, and it
+                // does not survive another layout container being put in its way.
+                .background { HeightReader(height: $pageHeight) }
+                .onPreferenceChange(ScrubberFootprint.self) { scrubberHeight = $0 }
             } else {
                 message(icon: "doc.questionmark",
                         title: "The saved text went missing.",
@@ -213,7 +240,7 @@ struct DetailPane: View {
                 .frame(maxWidth: 380)
             actions().padding(.top, 6)
         }
-        .padding(40)
+        .padding(isCompact ? 26 : 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -230,16 +257,21 @@ struct DetailPane: View {
             .padding(12)
 
             Spacer()
+            // The couplet is set to the glass it is on: at 40pt its first line needs more
+            // width than a phone has, and the line breaks are the whole point of it — so
+            // the type gives way rather than the wrap.
             Text("When the lights go off,\nenjoy the amber glow.")
-                .font(.system(size: 40, weight: .regular, design: .serif))
+                .font(.system(size: isCompact ? 27 : 40, weight: .regular, design: .serif))
                 .multilineTextAlignment(.center)
-                .lineSpacing(6)
+                .lineSpacing(isCompact ? 4 : 6)
                 .foregroundStyle(amber.inkStrong)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, isCompact ? 26 : 40)
             Text("Pick something from the library, or add a link.")
-                .font(.system(size: 14))
+                .font(.system(size: isCompact ? 13 : 14))
+                .multilineTextAlignment(.center)
                 .foregroundStyle(amber.inkFaint)
-                .padding(.top, 22)
+                .padding(.horizontal, 26)
+                .padding(.top, isCompact ? 16 : 22)
             Spacer()
             Spacer()
         }
