@@ -98,7 +98,10 @@ struct DetailPane: View {
     private func content(for article: SavedArticle) -> some View {
         switch article.state {
         case .ready:
-            if let body = library.body(for: article) {
+            if article.isPDF {
+                PDFReaderView(fileURL: library.documentURL(for: article))
+                    .id(article.id)
+            } else if let body = library.body(for: article) {
                 ReaderWebView(
                     article: article,
                     body: body,

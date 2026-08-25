@@ -252,7 +252,7 @@ struct ArticleRow: View {
                     .lineLimit(1)
                 if article.state == .ready {
                     Text("·")
-                    Text("\(article.estimatedMinutes) min")
+                    Text(article.lengthLabel)
                 }
                 if isWorking || article.state == .pending {
                     Text("·")

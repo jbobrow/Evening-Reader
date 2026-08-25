@@ -68,7 +68,7 @@ struct ReaderRenderer {
         if let byline = article.byline, !byline.isEmpty { meta.append(escape(byline)) }
         if let site = article.siteName, !site.isEmpty { meta.append(escape(site)) }
         else { meta.append(escape(article.host)) }
-        meta.append("\(article.estimatedMinutes) min")
+        meta.append(escape(article.lengthLabel))
         meta.append(escape(dateLine))
 
         return """

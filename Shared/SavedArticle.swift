@@ -11,7 +11,15 @@ struct SavedArticle: Codable, Identifiable, Hashable {
         case failed
     }
 
+    /// What the folder holds. Absent on anything saved before PDFs existed, which is
+    /// why it is optional rather than defaulted — a synthesised default is not applied
+    /// when the key is simply missing from the JSON.
+    enum Kind: String, Codable {
+        case article, pdf
+    }
+
     var id: UUID = UUID()
+    var kind: Kind?
     var url: URL
     var title: String
     var byline: String?
@@ -26,6 +34,21 @@ struct SavedArticle: Codable, Identifiable, Hashable {
     var state: State = .pending
     /// File name (not a full path) of the cached reader HTML inside the store's `Bodies` folder.
     var bodyFile: String?
+
+    /// Pages, for a PDF. Nothing else has one.
+    var pageCount: Int?
+
+    var isPDF: Bool { kind == .pdf }
+
+    /// What to show where a reading time would go. A page count is the honest unit for a
+    /// PDF: its text is not ours to count, so a minute estimate would be a guess.
+    var lengthLabel: String {
+        if isPDF {
+            guard let pages = pageCount, pages > 0 else { return "PDF" }
+            return pages == 1 ? "1 page" : "\(pages) pages"
+        }
+        return "\(estimatedMinutes) min"
+    }
 
     var estimatedMinutes: Int { max(1, Int((Double(wordCount) / 235.0).rounded())) }
 

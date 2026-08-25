@@ -52,7 +52,7 @@ enum OfflineAssets {
             }
             budget -= fetched.count
             guard let name = store.writeAsset(fetched, ext: extensionFor(remote, data: fetched),
-                                              article: article.id) else {
+                                              for: article) else {
                 out += tag
                 continue
             }

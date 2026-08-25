@@ -1,4 +1,5 @@
 import Foundation
+import PDFKit
 import UIKit
 import Observation
 
@@ -56,8 +57,11 @@ final class Library {
     func count(scope: Scope) -> Int { list(scope: scope, search: "").count }
 
     func body(for article: SavedArticle) -> String? {
-        guard let file = article.bodyFile else { return nil }
-        return store.readBody(file)
+        store.readBody(for: article)
+    }
+
+    func documentURL(for article: SavedArticle) -> URL {
+        store.documentURL(for: article)
     }
 
     // MARK: - Mutation
@@ -116,6 +120,13 @@ final class Library {
         working.insert(article.id)
         defer { working.remove(article.id) }
 
+        // A PDF has no reader text to pull out of it — it is already the document. Save
+        // the file itself and let the reader render it.
+        if await Self.isPDF(article.url) {
+            await savePDF(article)
+            return
+        }
+
         do {
             let result = try await ArticleExtractor.shared.extract(url: article.url)
             guard var updated = articles.first(where: { $0.id == article.id }) else { return }
@@ -128,8 +139,7 @@ final class Library {
             // Pull the pictures onto the device before the body is written, so what is
             // stored already points at the copies rather than at the web.
             let offline = await OfflineAssets.localize(html: result.html, article: updated, store: store)
-            updated.bodyFile = store.writeBody(offline, for: updated)
-            updated.state = updated.bodyFile == nil ? .failed : .ready
+            updated.state = store.writeBody(offline, for: updated) ? .ready : .failed
             replace(updated)
         } catch {
             guard var updated = articles.first(where: { $0.id == article.id }) else { return }
@@ -137,6 +147,47 @@ final class Library {
             replace(updated)
             lastError = error.localizedDescription
         }
+    }
+
+    /// Is this a PDF? The extension is only a hint — plenty of PDFs are served from a
+    /// path that does not end in one — so the server is asked, and the answer falls back
+    /// to the extension when it cannot be.
+    private static func isPDF(_ url: URL) async -> Bool {
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 12
+        if let (_, response) = try? await URLSession.shared.data(for: request),
+           let mime = (response as? HTTPURLResponse)?
+               .value(forHTTPHeaderField: "Content-Type")?.lowercased() {
+            if mime.contains("application/pdf") { return true }
+            if mime.contains("text/html") { return false }
+        }
+        return url.pathExtension.lowercased() == "pdf"
+    }
+
+    private func savePDF(_ article: SavedArticle) async {
+        var request = URLRequest(url: article.url)
+        request.timeoutInterval = 60
+        guard let (data, _) = try? await URLSession.shared.data(for: request), !data.isEmpty,
+              var updated = articles.first(where: { $0.id == article.id }) else {
+            guard var failed = articles.first(where: { $0.id == article.id }) else { return }
+            failed.state = .failed
+            replace(failed)
+            return
+        }
+        updated.kind = .pdf
+        updated.pageCount = PDFDocument(data: data)?.pageCount
+        if updated.title.isEmpty || updated.title == updated.host {
+            let name = article.url.deletingPathExtension().lastPathComponent
+            let cleaned = name.replacingOccurrences(of: "_", with: " ")
+                .replacingOccurrences(of: "-", with: " ")
+            if !cleaned.isEmpty { updated.title = cleaned }
+        }
+        // A page count is the honest unit for a PDF; the reader shows it in place of a
+        // reading time, which would be a guess about something we cannot see inside.
+        updated.wordCount = 0
+        updated.state = store.writeDocument(data, for: updated) ? .ready : .failed
+        replace(updated)
     }
 
     func markRead(_ article: SavedArticle) {
@@ -161,8 +212,7 @@ final class Library {
     }
 
     func delete(_ article: SavedArticle) {
-        store.deleteBody(article.bodyFile)
-        store.deleteAssets(for: article.id)
+        store.delete(article)
         articles.removeAll { $0.id == article.id }
         persist()
     }
