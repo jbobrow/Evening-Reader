@@ -113,6 +113,7 @@ private struct PDFWebView: UIViewRepresentable {
         web.backgroundColor = .clear
         web.scrollView.backgroundColor = .clear
         web.scrollView.showsVerticalScrollIndicator = false
+        web.navigationDelegate = context.coordinator
         web.loadFileURL(fileURL, allowingReadAccessTo: fileURL.deletingLastPathComponent())
         pager.scrollView = web.scrollView
         context.coordinator.watch(web.scrollView)
@@ -123,13 +124,66 @@ private struct PDFWebView: UIViewRepresentable {
         context.coordinator.parent = self
     }
 
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, WKNavigationDelegate {
         var parent: PDFWebView
         private var offsetToken: NSKeyValueObservation?
         private var sizeToken: NSKeyValueObservation?
         private var restored = false
+        /// WebKit's own page indicator, once found. Held so it can be kept down without
+        /// walking the view tree again.
+        private weak var systemPageLabel: UIView?
+        private var searchesLeft = 40
 
         init(_ parent: PDFWebView) { self.parent = parent }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            hideSystemPageLabel(in: webView)
+        }
+
+        /// Puts down WebKit's own page indicator — the blurred grey capsule that rises in
+        /// the corner while a PDF is scrolled and fades out after it.
+        ///
+        /// It is the one piece of system material left anywhere in the app, and it says
+        /// what the app's own pill already says, a few points away from it and in another
+        /// language entirely. There is no API to decline it, so it is found by class name
+        /// and hidden, which is the same trade the keyboard bridge makes: if WebKit ever
+        /// renames or restructures the view, nothing is found and nothing is touched. The
+        /// indicator comes back, which is untidy, and that is the whole of the damage.
+        ///
+        /// `isHidden` rather than removal — WebKit animates the thing's alpha to show and
+        /// hide it, and a hidden view stays hidden through that.
+        private func hideSystemPageLabel(in web: WKWebView) {
+            if let found = systemPageLabel {
+                found.isHidden = true
+                return
+            }
+            guard searchesLeft > 0 else { return }
+            searchesLeft -= 1
+            guard let found = Self.pageLabel(in: web) else { return }
+            systemPageLabel = found
+            found.isHidden = true
+        }
+
+        private static func pageLabel(in view: UIView) -> UIView? {
+            if String(describing: type(of: view)) == "PDFPageLabelView" { return view }
+            for sub in view.subviews {
+                if let found = pageLabel(in: sub) { return found }
+            }
+            return nil
+        }
+
+        /// The content process was jettisoned while the app was away — see the same
+        /// method on the article reader for what that is and why it happens. WebKit will
+        /// often bring a file URL back by itself, but asking is what makes it certain.
+        ///
+        /// The reader's place does not come back with it: the document reopens at the
+        /// top. The position is overwritten during the teardown, before the reload can
+        /// use it, by a report this has not managed to trace. Worth fixing, but it costs
+        /// a page rather than the page.
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            let url = parent.fileURL
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        }
 
         /// WebKit owns the scroll view's delegate, so the position is watched rather than
         /// received. The content size is watched too: it is zero until the document has
@@ -148,6 +202,7 @@ private struct PDFWebView: UIViewRepresentable {
 
         @MainActor
         private func report(_ scroll: UIScrollView) {
+            if let web = scroll.superview as? WKWebView { hideSystemPageLabel(in: web) }
             let viewport = scroll.bounds.height
             let length = scroll.contentSize.height
             guard viewport > 0, length > 0 else { return }
@@ -178,3 +233,4 @@ private struct PDFWebView: UIViewRepresentable {
         }
     }
 }
+

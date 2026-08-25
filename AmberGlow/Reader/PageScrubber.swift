@@ -104,6 +104,20 @@ struct PageScrubber: View {
     @State private var styleMenu = false
     @State private var pressTimer: Task<Void, Never>?
     @State private var pressHandled = false
+    /// Whether the readout is up. It follows the page: present while the reading moves,
+    /// gone once it settles.
+    @State private var showing = true
+    @State private var fadeTimer: Task<Void, Never>?
+
+    /// Seconds of stillness before the readout goes. Shorter than the track's own idle
+    /// timeout, since this is only a number going away rather than a control closing.
+    private let fadeTimeout: Double = 1.6
+
+    /// The pill earns its place while you are moving and not otherwise. A readout with
+    /// nothing to report is furniture, and this app puts its furniture away — the chrome
+    /// already goes on a tap. Open, it stays: a control being used is not idle, whatever
+    /// the page is doing.
+    private var isShowing: Bool { showing || isOpen || styleMenu }
 
     /// How far above the pill the thumb settles, where there is room for it.
     private let restAtFullSize: CGFloat = 188
@@ -167,6 +181,11 @@ struct PageScrubber: View {
             if styleMenu { chooser } else { pill }
         }
         .frame(height: isOpen ? rest + trackHeight / 2 + 56 : 46, alignment: .bottom)
+        .opacity(isShowing ? 1 : 0)
+        // Nothing invisible should be tappable. Faded out, the pill is not there at all
+        // — a nudge of the page brings it back, which is the same move that would have
+        // made you want it.
+        .allowsHitTesting(isShowing)
         // How much room this is taking, for the ground drawn beneath it. Measured rather
         // than computed so it follows the spring rather than jumping ahead of it.
         //
@@ -182,12 +201,15 @@ struct PageScrubber: View {
         }
         .animation(.spring(response: 0.42, dampingFraction: 0.72), value: isOpen)
         .onChange(of: percent) { _, _ in
+            reveal()
             // A scroll the reader made themselves — put the track away.
             guard isOpen, !isDragging,
                   Date().timeIntervalSince(lastTouch) > 0.6 else { return }
             close()
         }
-        .onDisappear { idleTimer?.cancel(); pressTimer?.cancel() }
+        // Shown when the page arrives, so it is known to be there, then away.
+        .onAppear { reveal() }
+        .onDisappear { idleTimer?.cancel(); pressTimer?.cancel(); fadeTimer?.cancel() }
     }
 
     /// The percent/pages chooser. It takes the pill's place rather than sitting above it:
@@ -378,6 +400,17 @@ struct PageScrubber: View {
 
     // MARK: - Behaviour
 
+    /// Bring the readout up, and start it going away again.
+    private func reveal() {
+        if !showing { withAnimation(.easeOut(duration: 0.16)) { showing = true } }
+        fadeTimer?.cancel()
+        fadeTimer = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(fadeTimeout * 1_000_000_000))
+            guard !Task.isCancelled, !isOpen, !styleMenu, !isDragging else { return }
+            withAnimation(.easeInOut(duration: 0.45)) { showing = false }
+        }
+    }
+
     private func showStyleMenu() {
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
         withAnimation(.spring(response: 0.34, dampingFraction: 0.78)) {
@@ -400,6 +433,7 @@ struct PageScrubber: View {
     }
 
     private func open() {
+        reveal()
         isOpen = true
         travel = 0
         lastTouch = Date()
@@ -408,6 +442,7 @@ struct PageScrubber: View {
     }
 
     private func close() {
+        reveal()
         idleTimer?.cancel()
         idleTimer = nil
         scroll(0)

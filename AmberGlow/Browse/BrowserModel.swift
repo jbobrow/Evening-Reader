@@ -105,6 +105,13 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         return url
     }
 
+    /// The content process was jettisoned while the app was away. A browsed page has a
+    /// real URL behind it, so unlike the reader it can simply be fetched again — but it
+    /// has to be asked, since WebKit leaves the view standing and empty.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        webView.reload()
+    }
+
     /// Long-pressing a link would otherwise raise WebKit's preview sheet and context
     /// menu — its own window, system materials, no appearance API. Returning nil is the
     /// documented way to decline it.

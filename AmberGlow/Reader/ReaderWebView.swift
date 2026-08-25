@@ -136,6 +136,27 @@ struct ReaderWebView: UIViewRepresentable {
             WebKeyboardBridge.installOverrides(on: webView)
         }
 
+        /// WebKit's content process was jettisoned — which the system does to a
+        /// backgrounded app when memory runs short, and a reader is an app that spends
+        /// its life backgrounded.
+        ///
+        /// The view survives; everything it was showing does not. And because the reader
+        /// document paints no background of its own, what is left is not a white page but
+        /// a blank one: the article's chrome, its scrubber, and nothing at all between
+        /// them. It looks like the app opened to a page that was never there.
+        ///
+        /// Nothing recovers on its own. WebKit can re-fetch a page it holds a URL for,
+        /// but the reader is handed an HTML string and has nowhere to go back to. Neither
+        /// will `loadIfNeeded`, whose whole job is to *not* reload for anything short of
+        /// a new article — which is what keeps a change of type or glow from throwing
+        /// away the reader's place. So the record of what was loaded is torn up first,
+        /// and the document goes back in behind it, landing where the reader left off:
+        /// `lastScroll` was being kept the whole time.
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            loadedKey = nil
+            loadIfNeeded(parent)
+        }
+
         private func restoreScroll() {
             guard !didRestore, let web else { return }
             didRestore = true

@@ -132,7 +132,7 @@ struct DetailPane: View {
                         .id(article.id)
                         .task(id: article.id) { liveProgress = article.lastScroll }
                         .overlay {
-                            if pageCount > 1, isCompact {
+                            if pageCount > 1, isCompact, scrubberHeight > 0 {
                                 ScrubberGround(height: scrubberHeight)
                             }
                         }
