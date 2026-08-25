@@ -92,7 +92,13 @@ struct ReaderRenderer {
         .wrap {
           max-width: var(--measure);
           margin: 0 auto;
-          padding: 26px 30px 180px;
+          /* Two things set the space above the title. The `em` floor keeps it in
+             proportion to the text, so turning the reading size up does not leave the
+             title crowded — and it is what holds in landscape, where there is little
+             height to give away. The `vh` term lets a taller screen take more: the same
+             inset that sits right on an 11" reads as tight on a 13", where the page is
+             bigger but a fixed margin is not. */
+          padding: max(3.4em, 6vh) 30px 180px;
         }
         header.ag-head { margin: 0 0 34px; }
         header.ag-head h1 {
