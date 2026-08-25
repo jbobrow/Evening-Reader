@@ -125,7 +125,10 @@ final class Library {
             updated.excerpt = result.excerpt.isEmpty ? nil : String(result.excerpt.prefix(320))
             updated.wordCount = result.wordCount
             updated.publishedAt = Self.parseDate(result.published)
-            updated.bodyFile = store.writeBody(result.html, for: updated)
+            // Pull the pictures onto the device before the body is written, so what is
+            // stored already points at the copies rather than at the web.
+            let offline = await OfflineAssets.localize(html: result.html, article: updated, store: store)
+            updated.bodyFile = store.writeBody(offline, for: updated)
             updated.state = updated.bodyFile == nil ? .failed : .ready
             replace(updated)
         } catch {
@@ -159,6 +162,7 @@ final class Library {
 
     func delete(_ article: SavedArticle) {
         store.deleteBody(article.bodyFile)
+        store.deleteAssets(for: article.id)
         articles.removeAll { $0.id == article.id }
         persist()
     }

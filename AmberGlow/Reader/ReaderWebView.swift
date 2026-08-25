@@ -1,6 +1,43 @@
 import SwiftUI
 import WebKit
 
+/// Serves an article's stored pictures to the reader.
+///
+/// The saved HTML points at `amber-asset://` rather than at the web, so a page opened
+/// with no network still has its pictures. WebKit hands those requests here and they are
+/// answered from disk.
+final class AssetSchemeHandler: NSObject, WKURLSchemeHandler {
+    private let store: ArticleStore
+    init(store: ArticleStore = .shared) { self.store = store }
+
+    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        guard let url = task.request.url,
+              let file = store.assetFile(for: url),
+              let data = try? Data(contentsOf: file) else {
+            task.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+        let response = URLResponse(url: url, mimeType: Self.mime(for: file.pathExtension),
+                                   expectedContentLength: data.count, textEncodingName: nil)
+        task.didReceive(response)
+        task.didReceive(data)
+        task.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
+
+    private static func mime(for ext: String) -> String {
+        switch ext.lowercased() {
+        case "jpg", "jpeg": return "image/jpeg"
+        case "png": return "image/png"
+        case "gif": return "image/gif"
+        case "webp": return "image/webp"
+        case "svg": return "image/svg+xml"
+        default: return "application/octet-stream"
+        }
+    }
+}
+
 /// A handle on the reader's web view, so the view that owns the edit callout can run
 /// the actions without reaching into the representable's coordinator.
 @MainActor
@@ -31,6 +68,7 @@ struct ReaderWebView: UIViewRepresentable {
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         config.userContentController.add(context.coordinator, name: "reader")
         config.allowsInlineMediaPlayback = true
+        config.setURLSchemeHandler(AssetSchemeHandler(), forURLScheme: OfflineAssets.scheme)
 
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
