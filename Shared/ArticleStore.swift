@@ -20,8 +20,13 @@ import CryptoKit
 final class ArticleStore {
     static let appGroupID = "group.com.amberglow.shared"
 
-    let root: URL
+    /// Where the library lives now. Starts local and moves to iCloud once the container
+    /// has been resolved, which cannot be done synchronously at launch.
+    private(set) var root: URL
+    /// The app group folder. Always writable, and where the share extension puts things.
+    let localRoot: URL
     let usesAppGroup: Bool
+    private(set) var isCloud = false
 
     private let legacyIndexURL: URL
     private let legacyBodiesDir: URL
@@ -35,20 +40,79 @@ final class ArticleStore {
     init() {
         let fm = FileManager.default
         if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID) {
-            root = group.appendingPathComponent("Library", isDirectory: true)
+            localRoot = group.appendingPathComponent("Library", isDirectory: true)
             usesAppGroup = true
         } else {
             let base = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                     appropriateFor: nil, create: true))
                 ?? URL(fileURLWithPath: NSTemporaryDirectory())
-            root = base.appendingPathComponent("AmberGlow", isDirectory: true)
+            localRoot = base.appendingPathComponent("AmberGlow", isDirectory: true)
             usesAppGroup = false
         }
-        legacyIndexURL = root.appendingPathComponent("index.json")
-        legacyBodiesDir = root.appendingPathComponent("Bodies", isDirectory: true)
-        legacyAssetsDir = root.appendingPathComponent("Assets", isDirectory: true)
-        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        root = localRoot
+        legacyIndexURL = localRoot.appendingPathComponent("index.json")
+        legacyBodiesDir = localRoot.appendingPathComponent("Bodies", isDirectory: true)
+        legacyAssetsDir = localRoot.appendingPathComponent("Assets", isDirectory: true)
+        try? fm.createDirectory(at: localRoot, withIntermediateDirectories: true)
         migrateIfNeeded()
+    }
+
+    // MARK: - iCloud
+
+    /// Moves the library into iCloud, if iCloud will have it.
+    ///
+    /// Anything already on this device is moved across the first time. A folder that is
+    /// already there wins — it came from another device and is at least as current as
+    /// what is here, and a folder is only ever written whole.
+    ///
+    /// Returns true when the library is in iCloud afterwards.
+    @discardableResult
+    func adoptCloud() async -> Bool {
+        guard !isCloud, let cloud = await CloudLibrary.documentsDirectory() else { return isCloud }
+        let fm = FileManager.default
+        let local = localRoot
+        queue.sync {
+            if let entries = try? fm.contentsOfDirectory(at: local,
+                                                         includingPropertiesForKeys: [.isDirectoryKey],
+                                                         options: [.skipsHiddenFiles]) {
+                for dir in entries {
+                    let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                    guard isDir else { continue }
+                    let destination = cloud.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+                    guard !fm.fileExists(atPath: destination.path) else { continue }
+                    try? fm.setUbiquitous(true, itemAt: dir, destinationURL: destination)
+                }
+            }
+            root = cloud
+            isCloud = true
+            folders.removeAll()
+        }
+        return true
+    }
+
+    /// Takes anything the share extension left in the app group.
+    ///
+    /// The extension has no iCloud entitlement — it writes where it can, and the app
+    /// carries it the rest of the way on the next launch or foreground.
+    func drainInbox() {
+        guard isCloud else { return }
+        let fm = FileManager.default
+        let inbox = localRoot
+        queue.sync {
+            guard let entries = try? fm.contentsOfDirectory(at: inbox,
+                                                            includingPropertiesForKeys: [.isDirectoryKey],
+                                                            options: [.skipsHiddenFiles]) else { return }
+            for dir in entries {
+                let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                guard isDir else { continue }
+                let destination = root.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+                if fm.fileExists(atPath: destination.path) {
+                    try? fm.removeItem(at: dir)          // already have it
+                } else {
+                    try? fm.setUbiquitous(true, itemAt: dir, destinationURL: destination)
+                }
+            }
+        }
     }
 
     // MARK: - Layout
@@ -253,18 +317,6 @@ final class ArticleStore {
         let file = dir.appendingPathComponent(Self.assetsName, isDirectory: true)
             .appendingPathComponent(name)
         return FileManager.default.fileExists(atPath: file.path) ? file : nil
-    }
-
-    /// Bytes held on disk for saved reading.
-    func storedByteCount() -> Int64 {
-        var total: Int64 = 0
-        guard let e = FileManager.default.enumerator(at: root,
-                                                     includingPropertiesForKeys: [.fileSizeKey])
-        else { return 0 }
-        for case let url as URL in e {
-            total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        }
-        return total
     }
 
     // MARK: - Migration

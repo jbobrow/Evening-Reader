@@ -51,8 +51,6 @@
 	<false/>
 	<key>UIStatusBarHidden</key>
 	<true/>
-	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<true/>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -62,5 +60,7 @@
 	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
 </dict>
 </plist>

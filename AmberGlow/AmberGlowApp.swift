@@ -126,10 +126,13 @@ struct RootView: View {
         }
         .onOpenURL(perform: handle)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { library.refreshFromDisk() }
+            if phase == .active { library.pickUpInbox() }
             if phase == .background { library.persist() }
         }
-        .task { library.refreshFromDisk() }
+        .task {
+            library.refreshFromDisk()
+            await library.startSync()
+        }
     }
 
     // MARK: - Drawer

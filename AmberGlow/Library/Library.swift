@@ -24,6 +24,8 @@ final class Library {
     }
 
     private let store: ArticleStore
+    @ObservationIgnored private let cloud = CloudLibrary()
+    @ObservationIgnored private var cloudObserver: NSObjectProtocol?
 
     init(store: ArticleStore = .shared) {
         self.store = store
@@ -222,6 +224,28 @@ final class Library {
     /// True when the clipboard *probably* holds a link — checked without reading the
     /// contents, so iOS doesn't show a paste banner until the user asks for it.
     var clipboardMayHoldLink: Bool { UIPasteboard.general.hasURLs }
+
+    /// Move the library into iCloud if it is available, then keep up with it.
+    ///
+    /// Called once at launch. Everything before this point works against the local copy,
+    /// so a slow or absent iCloud never delays the first read.
+    func startSync() async {
+        guard await store.adoptCloud() else { return }
+        store.drainInbox()
+        refreshFromDisk()
+        cloud.watch()
+        cloudObserver = NotificationCenter.default.addObserver(
+            forName: CloudLibrary.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshFromDisk() }
+        }
+    }
+
+    /// On returning to the app, take anything the share extension queued while away.
+    func pickUpInbox() {
+        store.drainInbox()
+        refreshFromDisk()
+    }
 
     func addFromClipboard() {
         let pasteboard = UIPasteboard.general
