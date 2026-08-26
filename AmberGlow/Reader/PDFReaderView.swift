@@ -198,11 +198,30 @@ private struct PDFWebView: UIViewRepresentable {
         }
 
         private static func pageLabel(in view: UIView) -> UIView? {
-            if String(describing: type(of: view)) == "PDFPageLabelView" { return view }
+            if isPageIndicator(view) { return view }
             for sub in view.subviews {
                 if let found = pageLabel(in: sub) { return found }
             }
             return nil
+        }
+
+        /// The indicator has had more than one name, and matching one spelling of it is
+        /// how this came to be hidden on the simulator and showing on the phone.
+        ///
+        /// Through iOS 18 it is PDFKit's `PDFPageLabelView`. On iOS 26 that class is
+        /// still there, but WebKit puts up its own `WKPDFPageNumberIndicator` instead,
+        /// so the old name matches nothing and the indicator stays. Both were read out of
+        /// the two runtimes rather than guessed at.
+        ///
+        /// Matching the shape of the name rather than either spelling covers the two that
+        /// exist and stands some chance against the next rename. It is still a name, and
+        /// still fails the same safe way: nothing found, nothing touched.
+        private static func isPageIndicator(_ view: UIView) -> Bool {
+            let name = String(describing: type(of: view))
+            guard name.contains("PDF") else { return false }
+            return name.contains("PageLabel")
+                || name.contains("PageNumber")
+                || name.contains("PageIndicator")
         }
 
         /// The content process was jettisoned while the app was away — see the same
