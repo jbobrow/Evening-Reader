@@ -48,6 +48,9 @@ struct RootView: View {
     @State private var drawerTracking = false
     /// Article awaiting a delete confirmation.
     @State private var confirmDelete: SavedArticle?
+    /// The opening. `launching` is the black itself; `launchName` is the name on it.
+    @State private var launching = true
+    @State private var launchName = false
 
     enum PanelAnchor { case library, reader }
 
@@ -118,6 +121,12 @@ struct RootView: View {
 
                 confirmDeleteOverlay
                     .zIndex(4)
+
+                if launching {
+                    LaunchVeil(nameShowing: launchName)
+                        .transition(.opacity)
+                        .zIndex(5)
+                }
             }
         }
         .statusBarHidden(true)
@@ -137,7 +146,18 @@ struct RootView: View {
             if phase == .background { library.persist() }
         }
         .task {
+            // Read off disk first: the library behind the veil is then already the one
+            // the reader left, so lifting it is a cross-fade to the app rather than to an
+            // empty shelf that fills in a moment later.
             library.refreshFromDisk()
+
+            withAnimation(.easeIn(duration: 0.9)) { launchName = true }
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
+            withAnimation(.easeInOut(duration: 0.7)) { launching = false }
+
+            // iCloud is asked for afterwards. It can take a minute to answer, and the
+            // opening is not the place to wait for it — what it brings arrives in the
+            // list, which is where it can be seen arriving.
             await library.startSync()
         }
     }
