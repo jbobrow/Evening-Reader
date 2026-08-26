@@ -156,72 +156,12 @@ private struct PDFWebView: UIViewRepresentable {
         private var restored = false
         /// WebKit's own page indicator, once found. Held so it can be kept down without
         /// walking the view tree again.
-        private weak var systemPageLabel: UIView?
-        /// When the hunt for WebKit's page label last ran, so a document that never has
-        /// one is not searched on every frame of every scroll.
-        private var lastLabelSearch: CFTimeInterval = 0
+        private let indicator = SystemPageIndicator()
 
         init(_ parent: PDFWebView) { self.parent = parent }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            hideSystemPageLabel(in: webView)
-        }
-
-        /// Puts down WebKit's own page indicator — the blurred grey capsule that rises in
-        /// the corner while a PDF is scrolled and fades out after it.
-        ///
-        /// It is the one piece of system material left anywhere in the app, and it says
-        /// what the app's own pill already says, a few points away from it and in another
-        /// language entirely. There is no API to decline it, so it is found by class name
-        /// and hidden, which is the same trade the keyboard bridge makes: if WebKit ever
-        /// renames or restructures the view, nothing is found and nothing is touched. The
-        /// indicator comes back, which is untidy, and that is the whole of the damage.
-        ///
-        /// `isHidden` rather than removal — WebKit animates the thing's alpha to show and
-        /// hide it, and a hidden view stays hidden through that.
-        private func hideSystemPageLabel(in web: WKWebView) {
-            if let found = systemPageLabel {
-                found.isHidden = true
-                return
-            }
-            // WebKit builds the label lazily, so the first look usually finds nothing
-            // and the search has to stay open. A budget of tries cannot do that: scroll
-            // events spend it in a fraction of a second, long before there is anything
-            // to find, and the label is then never taken down at all. Time bounds it
-            // instead — a walk of a dozen views, four times a second at worst.
-            let now = CACurrentMediaTime()
-            guard now - lastLabelSearch > 0.25 else { return }
-            lastLabelSearch = now
-            guard let found = Self.pageLabel(in: web) else { return }
-            systemPageLabel = found
-            found.isHidden = true
-        }
-
-        private static func pageLabel(in view: UIView) -> UIView? {
-            if isPageIndicator(view) { return view }
-            for sub in view.subviews {
-                if let found = pageLabel(in: sub) { return found }
-            }
-            return nil
-        }
-
-        /// The indicator has had more than one name, and matching one spelling of it is
-        /// how this came to be hidden on the simulator and showing on the phone.
-        ///
-        /// Through iOS 18 it is PDFKit's `PDFPageLabelView`. On iOS 26 that class is
-        /// still there, but WebKit puts up its own `WKPDFPageNumberIndicator` instead,
-        /// so the old name matches nothing and the indicator stays. Both were read out of
-        /// the two runtimes rather than guessed at.
-        ///
-        /// Matching the shape of the name rather than either spelling covers the two that
-        /// exist and stands some chance against the next rename. It is still a name, and
-        /// still fails the same safe way: nothing found, nothing touched.
-        private static func isPageIndicator(_ view: UIView) -> Bool {
-            let name = String(describing: type(of: view))
-            guard name.contains("PDF") else { return false }
-            return name.contains("PageLabel")
-                || name.contains("PageNumber")
-                || name.contains("PageIndicator")
+            indicator.hide(in: webView)
         }
 
         /// The content process was jettisoned while the app was away — see the same
@@ -286,7 +226,7 @@ private struct PDFWebView: UIViewRepresentable {
 
         @MainActor
         private func report(_ scroll: UIScrollView) {
-            if let web = scroll.superview as? WKWebView { hideSystemPageLabel(in: web) }
+            if let web = scroll.superview as? WKWebView { indicator.hide(in: web) }
             let viewport = scroll.bounds.height
             let length = scroll.contentSize.height
             guard viewport > 0, length > 0 else { return }
@@ -318,3 +258,72 @@ private struct PDFWebView: UIViewRepresentable {
     }
 }
 
+
+/// Puts down WebKit's own page indicator over a PDF — the blurred grey capsule that rises
+/// in the corner while the document is scrolled and fades out after it.
+///
+/// It is the last piece of system material anywhere in the app, and it says what the
+/// app's own pill already says, a few points away from it and in another language
+/// entirely. There is no API to decline it, so it is found by class name and hidden,
+/// which is the same trade the keyboard bridge makes: if WebKit renames or restructures
+/// the view, nothing is found and nothing is touched. The indicator comes back, which is
+/// untidy, and that is the whole of the damage.
+///
+/// A PDF can be arrived at two ways — opened from the library, or browsed to — and both
+/// hold one of these, because the indicator belongs to WebKit rather than to either
+/// reader.
+@MainActor
+final class SystemPageIndicator {
+    private weak var view: UIView?
+    /// When the hunt last ran, so a document that never has one is not searched on every
+    /// frame of every scroll.
+    private var lastSearch: CFTimeInterval = 0
+
+    /// `isHidden` rather than removal — WebKit animates the thing's alpha to show and
+    /// hide it, and a hidden view stays hidden through that. Called again on every scroll
+    /// rather than once, since the view can be rebuilt underneath us.
+    func hide(in web: WKWebView) {
+        if let view {
+            view.isHidden = true
+            return
+        }
+        // WebKit builds the indicator lazily, so the first look usually finds nothing and
+        // the search has to stay open. A budget of tries cannot do that: scroll events
+        // spend it in a fraction of a second, long before there is anything to find, and
+        // the indicator is then never taken down at all. Time bounds it instead — a walk
+        // of a dozen views, four times a second at worst.
+        let now = CACurrentMediaTime()
+        guard now - lastSearch > 0.25 else { return }
+        lastSearch = now
+        guard let found = Self.find(in: web) else { return }
+        view = found
+        found.isHidden = true
+    }
+
+    private static func find(in view: UIView) -> UIView? {
+        if isIndicator(view) { return view }
+        for sub in view.subviews {
+            if let found = find(in: sub) { return found }
+        }
+        return nil
+    }
+
+    /// The indicator has had more than one name, and matching one spelling of it is how
+    /// this came to be hidden on the simulator and showing on the phone.
+    ///
+    /// Through iOS 18 it is PDFKit's `PDFPageLabelView`. On iOS 26 that class is still
+    /// there, but WebKit puts up its own `WKPDFPageNumberIndicator` instead, so the old
+    /// name matches nothing and the indicator stays. Both were read out of the two
+    /// runtimes rather than guessed at.
+    ///
+    /// Matching the shape of the name rather than either spelling covers the two that
+    /// exist and stands some chance against the next rename. It is still a name, and
+    /// still fails the same safe way: nothing found, nothing touched.
+    private static func isIndicator(_ view: UIView) -> Bool {
+        let name = String(describing: type(of: view))
+        guard name.contains("PDF") else { return false }
+        return name.contains("PageLabel")
+            || name.contains("PageNumber")
+            || name.contains("PageIndicator")
+    }
+}

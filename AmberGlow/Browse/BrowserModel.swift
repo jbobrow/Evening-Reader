@@ -26,6 +26,17 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
+    /// A PDF can be browsed to as well as opened from the library, and WebKit puts its
+    /// own page indicator over it either way.
+    @ObservationIgnored private let pageIndicator = SystemPageIndicator()
+    /// Whether what is loaded is a PDF rather than a page. Taken from the response's MIME
+    /// type, which is the only thing that actually knows: a URL's extension is a hint, and
+    /// plenty of PDFs are served without one.
+    @ObservationIgnored private var showingPDF = false
+    /// Drives a browsed PDF's scrolling. A page carries `DocumentPager` as a script and
+    /// reports itself; a PDF has no document of ours to put a script in, so the same job
+    /// is done from the scroll view — see `PDFPager`.
+    @ObservationIgnored private let pdfPager = PDFPager()
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -65,6 +76,15 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         config.userContentController.add(self, name: "browse")
 
         observations = [
+            // Watched for the indicator's sake: WebKit raises it as the document is
+            // scrolled, so it has to be put down again as the document is scrolled.
+            web.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.pageIndicator.hide(in: self.web)
+                    self.reportPDFPosition()
+                }
+            },
             web.observe(\.url, options: [.initial, .new]) { [weak self] w, _ in
                 MainActor.assumeIsolated { self?.currentURL = w.url }
             },
@@ -125,6 +145,46 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         webView.reload()
     }
 
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        pageIndicator.hide(in: webView)
+        reportPDFPosition()
+    }
+
+    /// What is arriving, so a PDF can be told from a page. Nothing is refused here; the
+    /// answer only decides who reports the reading position afterwards.
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if navigationResponse.isForMainFrame {
+            showingPDF = navigationResponse.response.mimeType == "application/pdf"
+            // The new document has not said where it is yet, and the last one's numbers
+            // are not its own. The scrubber goes away until something reports again.
+            pdfPager.stop()
+            page = 1
+            pageCount = 1
+            percent = 0
+        }
+        decisionHandler(.allow)
+    }
+
+    /// Where a browsed PDF is, in screenfuls.
+    ///
+    /// The reader can say "5 of 9" because the file was counted by PDFKit when it was
+    /// saved. A PDF being browsed has not been counted and WebKit will not say, so it is
+    /// measured the same way every other browsed page is — which is also the only unit
+    /// the two have in common.
+    private func reportPDFPosition() {
+        guard showingPDF else { return }
+        let scroll = web.scrollView
+        let viewport = scroll.bounds.height
+        let length = scroll.contentSize.height
+        guard viewport > 0, length > 0 else { return }
+        let limit = max(0, length - viewport)
+        percent = limit > 0 ? min(1, max(0, scroll.contentOffset.y / limit)) : 0
+        pageCount = max(1, Int((length / viewport).rounded(.up)))
+        page = min(pageCount, max(1, Int(scroll.contentOffset.y / viewport) + 1))
+    }
+
     /// Long-pressing a link would otherwise raise WebKit's preview sheet and context
     /// menu — its own window, system materials, no appearance API. Returning nil is the
     /// documented way to decline it.
@@ -160,6 +220,11 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     }
 
     func autoScroll(_ velocity: Double) {
+        if showingPDF {
+            pdfPager.scrollView = web.scrollView
+            pdfPager.autoScroll(velocity)
+            return
+        }
         web.evaluateJavaScript("window.__agPager && window.__agPager.autoScroll(\(velocity));")
     }
 
