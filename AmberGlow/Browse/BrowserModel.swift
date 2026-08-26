@@ -40,9 +40,22 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         web.allowsBackForwardNavigationGestures = true
         web.allowsLinkPreview = false
         web.customUserAgent = ArticleExtractor.desktopUserAgent
-        web.isOpaque = false
-        web.backgroundColor = .clear
-        web.scrollView.backgroundColor = .clear
+        // Opaque, and backed with white.
+        //
+        // The page is filtered on its way to the ramp — luminance, then squeezed into the
+        // ink..page span, then multiplied onto the emitter — and white is what comes out
+        // the far end as the page colour exactly. So the backdrop is white for the same
+        // reason the page is: it goes through the identical mapping and lands in the
+        // identical place, at any warmth, glow or polarity.
+        //
+        // Left clear, the places the content does not reach — above a page pulled past
+        // its top, around a PDF zoomed smaller than the glass — showed `GlowSurface`
+        // through the gap. That is the lamp a second time, since this view already paints
+        // one over itself, and two lamps is a lighter amber than one. The seam was
+        // exactly where the content stopped.
+        web.isOpaque = true
+        web.backgroundColor = .white
+        web.scrollView.backgroundColor = .white
         // The system indicator is grey — the one bit of furniture left that the ramp
         // does not reach. The reading position is shown in the chrome instead.
         web.scrollView.showsVerticalScrollIndicator = false

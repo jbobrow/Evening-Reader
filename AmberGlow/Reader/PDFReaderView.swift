@@ -63,6 +63,8 @@ struct PDFReaderView: View {
     var onProgress: (Double) -> Void = { _ in }
     /// page, total, fraction read, and the document's length in points.
     var onPages: (Int, Int, Double, CGFloat) -> Void = { _, _, _, _ in }
+    /// A bare tap on the page, which puts the chrome away as it does in an article.
+    var onTap: () -> Void = {}
     let pager: PDFPager
 
     /// Where a white page lands, matching the app's own surfaces.
@@ -85,6 +87,7 @@ struct PDFReaderView: View {
                    initialProgress: initialProgress,
                    onProgress: onProgress,
                    onPages: onPages,
+                   onTap: onTap,
                    pager: pager)
             .grayscale(1)
             .contrast(tintSign * (1 - tintFloor))
@@ -100,6 +103,7 @@ private struct PDFWebView: UIViewRepresentable {
     var initialProgress: Double
     var onProgress: (Double) -> Void
     var onPages: (Int, Int, Double, CGFloat) -> Void
+    var onTap: () -> Void
     let pager: PDFPager
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -109,14 +113,35 @@ private struct PDFWebView: UIViewRepresentable {
         // The document is on disk; nothing here should reach the network.
         config.websiteDataStore = .nonPersistent()
         let web = WKWebView(frame: .zero, configuration: config)
-        web.isOpaque = false
-        web.backgroundColor = .clear
-        web.scrollView.backgroundColor = .clear
+        // Opaque, and backed with white — see `BrowserModel`, which is filtered the
+        // same way and had the same seam.
+        //
+        // The page is filtered on its way to the ramp — luminance, then squeezed into the
+        // ink..page span, then multiplied onto the emitter — and white is what comes out
+        // the far end as the page colour exactly. So the backdrop is white for the same
+        // reason the page is: it goes through the identical mapping and lands in the
+        // identical place, at any warmth, glow or polarity.
+        //
+        // Left clear, the places the content does not reach — above a page pulled past
+        // its top, around a PDF zoomed smaller than the glass — showed `GlowSurface`
+        // through the gap. That is the lamp a second time, since this view already paints
+        // one over itself, and two lamps is a lighter amber than one. The seam was
+        // exactly where the content stopped.
+        web.isOpaque = true
+        web.backgroundColor = .white
+        web.scrollView.backgroundColor = .white
         web.scrollView.showsVerticalScrollIndicator = false
+        // No rubber band. WebKit draws the grey desk the pages sit on inside its own
+        // process, so the app can neither read that colour nor set it — which means the
+        // ground past the end of the document can never be made to match it, and pulling
+        // beyond the document showed the join. A PDF has a first page and a last one;
+        // stopping at them is honest, and there is then no past-the-end to give away.
+        web.scrollView.bounces = false
         web.navigationDelegate = context.coordinator
         web.loadFileURL(fileURL, allowingReadAccessTo: fileURL.deletingLastPathComponent())
         pager.scrollView = web.scrollView
         context.coordinator.watch(web.scrollView)
+        context.coordinator.listenForTaps(on: web)
         return web
     }
 
@@ -124,7 +149,7 @@ private struct PDFWebView: UIViewRepresentable {
         context.coordinator.parent = self
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         var parent: PDFWebView
         private var offsetToken: NSKeyValueObservation?
         private var sizeToken: NSKeyValueObservation?
@@ -132,7 +157,9 @@ private struct PDFWebView: UIViewRepresentable {
         /// WebKit's own page indicator, once found. Held so it can be kept down without
         /// walking the view tree again.
         private weak var systemPageLabel: UIView?
-        private var searchesLeft = 40
+        /// When the hunt for WebKit's page label last ran, so a document that never has
+        /// one is not searched on every frame of every scroll.
+        private var lastLabelSearch: CFTimeInterval = 0
 
         init(_ parent: PDFWebView) { self.parent = parent }
 
@@ -157,8 +184,14 @@ private struct PDFWebView: UIViewRepresentable {
                 found.isHidden = true
                 return
             }
-            guard searchesLeft > 0 else { return }
-            searchesLeft -= 1
+            // WebKit builds the label lazily, so the first look usually finds nothing
+            // and the search has to stay open. A budget of tries cannot do that: scroll
+            // events spend it in a fraction of a second, long before there is anything
+            // to find, and the label is then never taken down at all. Time bounds it
+            // instead — a walk of a dozen views, four times a second at worst.
+            let now = CACurrentMediaTime()
+            guard now - lastLabelSearch > 0.25 else { return }
+            lastLabelSearch = now
             guard let found = Self.pageLabel(in: web) else { return }
             systemPageLabel = found
             found.isHidden = true
@@ -183,6 +216,38 @@ private struct PDFWebView: UIViewRepresentable {
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             let url = parent.fileURL
             webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        }
+
+        /// A bare tap puts the chrome away, the same as it does over an article.
+        ///
+        /// An article is asked in its own document: a script watches for a tap that is
+        /// not a scroll, a link or a selection, and says so. A PDF has no document of
+        /// ours to ask, so the tap is caught with a recogniser instead — added alongside
+        /// WebKit's own rather than in front of them, so scrolling, selecting and
+        /// following a link all still reach the page.
+        func listenForTaps(on web: WKWebView) {
+            let tap = UITapGestureRecognizer(target: self, action: #selector(pageTapped))
+            tap.cancelsTouchesInView = false
+            tap.delaysTouchesEnded = false
+            tap.delegate = self
+            // A double tap is a zoom, and its first tap is not a request for the chrome.
+            for other in Self.taps(in: web) where other.numberOfTapsRequired == 2 {
+                tap.require(toFail: other)
+            }
+            web.scrollView.addGestureRecognizer(tap)
+        }
+
+        private static func taps(in view: UIView) -> [UITapGestureRecognizer] {
+            var found = (view.gestureRecognizers ?? []).compactMap { $0 as? UITapGestureRecognizer }
+            for sub in view.subviews { found += taps(in: sub) }
+            return found
+        }
+
+        @objc private func pageTapped() { parent.onTap() }
+
+        func gestureRecognizer(_ recognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
         }
 
         /// WebKit owns the scroll view's delegate, so the position is watched rather than

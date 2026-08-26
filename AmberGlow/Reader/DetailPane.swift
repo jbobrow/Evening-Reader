@@ -128,6 +128,7 @@ struct DetailPane: View {
                                       self.percent = percent
                                       self.documentLength = length
                                   },
+                                  onTap: toggleChrome,
                                   pager: pdfPager)
                         .id(article.id)
                         .task(id: article.id) { liveProgress = article.lastScroll }
