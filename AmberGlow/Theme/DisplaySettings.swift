@@ -87,7 +87,30 @@ final class DisplaySettings {
     private let defaults: UserDefaults
     private static let prefix = "display."
 
-    init(defaults: UserDefaults = UserDefaults(suiteName: ArticleStore.appGroupID) ?? .standard) {
+    /// Where the settings are kept: the shared suite when the app group is really there,
+    /// and the app's own otherwise.
+    ///
+    /// The test has to be the container, not the suite. `UserDefaults(suiteName:)` hands
+    /// back a usable object whether or not the group has been provisioned to this build,
+    /// so `?? .standard` never fires — and when the group is not there, what comes back
+    /// writes to somewhere the sandbox refuses. The settings then hold for as long as the
+    /// app is running and are gone by the next launch, with nothing anywhere to say why.
+    ///
+    /// `containerURL(forSecurityApplicationGroupIdentifier:)` is what actually answers
+    /// the question, and is the test the store has always made — which is why a library
+    /// survived a build with no group and the glow it was read in did not.
+    ///
+    /// The suite is still preferred where it exists: the share extension draws its card
+    /// from these same values, so that it arrives in the glow the reader set.
+    static func store() -> UserDefaults {
+        guard FileManager.default
+                .containerURL(forSecurityApplicationGroupIdentifier: ArticleStore.appGroupID) != nil,
+              let shared = UserDefaults(suiteName: ArticleStore.appGroupID)
+        else { return .standard }
+        return shared
+    }
+
+    init(defaults: UserDefaults = DisplaySettings.store()) {
         self.defaults = defaults
         func d(_ key: String, _ fallback: Double) -> Double {
             defaults.object(forKey: Self.prefix + key) as? Double ?? fallback
