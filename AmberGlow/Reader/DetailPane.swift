@@ -30,6 +30,13 @@ struct DetailPane: View {
     @State private var pdfPager = PDFPager()
     /// A PDF's length in points. Its pages are its own, so the scrubber cannot infer it.
     @State private var documentLength: CGFloat = 0
+    /// A book's table of contents, read once when the book opens rather than on every
+    /// render — it can run to several hundred entries.
+    @State private var chapters: [BookChapter] = []
+    /// The chapter anchor nearest the top of the screen right now, so the contents sheet
+    /// can mark it — the reader's equivalent of `ArticleRow`'s selection highlight.
+    @State private var currentChapterAnchor: String?
+    @State private var showContents = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -88,7 +95,7 @@ struct DetailPane: View {
                         .font(.system(size: 13, weight: .semibold, design: .serif))
                         .lineLimit(1)
                         .foregroundStyle(amber.ink)
-                    Text(article.host)
+                    Text(article.sourceLabel)
                         .font(.system(size: 10, weight: .medium))
                         .tracking(0.5)
                         .foregroundStyle(amber.inkFaint)
@@ -98,7 +105,14 @@ struct DetailPane: View {
                 Spacer(minLength: 12)
 
                 AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
-                AmberIconButton(symbol: "globe") { onOpenLink(article.url) }
+                // A book has no page of its own to open in the browser — what the globe
+                // button opens for everything else — so it gets the one piece of chrome
+                // that means something instead: its contents.
+                if article.isBook {
+                    AmberIconButton(symbol: "list.bullet") { showContents = true }
+                } else {
+                    AmberIconButton(symbol: "globe") { onOpenLink(article.url) }
+                }
                 AmberIconButton(symbol: article.isArchived ? "tray.and.arrow.up" : "archivebox") {
                     library.setArchived(article, !article.isArchived)
                     if !article.isArchived { onDismissArticle() }
@@ -214,10 +228,21 @@ struct DetailPane: View {
                             self.pageCount = total
                             self.percent = percent
                         },
+                        onChapter: { anchor in currentChapterAnchor = anchor },
                         bridge: bridge
                     )
                     .id(article.id)
-                    .task(id: article.id) { liveProgress = article.lastScroll }
+                    .task(id: article.id) {
+                        liveProgress = article.lastScroll
+                        chapters = article.isBook ? BookContents.read(for: article, store: .shared) : []
+                        currentChapterAnchor = nil
+                    }
+                    .modifier(AddLinkPresentation(isCompact: isCompact, isPresented: $showContents) {
+                        ContentsSheet(article: article, chapters: chapters,
+                                     currentAnchor: currentChapterAnchor) { chapter in
+                            bridge.runJavaScript("window.__ag && window.__ag.goto('\(chapter.href)');")
+                        }
+                    })
                     // The ground goes on the page, not on the control, so it can be the
                     // page — and it runs to the bezel with it, so the pool has no edge
                     // where the safe area starts. Under the callout, so a selection made
@@ -279,15 +304,23 @@ struct DetailPane: View {
         case .pending:
             VStack(spacing: 18) {
                 AmberSpinner()
-                Text("Setting the type…")
+                Text(article.isBook ? "Opening the book…" : "Setting the type…")
                     .font(.system(size: 15, design: .serif))
                     .foregroundStyle(amber.inkMuted)
-                Text(article.host)
+                Text(article.sourceLabel)
                     .font(.system(size: 11, weight: .medium))
                     .tracking(0.6)
                     .foregroundStyle(amber.inkFaint)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .failed where article.isBook:
+            message(icon: "text.badge.xmark",
+                    title: "This book couldn't be opened.",
+                    detail: library.lastError ?? "Something about this file's contents wasn't readable.") {
+                Button("Try again") { library.retry(article) }
+                    .buttonStyle(AmberButtonStyle(kind: .solid))
+            }
 
         case .failed:
             message(icon: "text.badge.xmark",

@@ -120,7 +120,12 @@ final class ArticleStore {
     private static let metadataName = "article.json"
     private static let bodyName = "body.html"
     private static let documentName = "document.pdf"
+    private static let bookName = "book.epub"
     private static let assetsName = "assets"
+    /// Sidecar files a kind may keep beside `article.json`. Whitelisted rather than
+    /// taking any name, so this stays a store for known shapes rather than a place
+    /// anything can be dropped.
+    private static let allowedSidecars: Set<String> = ["contents.json"]
 
     func folder(for article: SavedArticle) -> URL {
         if let known = queue.sync(execute: { folders[article.id] }) { return known }
@@ -160,6 +165,14 @@ final class ArticleStore {
 
     func documentURL(for article: SavedArticle) -> URL {
         folder(for: article).appendingPathComponent(Self.documentName)
+    }
+
+    /// Where a book's own EPUB file lives, kept alongside the `body.html` flattened from
+    /// it. Doubling the folder's size is the cost of the store's own rule — a folder is
+    /// the complete, portable thing — and it means a better flattener can re-run later
+    /// without asking the reader to fetch the book again.
+    func bookURL(for article: SavedArticle) -> URL {
+        folder(for: article).appendingPathComponent(Self.bookName)
     }
 
     func assetsDirectory(for article: SavedArticle) -> URL {
@@ -276,6 +289,48 @@ final class ArticleStore {
         } catch {
             return false
         }
+    }
+
+    /// Copies a book's file into its folder. A copy rather than a `Data` round trip: a
+    /// share extension lives in a tight memory budget and an illustrated book is tens of
+    /// megabytes, so the bytes should move once, on disk, and never sit fully in memory.
+    @discardableResult
+    func adoptDocument(from fileURL: URL, for article: SavedArticle) -> Bool {
+        let dir = folder(for: article)
+        let destination = dir.appendingPathComponent(Self.bookName)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: fileURL, to: destination)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    // MARK: - Sidecars
+
+    /// A book's table of contents, or anything else a kind needs beside `article.json`.
+    /// `name` must be on the whitelist above — this is a store for known shapes, not an
+    /// arbitrary drop folder.
+    @discardableResult
+    func writeSidecar(_ data: Data, named name: String, for article: SavedArticle) -> Bool {
+        guard Self.allowedSidecars.contains(name) else { return false }
+        let dir = folder(for: article)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try data.write(to: dir.appendingPathComponent(name), options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    func readSidecar(named name: String, for article: SavedArticle) -> Data? {
+        guard Self.allowedSidecars.contains(name) else { return nil }
+        return try? Data(contentsOf: folder(for: article).appendingPathComponent(name))
     }
 
     // MARK: - Assets

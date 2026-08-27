@@ -37,6 +37,10 @@ struct RootView: View {
     @State private var search = ""
     @State private var showAdd = false
     @State private var browseTarget: BrowseTarget?
+    /// Set when a file opened from outside the app (Files, Mail, another app's "Open
+    /// in…") turns out not to be a book Amber Glow can read — a lock the app cannot
+    /// open, or something that isn't an EPUB at all.
+    @State private var bookImportProblem: EpubGuard.Problem?
 
     /// Chrome hides on a tap so a page can be read with nothing else on the glass.
     @State private var chromeVisible = true
@@ -127,6 +131,9 @@ struct RootView: View {
                     .zIndex(3)
 
                 confirmDeleteOverlay
+                    .zIndex(4)
+
+                bookImportProblemOverlay
                     .zIndex(4)
 
                 if launching {
@@ -286,6 +293,27 @@ struct RootView: View {
         }
     }
 
+    /// A book opened from outside the app turned out to be one Amber Glow can't read.
+    /// An acknowledgement, not a choice — there is nothing to confirm or cancel.
+    @ViewBuilder
+    private var bookImportProblemOverlay: some View {
+        if let problem = bookImportProblem {
+            ZStack {
+                AmberScrim { bookImportProblem = nil }
+                AmberConfirm(
+                    title: problem.title,
+                    message: problem.detail,
+                    confirmTitle: "OK",
+                    cancelTitle: nil,
+                    confirm: { bookImportProblem = nil }
+                )
+                .padding(.horizontal, 20)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
     private func dismissConfirm() {
         withAnimation(.easeOut(duration: 0.18)) { confirmDelete = nil }
     }
@@ -385,14 +413,56 @@ struct RootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// amberglow://add?url=… and amberglow://read?url=… so Shortcuts can hand pages over.
+    /// amberglow://add?url=… and amberglow://read?url=… so Shortcuts can hand pages over
+    /// — or a book, handed over as a file URL by Files, Mail, or another app's "Open in
+    /// Amber Glow".
     private func handle(_ url: URL) {
+        if url.isFileURL {
+            importBookFile(at: url)
+            return
+        }
         guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let raw = comps.queryItems?.first(where: { $0.name == "url" })?.value,
               let target = URL(string: raw) else { return }
         let article = library.add(url: target)
         if comps.host == "read" || comps.path.contains("read") {
             open(article)
+        }
+    }
+
+    /// A book opened directly as a file, rather than shared as a link. Runs the same
+    /// guard the share extension runs — DRM and `.acsm` are refused here just as plainly
+    /// — then hands the rest of the work to `Library`, exactly as a book that arrived
+    /// through the share extension would.
+    private func importBookFile(at url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
+            bookImportProblem = .notAnEpub
+            return
+        }
+
+        do {
+            let (_, package) = try EpubInspector.open(data: data)
+            var article = SavedArticle(kind: .book,
+                                       url: BookIdentity.url(package: package, fileData: data),
+                                       title: package.title, state: .pending)
+            article.byline = package.creator
+            article.siteName = package.publisher
+            let resolved = library.addBookFile(article, from: url)
+            open(resolved)
+        } catch let failure as EpubInspector.Failure {
+            bookImportProblem = failure.problem
+        } catch {
+            bookImportProblem = .notAnEpub
+        }
+
+        // iOS copies a file opened this way into the app's own sandbox (Documents/Inbox)
+        // unless it stayed in place at its owner's — the book's own copy lives in the
+        // library folder now, so the Inbox copy is only ever debris.
+        if url.path.contains("/Inbox/") {
+            try? FileManager.default.removeItem(at: url)
         }
     }
 }

@@ -81,9 +81,11 @@ struct AmberConfirm: View {
     var title: String
     var message: String
     var confirmTitle: String
-    var cancelTitle: String = "Keep"
+    /// `nil` hides the second button entirely — for a plain acknowledgement (a book that
+    /// can't be opened, say) rather than a choice between two actions.
+    var cancelTitle: String? = "Keep"
     var confirm: () -> Void
-    var cancel: () -> Void
+    var cancel: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -95,14 +97,16 @@ struct AmberConfirm: View {
                 Text(message)
                     .font(.system(size: 13))
                     .lineSpacing(2)
-                    .lineLimit(3)
+                    .lineLimit(5)
                     .foregroundStyle(amber.inkMuted)
             }
 
             HStack(spacing: 10) {
                 Spacer()
-                Button(cancelTitle, action: cancel)
-                    .buttonStyle(AmberButtonStyle(kind: .outline, size: 14))
+                if let cancelTitle {
+                    Button(cancelTitle, action: cancel)
+                        .buttonStyle(AmberButtonStyle(kind: .outline, size: 14))
+                }
                 Button(confirmTitle, action: confirm)
                     .buttonStyle(AmberButtonStyle(kind: .solid, size: 14))
             }

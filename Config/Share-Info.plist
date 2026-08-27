@@ -24,15 +24,33 @@
 	<dict>
 		<key>NSExtensionAttributes</key>
 		<dict>
+			<!-- A predicate rather than the simpler dictionary form, so an EPUB file can
+			     be added to what activates this extension without also accepting every
+			     other kind of file. The web-page and plain-text branches are exactly what
+			     the dictionary rule above expressed; the third branch is new. -->
 			<key>NSExtensionActivationRule</key>
-			<dict>
-				<key>NSExtensionActivationSupportsText</key>
-				<true/>
-				<key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
-				<integer>1</integer>
-				<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
-				<integer>1</integer>
-			</dict>
+			<string>
+				SUBQUERY (
+					extensionItems, $item,
+					SUBQUERY ($item.attachments, $attachment,
+						ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
+					).@count == $item.attachments.@count
+				).@count == extensionItems.@count
+				OR
+				SUBQUERY (
+					extensionItems, $item,
+					SUBQUERY ($item.attachments, $attachment,
+						ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text"
+					).@count == $item.attachments.@count
+				).@count == extensionItems.@count
+				OR
+				SUBQUERY (
+					extensionItems, $item,
+					SUBQUERY ($item.attachments, $attachment,
+						ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "org.idpf.epub-container"
+					).@count == $item.attachments.@count
+				).@count == extensionItems.@count
+			</string>
 		</dict>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.share-services</string>

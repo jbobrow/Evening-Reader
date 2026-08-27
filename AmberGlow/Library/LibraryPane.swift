@@ -176,9 +176,13 @@ struct LibraryPane: View {
                 library.retry(item)
             })
         }
-        items.append(AmberMenuItem(title: "Copy Link", symbol: "link") {
-            UIPasteboard.general.url = item.url
-        })
+        // A book's `url` is a synthetic identity, not an address — nothing anyone would
+        // want on the clipboard.
+        if !item.isBook {
+            items.append(AmberMenuItem(title: "Copy Link", symbol: "link") {
+                UIPasteboard.general.url = item.url
+            })
+        }
         items.append(AmberMenuItem(title: "Remove", symbol: "trash", isDestructive: true) {
             onRequestDelete(item)
         })
@@ -215,7 +219,7 @@ struct LibraryPane: View {
                 .font(.system(size: 16, design: .serif))
                 .foregroundStyle(amber.inkMuted)
             if scope != .archive {
-                Text("Share a page to Amber Glow from Safari, paste a link, or browse the web here.")
+                Text("Share a page to Amber Glow from Safari, share a book from Files, paste a link, or browse the web here.")
                     .font(.system(size: 13))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(amber.inkFaint)
@@ -263,6 +267,35 @@ struct LibraryPane: View {
     }
 }
 
+/// A book's cover, in the one list in the app that otherwise carries no pictures at all.
+/// Given the same grayscale-then-amber treatment `PDFReaderView` gives a whole page, so a
+/// raw full-colour cover doesn't glare next to type that is otherwise entirely ink on
+/// paper.
+private struct CoverThumbnail: View {
+    @Environment(\.amber) private var amber
+    let url: URL
+
+    var body: some View {
+        Group {
+            if let image = UIImage(contentsOfFile: url.path) {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .grayscale(1)
+                    .colorMultiply(amber.color(0.30))
+            } else {
+                amber.color(0.80)
+            }
+        }
+        .frame(width: 38, height: 54)
+        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .strokeBorder(amber.rule, lineWidth: 1)
+        }
+    }
+}
+
 // MARK: - Row
 
 struct ArticleRow: View {
@@ -275,49 +308,58 @@ struct ArticleRow: View {
     private var isWorking: Bool { library.working.contains(article.id) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(article.displayTitle)
-                .font(.system(size: 16, weight: .medium, design: .serif))
-                .foregroundStyle(article.readAt == nil ? amber.inkStrong : amber.inkMuted)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 6) {
-                Text(article.host)
-                    .lineLimit(1)
-                if article.state == .ready {
-                    Text("·")
-                    Text(article.lengthLabel)
-                }
-                if isWorking || article.state == .pending {
-                    Text("·")
-                    HStack(spacing: 4) {
-                        Image(systemName: "text.viewfinder")
-                        Text("reading")
-                    }
-                } else if article.state == .failed {
-                    Text("·")
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle")
-                        Text("no article text")
-                    }
-                }
+        HStack(alignment: .top, spacing: 12) {
+            // The one image anywhere in a deliberately typographic list — kept small, and
+            // present only for a book, where a bare title-and-byline reads thinner than
+            // it should next to something with an actual cover.
+            if article.isBook, let url = library.coverURL(for: article) {
+                CoverThumbnail(url: url)
             }
-            .font(.system(size: 11, weight: .medium))
-            .tracking(0.4)
-            .foregroundStyle(amber.inkFaint)
 
-            if article.lastScroll > 0.02 && article.lastScroll < 0.98 {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Rectangle().fill(amber.color(0.74)).frame(height: 2)
-                        Rectangle().fill(amber.color(0.34))
-                            .frame(width: geo.size.width * article.lastScroll, height: 2)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(article.displayTitle)
+                    .font(.system(size: 16, weight: .medium, design: .serif))
+                    .foregroundStyle(article.readAt == nil ? amber.inkStrong : amber.inkMuted)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 6) {
+                    Text(article.sourceLabel)
+                        .lineLimit(1)
+                    if article.state == .ready {
+                        Text("·")
+                        Text(article.lengthLabel)
+                    }
+                    if isWorking || article.state == .pending {
+                        Text("·")
+                        HStack(spacing: 4) {
+                            Image(systemName: "text.viewfinder")
+                            Text(article.isBook ? "opening" : "reading")
+                        }
+                    } else if article.state == .failed {
+                        Text("·")
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle")
+                            Text(article.isBook ? "couldn't open" : "no article text")
+                        }
                     }
                 }
-                .frame(height: 2)
-                .padding(.top, 2)
+                .font(.system(size: 11, weight: .medium))
+                .tracking(0.4)
+                .foregroundStyle(amber.inkFaint)
+
+                if article.lastScroll > 0.02 && article.lastScroll < 0.98 {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Rectangle().fill(amber.color(0.74)).frame(height: 2)
+                            Rectangle().fill(amber.color(0.34))
+                                .frame(width: geo.size.width * article.lastScroll, height: 2)
+                        }
+                    }
+                    .frame(height: 2)
+                    .padding(.top, 2)
+                }
             }
         }
         .padding(.horizontal, 16)

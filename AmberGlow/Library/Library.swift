@@ -62,7 +62,7 @@ final class Library {
                 guard !query.isEmpty else { return true }
                 return item.displayTitle.lowercased().contains(query)
                     || (item.byline ?? "").lowercased().contains(query)
-                    || item.host.lowercased().contains(query)
+                    || item.sourceLabel.lowercased().contains(query)
                     || (item.excerpt ?? "").lowercased().contains(query)
             }
             .sorted { $0.addedAt > $1.addedAt }
@@ -76,6 +76,12 @@ final class Library {
 
     func documentURL(for article: SavedArticle) -> URL {
         store.documentURL(for: article)
+    }
+
+    /// A book's cover, on disk, if it has one and got one.
+    func coverURL(for article: SavedArticle) -> URL? {
+        guard let asset = article.coverAsset else { return nil }
+        return store.assetsDirectory(for: article).appendingPathComponent(asset)
     }
 
     // MARK: - Mutation
@@ -133,6 +139,14 @@ final class Library {
         guard !working.contains(article.id) else { return }
         working.insert(article.id)
         defer { working.remove(article.id) }
+
+        // A book was already identified and its file already copied in by whatever queued
+        // it — the share extension, today. There is no `article.url` worth fetching: its
+        // scheme is synthetic, and `isPDF`'s HEAD request would only fail or hang against it.
+        if article.isBook {
+            await importBook(article)
+            return
+        }
 
         // A PDF has no reader text to pull out of it — it is already the document. Save
         // the file itself and let the reader render it.
@@ -201,6 +215,51 @@ final class Library {
         // reading time, which would be a guess about something we cannot see inside.
         updated.wordCount = 0
         updated.state = store.writeDocument(data, for: updated) ? .ready : .failed
+        replace(updated)
+    }
+
+    /// Takes a book already vetted by the caller (guard already run, metadata already
+    /// read) and queues it the same way one that arrived through the share extension
+    /// would — one folder, one pending item, extracted on the next pass.
+    @discardableResult
+    func addBookFile(_ article: SavedArticle, from fileURL: URL) -> SavedArticle {
+        if let existing = articles.first(where: { $0.url == article.url }) {
+            if existing.isArchived { setArchived(existing, false) }
+            if existing.state == .failed { retry(existing) }
+            return existing
+        }
+        articles.insert(article, at: 0)
+        persist()
+        store.adoptDocument(from: fileURL, for: article)
+        Task { await extract(article) }
+        return article
+    }
+
+    /// Unzips and flattens a book already stored by whatever queued it. Real work — a
+    /// long novel is not something to do on the main actor — so it runs detached and only
+    /// the finished `SavedArticle` mutation comes back to it.
+    private func importBook(_ article: SavedArticle) async {
+        let store = self.store
+        let outcome: Result<BookImporter.Imported, Error> = await Task.detached(priority: .userInitiated) {
+            do { return .success(try BookImporter.importBook(for: article, store: store)) }
+            catch { return .failure(error) }
+        }.value
+
+        guard var updated = articles.first(where: { $0.id == article.id }) else { return }
+        switch outcome {
+        case .success(let imported):
+            updated.title = imported.title.isEmpty ? updated.title : imported.title
+            updated.byline = imported.creator
+            updated.siteName = imported.publisher
+            updated.wordCount = imported.wordCount
+            updated.chapterCount = imported.chapters.count
+            updated.coverAsset = imported.coverAssetName
+            updated.coverAssetClass = imported.coverAssetClass
+            updated.state = .ready
+        case .failure(let error):
+            updated.state = .failed
+            lastError = error.localizedDescription
+        }
         replace(updated)
     }
 

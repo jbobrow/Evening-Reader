@@ -127,9 +127,12 @@ enum OfflineAssets {
     }
 
     // MARK: - Tag surgery
+    //
+    // Shared with EpubFlattener, which does the same shape of work on a book's markup —
+    // hence `internal` rather than `private` on the primitives below.
 
     /// Finds the `>` that closes a tag, ignoring any inside quoted attribute values.
-    private static func endOfTag(in text: Substring, from index: String.Index) -> String.Index? {
+    static func endOfTag(in text: Substring, from index: String.Index) -> String.Index? {
         var i = index
         var quote: Character?
         while i < text.endIndex {
@@ -146,7 +149,7 @@ enum OfflineAssets {
         return nil
     }
 
-    private static func range(of attribute: String, in tag: String) -> (name: Range<String.Index>, value: Range<String.Index>)? {
+    static func range(of attribute: String, in tag: String) -> (name: Range<String.Index>, value: Range<String.Index>)? {
         var search = tag.startIndex
         while let found = tag.range(of: attribute, options: [.caseInsensitive], range: search..<tag.endIndex) {
             search = found.upperBound
@@ -174,14 +177,14 @@ enum OfflineAssets {
         return raw.isEmpty ? nil : decodeEntities(raw)
     }
 
-    private static func replace(_ attribute: String, with newValue: String, in tag: String) -> String {
+    static func replace(_ attribute: String, with newValue: String, in tag: String) -> String {
         guard let found = range(of: attribute, in: tag) else { return tag }
         var copy = tag
         copy.replaceSubrange(found.value, with: newValue)
         return copy
     }
 
-    private static func removeAttribute(_ attribute: String, from tag: String) -> String {
+    static func removeAttribute(_ attribute: String, from tag: String) -> String {
         guard let found = range(of: attribute, in: tag) else { return tag }
         var copy = tag
         // Take the closing quote with it.
@@ -190,7 +193,7 @@ enum OfflineAssets {
         return copy
     }
 
-    private static func addClass(_ name: String, to tag: String) -> String {
+    static func addClass(_ name: String, to tag: String) -> String {
         if let found = range(of: "class", in: tag) {
             var copy = tag
             copy.replaceSubrange(found.value, with: String(tag[found.value]) + " " + name)
@@ -203,13 +206,15 @@ enum OfflineAssets {
         return copy
     }
 
-    private static func decodeEntities(_ s: String) -> String {
+    static func decodeEntities(_ s: String) -> String {
         s.replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
     }
 
-    private static func extensionFor(_ url: URL, data: Data) -> String {
+    static func extensionFor(_ url: URL, data: Data) -> String {
         // Trust the bytes over the URL: plenty of images are served from paths with no
         // extension at all, or the wrong one.
         if data.count > 3 {

@@ -62,14 +62,27 @@ struct ReaderRenderer {
             .map { "      \($0.key): \($0.value);" }
             .joined(separator: "\n")
 
-        let dateLine = (article.publishedAt ?? article.addedAt)
-            .formatted(date: .abbreviated, time: .omitted)
         var meta: [String] = []
-        if let byline = article.byline, !byline.isEmpty { meta.append(escape(byline)) }
-        if let site = article.siteName, !site.isEmpty { meta.append(escape(site)) }
-        else { meta.append(escape(article.host)) }
-        meta.append(escape(article.lengthLabel))
-        meta.append(escape(dateLine))
+        if article.isBook {
+            // A book's byline already carries the author; what an article's meta line
+            // spends on a byline, a book spends on the publisher and how long it is —
+            // there is no "published" date worth showing for most of them, and no
+            // fetch date worth pretending is one.
+            if let publisher = article.siteName, !publisher.isEmpty { meta.append(escape(publisher)) }
+            meta.append(escape(article.lengthLabel))
+            if let count = article.chapterCount, count > 0 {
+                meta.append(escape(count == 1 ? "1 chapter" : "\(count) chapters"))
+            }
+        } else {
+            let dateLine = (article.publishedAt ?? article.addedAt)
+                .formatted(date: .abbreviated, time: .omitted)
+            if let byline = article.byline, !byline.isEmpty { meta.append(escape(byline)) }
+            if let site = article.siteName, !site.isEmpty { meta.append(escape(site)) }
+            else { meta.append(escape(article.sourceLabel)) }
+            meta.append(escape(article.lengthLabel))
+            meta.append(escape(dateLine))
+        }
+        let coverImg = article.isBook ? coverImageTag(article) : ""
 
         return """
         <!DOCTYPE html>
@@ -133,6 +146,12 @@ struct ReaderRenderer {
         }
         header.ag-head .ag-meta span:not(:last-child)::after { content: " ·"; }
         header.ag-head hr { margin: 22px 0 0; }
+        header.ag-head .ag-byline {
+          font-family: -apple-system, ui-sans-serif, sans-serif;
+          font-size: 0.86em;
+          color: var(--ink-muted);
+          margin: -6px 0 16px;
+        }
 
         p { margin: 0 0 1.1em; }
         p:first-child { margin-top: 0; }
@@ -213,6 +232,39 @@ struct ReaderRenderer {
         th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; }
         th { background: var(--page-dim); font-weight: 600; }
         sup, sub { font-size: 0.7em; }
+
+        /* A book's cover, standing in place of the article header's hairline. It gets the
+           same ink treatment every other picture in the reader does — a cover in its own
+           full colour would be the one thing on the page fighting the amber ramp instead
+           of joining it — just held to a sane size, since a cover is usually drawn for a
+           bookstore thumbnail, not a phone-width column. */
+        img.ag-cover {
+          max-width: min(100%, 320px);
+          margin: 0 auto 2.4em;
+          border-radius: 2px;
+        }
+        /* Chapters read as a book rather than one long article: each one opens with
+           room to breathe and a rule above it, except the first, which already has the
+           book's own header just above. */
+        .ag-chapter { margin-top: 3.2em; padding-top: 1.6em; border-top: 1px solid var(--rule); }
+        .ag-chapter:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+        .ag-chapter-title {
+          font-size: 1.5em;
+          line-height: 1.24;
+          font-weight: 600;
+          letter-spacing: -0.008em;
+          margin: 0 0 0.7em;
+          color: var(--ink-strong);
+        }
+        /* A footnote reads as an aside, not as body text picking up again. */
+        .ag-footnote {
+          font-size: 0.88em;
+          color: var(--ink-muted);
+          border-top: 1px solid var(--rule);
+          margin-top: 1.6em;
+          padding-top: 1em;
+        }
+        .ag-noteref { font-size: 0.7em; vertical-align: super; text-decoration: none; }
         </style>
         </head>
         <body>
@@ -238,7 +290,9 @@ struct ReaderRenderer {
         </svg>
         <div class="wrap">
         <header class="ag-head">
+          \(coverImg)
           <h1>\(escape(article.displayTitle))</h1>
+          \(article.isBook ? bylineLine(article) : "")
           <div class="ag-meta">\(meta.map { "<span>\($0)</span>" }.joined())</div>
           <hr>
         </header>
@@ -267,18 +321,36 @@ struct ReaderRenderer {
             var h = document.documentElement;
             var max = h.scrollHeight - window.innerHeight;
             if (max > 0 && fraction > 0.001) { window.scrollTo(0, max * fraction); }
+          },
+          // A book's chapters, so the contents sheet can jump to one and a same-document
+          // link (a footnote, a cross-reference) can be followed without leaving the page.
+          goto: function (anchor) {
+            var el = document.getElementById(anchor);
+            if (el) { el.scrollIntoView({ block: "start" }); }
+          },
+          chapter: function () {
+            var sections = document.getElementsByClassName("ag-chapter");
+            var current = sections.length ? sections[0].id : "";
+            for (var i = 0; i < sections.length; i++) {
+              if (sections[i].getBoundingClientRect().top <= 1) { current = sections[i].id; }
+              else { break; }
+            }
+            return current;
           }
         };
         var post = function (name, value) {
           try { window.webkit.messageHandlers.reader.postMessage({ name: name, value: value }); } catch (e) {}
         };
         var ticking = false;
+        var lastChapter = "";
         window.addEventListener("scroll", function () {
           if (ticking) return;
           ticking = true;
           requestAnimationFrame(function () {
             ticking = false;
             post("progress", window.__ag.progress());
+            var here = window.__ag.chapter();
+            if (here && here !== lastChapter) { lastChapter = here; post("chapter", here); }
           });
         }, { passive: true });
         \(SelectionReporter.script(handler: "reader"))
@@ -401,8 +473,29 @@ struct ReaderRenderer {
           });
         })();
 
-        window.addEventListener("load", function () { post("ready", 1); });
+        window.addEventListener("load", function () {
+          post("ready", 1);
+          // Every image has either finished loading or failed by the time this fires,
+          // which the earlier "ready" post — sent as soon as DOMContentLoaded, before a
+          // single picture has necessarily laid out — cannot promise. See settleScroll().
+          post("settled", 1);
+        });
         document.addEventListener("DOMContentLoaded", function () { post("ready", 1); });
+
+        // An in-document link — a footnote, a table-of-contents entry, a cross-reference
+        // — is still, to WKWebView, a link, and `decidePolicyFor` treats every activated
+        // link the same way: cancel the navigation and send it to `onOpenLink`, which
+        // opens the amber browser. That is right for a link out to the web and wrong for
+        // one that only means "scroll to this id" — so a same-document href is handled
+        // here, before it becomes a navigation at all.
+        document.addEventListener("click", function (e) {
+          var a = e.target && e.target.closest && e.target.closest("a");
+          if (!a) return;
+          var href = a.getAttribute("href") || "";
+          if (href.charAt(0) !== "#" || href.length < 2) return;
+          e.preventDefault();
+          window.__ag.goto(href.slice(1));
+        });
 
         // A bare tap on the page toggles the app's chrome. Anything that is really a
         // scroll, a link, or a text selection must not count, so the gesture is judged
@@ -424,6 +517,17 @@ struct ReaderRenderer {
         </body>
         </html>
         """
+    }
+
+    private static func coverImageTag(_ article: SavedArticle) -> String {
+        guard let asset = article.coverAsset else { return "" }
+        let extra = article.coverAssetClass.map { " \($0)" } ?? ""
+        return "<img class=\"ag-cover\(extra)\" src=\"\(OfflineAssets.scheme)://\(article.id.uuidString)/\(escape(asset))\" alt=\"\">"
+    }
+
+    private static func bylineLine(_ article: SavedArticle) -> String {
+        guard let byline = article.byline, !byline.isEmpty else { return "" }
+        return "<div class=\"ag-byline\">\(escape(byline))</div>"
     }
 
     static func escape(_ s: String) -> String {

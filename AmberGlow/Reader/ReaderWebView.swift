@@ -58,6 +58,9 @@ struct ReaderWebView: UIViewRepresentable {
     var onTap: () -> Void
     var onSelection: (WebSelection?) -> Void
     var onPages: (Int, Int, Double) -> Void
+    /// The id of the `.ag-chapter` section currently at the top of the screen, for a
+    /// book. Ignored otherwise.
+    var onChapter: (String) -> Void = { _ in }
     let bridge: ReaderBridge
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -165,6 +168,20 @@ struct ReaderWebView: UIViewRepresentable {
             web.evaluateJavaScript("window.__ag && window.__ag.restore(\(fraction));")
         }
 
+        /// A second, corrective pass once every image has either finished loading or
+        /// failed — which `window.load` guarantees and the `ready` message, fired as
+        /// early as `DOMContentLoaded`, does not. Invisible in an article, where the
+        /// document's height barely moves after first paint; in a long book, restoring a
+        /// fraction against a height that still has images to lay out can land a chapter
+        /// or more off. `load` only ever fires once per document, so this cannot repeat
+        /// or compound into a visible jump under the reader's thumb.
+        private func settleScroll() {
+            guard let web else { return }
+            let fraction = parent.article.lastScroll
+            guard fraction > 0.001 else { return }
+            web.evaluateJavaScript("window.__ag && window.__ag.restore(\(fraction));")
+        }
+
         func userContentController(_ controller: WKUserContentController,
                                    didReceive message: WKScriptMessage) {
             guard let dict = message.body as? [String: Any],
@@ -174,10 +191,14 @@ struct ReaderWebView: UIViewRepresentable {
                 if let v = dict["value"] as? Double { parent.onProgress(v) }
             case "ready":
                 restoreScroll()
+            case "settled":
+                settleScroll()
             case "pages":
                 parent.onPages(dict["page"] as? Int ?? 1,
                                dict["total"] as? Int ?? 1,
                                dict["percent"] as? Double ?? 0)
+            case "chapter":
+                if let anchor = dict["value"] as? String { parent.onChapter(anchor) }
             case "tap":
                 parent.onTap()
             case "selection":
