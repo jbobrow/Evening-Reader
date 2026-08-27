@@ -98,16 +98,23 @@ struct RootView: View {
                 edgeAffordance(width: drawerWidth, progress: progress)
 
                 // Dimming the page behind the drawer, in step with how far it is out.
-                if progress > 0.001 {
-                    amber.color(0.02, opacity: 0.28 * progress)
-                        .ignoresSafeArea()
-                        .contentShape(Rectangle())
-                        .onTapGesture { withAnimation(.drawer) { showLibrary = false } }
-                        // Pushing the page left puts the drawer away too, so the drawer
-                        // can be dismissed from the side you are already reading on.
-                        .gesture(drawerDragGesture(width: drawerWidth))
-                        .zIndex(1)
-                }
+                //
+                // Always mounted, and taken out of the way by hit testing rather than by
+                // being removed. It carries a drawer gesture, and a closing drag ends at
+                // exactly the moment its own progress reaches zero: removed there, the
+                // gesture is destroyed in mid-flight and never ends, and the travel it
+                // was holding is left behind on the drawer for good — added to every
+                // position asked for afterwards, which is a drawer that will not open
+                // however it is asked.
+                amber.color(0.02, opacity: 0.28 * progress)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(.drawer) { showLibrary = false } }
+                    // Pushing the page left puts the drawer away too, so the drawer
+                    // can be dismissed from the side you are already reading on.
+                    .gesture(drawerDragGesture(width: drawerWidth))
+                    .allowsHitTesting(progress > 0.001)
+                    .zIndex(1)
 
                 libraryPane()
                     .frame(width: drawerWidth)
@@ -141,6 +148,14 @@ struct RootView: View {
             }
         }
         .onOpenURL(perform: handle)
+        // Whatever moved the drawer, any drag that was in flight is finished with. A
+        // gesture that is interrupted rather than ended keeps its travel, and that travel
+        // goes on being added to the drawer's position — so it is cleared here as well as
+        // in the gesture, where an interruption is the one case that never reaches.
+        .onChange(of: showLibrary) { _, _ in
+            drawerDrag = 0
+            drawerTracking = false
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { library.pickUpInbox() }
             if phase == .background { library.persist() }
