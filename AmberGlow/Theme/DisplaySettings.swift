@@ -123,7 +123,7 @@ final class DisplaySettings {
         ) ?? .paper
         textScale = d("textScale", 1.0)
         lineHeight = d("lineHeight", 1.62)
-        measure = d("measure", 0.62)
+        measure = d("measure", Self.defaultMeasure)
         typeface = Typeface(
             rawValue: defaults.string(forKey: Self.prefix + "typeface") ?? ""
         ) ?? .serif
@@ -160,6 +160,8 @@ final class DisplaySettings {
     static let defaultWarmth = 0.87    // the top of "Deep amber"
     static let defaultGlow = 0.80
     static let defaultContrast = 0.30
+    /// Yields a 680pt default column, in the 600–860 range `readerColumnPoints` maps.
+    static let defaultMeasure = (680.0 - 600.0) / (860.0 - 600.0)
 
     /// True when the panel is already sitting on the shipped defaults.
     var isDefaultPanel: Bool {
