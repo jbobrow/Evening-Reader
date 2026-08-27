@@ -55,6 +55,21 @@ struct DetailPane: View {
         return components.url!
     }
 
+    /// A PDF is read-only, so the two actions that make sense are the two it gets. The
+    /// article's `WebEditor` runs its work as script in the page, which is exactly what a
+    /// PDF has none of — but copy was never script to begin with.
+    private func performPDF(_ action: EditAction, on selection: WebSelection) {
+        switch action {
+        case .copy:
+            UIPasteboard.general.string = selection.text
+        case .search:
+            onOpenLink(searchURL(for: selection.text))
+        case .cut, .paste:
+            break
+        }
+        pdfPager.clearSelection()
+    }
+
     private func toggleChrome() {
         withAnimation(.easeOut(duration: 0.2)) { chromeVisible.toggle() }
     }
@@ -116,7 +131,6 @@ struct DetailPane: View {
                 // control. The one difference is what a page means — see the pager.
                 ZStack(alignment: .bottomTrailing) {
                     PDFReaderView(fileURL: library.documentURL(for: article),
-                                  pageCount: article.pageCount,
                                   initialProgress: article.lastScroll,
                                   onProgress: { p in
                                       liveProgress = p
@@ -129,9 +143,28 @@ struct DetailPane: View {
                                       self.documentLength = length
                                   },
                                   onTap: toggleChrome,
+                                  onSelection: { found in
+                                      withAnimation(.easeOut(duration: 0.14)) { selection = found }
+                                  },
                                   pager: pdfPager)
                         .id(article.id)
                         .task(id: article.id) { liveProgress = article.lastScroll }
+                        // The app's own callout, over a PDF as over an article. Copy and
+                        // search are all a document one cannot write in can offer.
+                        .overlay {
+                            GeometryReader { geo in
+                                if let selection {
+                                    AmberEditMenuOverlay(
+                                        selection: selection,
+                                        container: geo.size,
+                                        actions: [.copy, .search]
+                                    ) { action in
+                                        performPDF(action, on: selection)
+                                        withAnimation(.easeOut(duration: 0.14)) { self.selection = nil }
+                                    }
+                                }
+                            }
+                        }
                         .overlay {
                             if pageCount > 1, isCompact, scrubberHeight > 0 {
                                 ScrubberGround(height: scrubberHeight)
