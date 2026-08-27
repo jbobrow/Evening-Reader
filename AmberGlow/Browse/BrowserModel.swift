@@ -251,9 +251,10 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     }
 
     /// (Re)install the page-side preparation. The grayscale + amber mapping itself is
-    /// applied natively over the whole web view, so only the grid depends on settings.
-    func applyTint(showGrid: Bool) {
-        let script = WebTint.script(showGrid: showGrid)
+    /// applied natively over the whole web view, so this only needs to know the grid and
+    /// whether pictures need to pre-invert to opt out of night's polarity flip.
+    func applyTint(showGrid: Bool, isNight: Bool) {
+        let script = WebTint.script(showGrid: showGrid, isNight: isNight)
         guard script != appliedTint else { return }
         appliedTint = script
 

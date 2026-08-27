@@ -15,8 +15,21 @@ import Foundation
 /// white base a duotone expects, and the pixel grid.
 struct WebTint {
 
-    static func script(showGrid: Bool) -> String {
+    static func script(showGrid: Bool, isNight: Bool) -> String {
         let gridOpacity = showGrid ? "0.5" : "0"
+        // Night's polarity flip is a negative `.contrast()` over the whole rendered view
+        // (see `BrowseScreen`), which reads as a page turning to ink — right for text and
+        // backgrounds, wrong for a photograph or a video frame, which comes out looking
+        // like a photo negative. Pre-inverting those elements here cancels the flip
+        // algebraically: `contrast(-k)` of `1 - x` is exactly `contrast(k)` of `x` (given
+        // grayscale weights that sum to 1, so `luma(invert(c)) == 1 - luma(c)` too), so a
+        // pixel that arrives pre-inverted comes out the other side reading as a positive
+        // again, tinted by the same ink as everything else. Applied to the element
+        // directly rather than to an ancestor, so it holds regardless of whether the
+        // element got its own compositing layer.
+        let mediaInvert = isNight
+            ? "img, video, canvas { filter: invert(1); }"
+            : ""
 
         return """
         (function () {
@@ -43,7 +56,8 @@ struct WebTint {
             '  background-image:',
             '    repeating-linear-gradient(0deg, rgba(0,0,0,0.055) 0 1px, transparent 1px 2px),',
             '    repeating-linear-gradient(90deg, rgba(0,0,0,0.055) 0 1px, transparent 1px 2px);',
-            '}'
+            '}',
+            '\(mediaInvert)'
           ].join('\\n');
 
           \(SelectionReporter.script(handler: "browse"))

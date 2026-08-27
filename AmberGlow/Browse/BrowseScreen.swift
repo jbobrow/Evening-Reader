@@ -109,7 +109,7 @@ struct BrowseScreen: View {
         .background(GlowSurface(level: 0.88))
         .statusBarHidden(true)
         .onAppear {
-            model.applyTint(showGrid: settings.showTexture)
+            model.applyTint(showGrid: settings.showTexture, isNight: isNight)
             if let initialURL {
                 address = initialURL.absoluteString
                 model.load(initialURL)
@@ -118,8 +118,11 @@ struct BrowseScreen: View {
             }
         }
         .onChange(of: settings.showTexture) { _, grid in
-            model.applyTint(showGrid: grid)
+            model.applyTint(showGrid: grid, isNight: isNight)
             WebKeyboardBridge.shared.refresh(palette: settings.palette, showsTexture: grid)
+        }
+        .onChange(of: settings.polarity) { _, polarity in
+            model.applyTint(showGrid: settings.showTexture, isNight: polarity == .night)
         }
         .onChange(of: settings.palette) { _, palette in
             WebKeyboardBridge.shared.refresh(palette: palette, showsTexture: settings.showTexture)
