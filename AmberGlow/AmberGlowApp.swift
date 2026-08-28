@@ -4,12 +4,14 @@ import SwiftUI
 struct AmberGlowApp: App {
     @State private var settings = DisplaySettings()
     @State private var library = Library()
+    @State private var highlights = Highlights()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(settings)
                 .environment(library)
+                .environment(highlights)
                 .environment(\.amber, settings.palette)
                 .tint(settings.palette.ink)
                 .preferredColorScheme(.light)   // we paint every surface ourselves
@@ -27,6 +29,7 @@ extension Animation {
 struct RootView: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(Library.self) private var library
+    @Environment(Highlights.self) private var highlights
     @Environment(\.amber) private var amber
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -36,6 +39,10 @@ struct RootView: View {
     @State private var scope: Library.Scope = .unread
     @State private var search = ""
     @State private var showAdd = false
+    @State private var showHighlights = false
+    /// A marked passage the reader picked out of the highlights list, on its way to the
+    /// page it came off. Cleared by the reader once it has been reached.
+    @State private var revealHighlight: UUID?
     @State private var browseTarget: BrowseTarget?
     /// Set when a file opened from outside the app (Files, Mail, another app's "Open
     /// in…") turns out not to be a book Amber Glow can read — a lock the app cannot
@@ -93,6 +100,7 @@ struct RootView: View {
                     article: selected,
                     showLibrary: $showLibrary,
                     chromeVisible: $chromeVisible,
+                    revealHighlight: $revealHighlight,
                     panelOpen: glowPanel == .reader,
                     onOpenLink: { browseTarget = BrowseTarget(url: $0) },
                     onDismissArticle: { selection = nil },
@@ -149,10 +157,22 @@ struct RootView: View {
                 open(library.add(url: url))
             }
         })
+        .modifier(AmberFullScreenPresentation(isPresented: $showHighlights) {
+            HighlightsSheet { article, mark in
+                open(article)
+                // `open` only puts the drawer away on a phone, where it is the whole
+                // screen. Here it goes either way: this is a request to see one
+                // particular passage, and on a wide panel the drawer is over the page
+                // it is on.
+                withAnimation(.drawer) { showLibrary = false }
+                revealHighlight = mark.id
+            }
+        })
         .fullScreenCover(item: $browseTarget) { target in
             BrowseScreen(initialURL: target.url) { saved in
                 open(saved)
             }
+            .environment(highlights)
             // Full-screen covers are hosted through a separate presentation path on Mac
             // (running the iPad build) and don't reliably inherit the window's environment
             // there, so `@Environment(Library.self)` / `@Environment(DisplaySettings.self)`
@@ -170,7 +190,12 @@ struct RootView: View {
             drawerTracking = false
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { library.pickUpInbox() }
+            // What came down from iCloud arrived as whole folders, so what is held about
+            // any of them is stale. The library re-reads itself; the marks are told to.
+            if phase == .active {
+                library.pickUpInbox()
+                highlights.forget()
+            }
             if phase == .background { library.persist() }
         }
         .task {
@@ -263,6 +288,7 @@ struct RootView: View {
             selection: $selection,
             onAdd: { showAdd = true },
             onBrowse: { browseTarget = BrowseTarget(url: nil) },
+            onHighlights: { showHighlights = true },
             onClose: { withAnimation(.drawer) { showLibrary = false } },
             onOpened: { withAnimation(.drawer) { showLibrary = false } },
             onGlow: { toggleGlow(.library) },

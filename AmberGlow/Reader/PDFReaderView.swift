@@ -8,8 +8,18 @@ import PDFKit
 /// renders it rather than WebKit, is a view that will answer.
 @MainActor
 final class PDFPager: NSObject {
-    weak var view: PDFView?
+    weak var view: PDFView? {
+        didSet { goToPendingPage() }
+    }
     weak var scrollView: UIScrollView?
+
+    /// A page asked for before there was a view to ask. Held rather than dropped: opening
+    /// a PDF from the highlights list asks for the page in the same breath as opening the
+    /// document, and which of the two lands first is not ours to decide.
+    private var pendingPage: Int?
+    /// True once a particular page has been asked for, so the coordinator's restore of
+    /// the last-read position stands down — the reader said where they wanted to be.
+    private(set) var wentToPage = false
 
     private var link: CADisplayLink?
     private var velocity: Double = 0
@@ -36,6 +46,49 @@ final class PDFPager: NSObject {
 
     func clearSelection() {
         view?.clearSelection()
+    }
+
+    /// Anchors what is selected right now, so the app can keep it.
+    ///
+    /// A PDF has no text of ours to count through, so a passage is pinned the way PDFKit
+    /// itself pins one: to a page, and to the line boxes it covers on that page. Only the
+    /// first page's lines are taken. A selection dragged across a page break would need a
+    /// second anchor to draw the rest, and a page is the unit a PDF's own annotations are
+    /// stored in — the passage's text is kept whole either way.
+    func captureSelection() -> Highlight? {
+        guard let view, let document = view.document,
+              let selection = view.currentSelection,
+              let text = selection.string, !text.trimmingCharacters(in: .whitespaces).isEmpty,
+              let page = selection.pages.first else { return nil }
+        let index = document.index(for: page)
+        var boxes = selection.selectionsByLine().compactMap { line -> Highlight.Box? in
+            guard let linePage = line.pages.first, document.index(for: linePage) == index else {
+                return nil
+            }
+            return Highlight.Box(line.bounds(for: linePage))
+        }
+        if boxes.isEmpty { boxes = [Highlight.Box(selection.bounds(for: page))] }
+        let pages = max(1, document.pageCount - 1)
+        return Highlight(text: text,
+                         pageIndex: index,
+                         boxes: boxes,
+                         progress: Double(index) / Double(pages))
+    }
+
+    /// Turn to the page a marked passage is on — the jump from the highlights list.
+    func reveal(pageIndex: Int) {
+        pendingPage = pageIndex
+        wentToPage = true
+        goToPendingPage()
+    }
+
+    private func goToPendingPage() {
+        guard let pageIndex = pendingPage,
+              let view, let document = view.document,
+              pageIndex >= 0, pageIndex < document.pageCount,
+              let page = document.page(at: pageIndex) else { return }
+        pendingPage = nil
+        view.go(to: page)
     }
 
     @objc private func step() {
@@ -67,7 +120,6 @@ final class PDFPager: NSObject {
 /// process to lose, and `currentSelection` for the text and where it sits.
 struct PDFReaderView: View {
     @Environment(DisplaySettings.self) private var settings
-    @Environment(\.amber) private var amber
 
     let fileURL: URL
     /// Where the reader left off, as a fraction.
@@ -79,21 +131,14 @@ struct PDFReaderView: View {
     var onTap: () -> Void = {}
     /// What the reader has selected, in the view's own coordinates, or nil for nothing.
     var onSelection: (WebSelection?) -> Void = { _ in }
+    /// What is marked in this document, painted onto the pages as annotations.
+    var highlights: [Highlight] = []
     let pager: PDFPager
 
     /// Where a white page lands, matching the app's own surfaces.
     private let pageLevel = 0.88
-    private let inkFloor = 0.045
 
     private var isNight: Bool { settings.polarity == .night }
-    private var tintSign: Double { isNight ? -1 : 1 }
-    private var tintColor: Color { isNight ? amber.color(0.0) : amber.color(pageLevel) }
-    private var tintFloor: Double {
-        guard isNight else { return inkFloor }
-        let ink = amber.rgb(0.0).0
-        let page = amber.rgb(pageLevel).0
-        return ink > 0 ? min(1, page / ink) : inkFloor
-    }
 
     var body: some View {
         PDFDocumentView(fileURL: fileURL,
@@ -102,11 +147,9 @@ struct PDFReaderView: View {
                         onPages: onPages,
                         onTap: onTap,
                         onSelection: onSelection,
+                        highlights: highlights,
                         pager: pager)
-            .grayscale(1)
-            .contrast(tintSign * (1 - tintFloor))
-            .brightness(tintFloor / 2)
-            .colorMultiply(tintColor)
+            .amberInk(pageLevel: pageLevel, isNight: isNight)
             .overlay { BacklightBloom(level: isNight ? 0.0 : pageLevel) }
             // The lattice, painted back on over the top.
             //
@@ -129,6 +172,7 @@ private struct PDFDocumentView: UIViewRepresentable {
     var onPages: (Int, Int, Double, CGFloat) -> Void
     var onTap: () -> Void
     var onSelection: (WebSelection?) -> Void
+    var highlights: [Highlight]
     let pager: PDFPager
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -167,6 +211,7 @@ private struct PDFDocumentView: UIViewRepresentable {
 
     func updateUIView(_ view: PDFView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.applyHighlights(highlights, to: view)
     }
 
     static func dismantleUIView(_ view: PDFView, coordinator: Coordinator) {
@@ -182,6 +227,9 @@ private struct PDFDocumentView: UIViewRepresentable {
         private var offsetToken: NSKeyValueObservation?
         private var sizeToken: NSKeyValueObservation?
         private var restored = false
+        /// What is drawn on the pages now, so a redraw is only paid for when the set has
+        /// changed — `updateUIView` runs on every glow tweak.
+        private var drawnMarks: String?
 
         init(_ parent: PDFDocumentView) { self.parent = parent }
 
@@ -214,7 +262,48 @@ private struct PDFDocumentView: UIViewRepresentable {
             tap.delaysTouchesEnded = false
             tap.delegate = self
             view.addGestureRecognizer(tap)
+
+            applyHighlights(parent.highlights, to: view)
         }
+
+        /// Paints the marked passages onto the pages.
+        ///
+        /// PDFKit already knows how to draw a highlight, so it draws them — as its own
+        /// annotations, in a grey that the view's grayscale-then-amber mapping lands
+        /// somewhere sensible on the ramp, the same way it lands the type. They are
+        /// annotations on the open document only: nothing is ever written back to the
+        /// file, which stays exactly the bytes that were downloaded. The marks live in
+        /// the sidecar next to it.
+        ///
+        /// Ours are recognised by what is in `contents`, so a document that arrived with
+        /// annotations of its own keeps them.
+        func applyHighlights(_ list: [Highlight], to view: PDFView) {
+            let key = list.map { "\($0.id.uuidString):\($0.hasNote)" }.joined(separator: ",")
+            guard key != drawnMarks, let document = view.document else { return }
+            drawnMarks = key
+
+            for index in 0..<document.pageCount {
+                guard let page = document.page(at: index) else { continue }
+                for annotation in page.annotations
+                where annotation.contents?.hasPrefix(Self.markPrefix) == true {
+                    page.removeAnnotation(annotation)
+                }
+            }
+
+            for mark in list {
+                guard let index = mark.pageIndex, let boxes = mark.boxes,
+                      let page = document.page(at: index) else { continue }
+                for box in boxes {
+                    let annotation = PDFAnnotation(bounds: box.rect, forType: .highlight,
+                                                   withProperties: nil)
+                    annotation.color = UIColor(white: mark.hasNote ? 0.44 : 0.58, alpha: 1)
+                    annotation.contents = Self.markPrefix + mark.id.uuidString
+                    page.addAnnotation(annotation)
+                }
+            }
+        }
+
+        private static let markPrefix = "amber-highlight:"
 
         func detach() {
             NotificationCenter.default.removeObserver(self)
@@ -235,6 +324,9 @@ private struct PDFDocumentView: UIViewRepresentable {
             guard !restored, scroll.bounds.height > 0,
                   scroll.contentSize.height > scroll.bounds.height else { return }
             restored = true
+            // A page was asked for while the document was still laying out. Restoring
+            // where the reader left off would pull them straight back off it.
+            guard !parent.pager.wentToPage else { return }
             let limit = scroll.contentSize.height - scroll.bounds.height
             guard parent.initialProgress > 0.001 else { return }
             scroll.contentOffset.y = limit * parent.initialProgress

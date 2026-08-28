@@ -26,6 +26,7 @@ struct AddLinkPresentation<Sheet: View>: ViewModifier {
 
     @Environment(Library.self) private var library
     @Environment(DisplaySettings.self) private var settings
+    @Environment(Highlights.self) private var highlights
 
     func body(content: Content) -> some View {
         if isCompact {
@@ -36,16 +37,83 @@ struct AddLinkPresentation<Sheet: View>: ViewModifier {
                     // inherit the window's environment.
                     .environment(library)
                     .environment(settings)
+                    .environment(highlights)
             }
         } else {
             content.sheet(isPresented: $isPresented) {
                 sheet()
                     .environment(library)
                     .environment(settings)
+                    .environment(highlights)
                     .presentationBackground { GlowSurface(level: 0.9) }
                     .modifier(FittedSheet())
             }
         }
+    }
+}
+
+/// A panel that takes the whole glass, whatever the screen.
+///
+/// The add panel and the contents list are cards on a wide screen because they are small
+/// and particular — a field and a button; a column of chapter names. The highlights list
+/// is neither. It is a second library, holding everything worth keeping out of everything
+/// read, and a 420pt card is a window onto that rather than a view of it.
+struct AmberFullScreenPresentation<Sheet: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    @ViewBuilder var sheet: () -> Sheet
+
+    @Environment(Library.self) private var library
+    @Environment(DisplaySettings.self) private var settings
+    @Environment(Highlights.self) private var highlights
+
+    func body(content: Content) -> some View {
+        content.fullScreenCover(isPresented: $isPresented) {
+            sheet()
+                // See the matching note above: on Mac, running the iPad build, this
+                // presentation path doesn't reliably inherit the window's environment.
+                .environment(library)
+                .environment(settings)
+                .environment(highlights)
+        }
+    }
+}
+
+/// The same presentation, driven by what is being shown rather than by a flag.
+///
+/// The reader's panels — a definition, a question about a passage — are each about one
+/// particular piece of text, and carrying that alongside a `Bool` means two pieces of
+/// state that can disagree. An item cannot: it is either there, with its subject, or it
+/// is not.
+struct AmberItemPresentation<Item: Identifiable, Sheet: View>: ViewModifier {
+    let isCompact: Bool
+    @Binding var item: Item?
+    @ViewBuilder var sheet: (Item) -> Sheet
+
+    @Environment(Library.self) private var library
+    @Environment(DisplaySettings.self) private var settings
+    @Environment(Highlights.self) private var highlights
+
+    func body(content: Content) -> some View {
+        if isCompact {
+            content.fullScreenCover(item: $item) { value in
+                dressed(sheet(value))
+                    .background(GlowSurface(level: 0.9))
+                    .statusBarHidden(true)
+            }
+        } else {
+            content.sheet(item: $item) { value in
+                dressed(sheet(value))
+                    .presentationBackground { GlowSurface(level: 0.9) }
+                    .modifier(FittedSheet())
+            }
+        }
+    }
+
+    private func dressed<V: View>(_ view: V) -> some View {
+        view
+            .environment(library)
+            .environment(settings)
+            .environment(highlights)
     }
 }
 

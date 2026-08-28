@@ -87,67 +87,21 @@ struct AmberTextField: UIViewRepresentable {
     final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: AmberTextField
         weak var field: UITextField?
-        private var host: UIHostingController<AmberKeyboard>?
-        private var container: AmberInputContainer?
-        /// The board's width, as UIKit lays it out. The keys are sized from it.
-        private var boardWidth: CGFloat = 0
+        private let board = AmberKeyboardInstaller()
 
         init(_ parent: AmberTextField) { self.parent = parent }
 
         func installKeyboard(_ parent: AmberTextField, on field: UITextField) {
-            let host = UIHostingController(rootView: keyboard(for: parent))
-            host.view.backgroundColor = .clear
-            host.sizingOptions = []
-            self.host = host
-
-            // The app supplies the container too. Left to itself the input view paints a
-            // light system backdrop, which shows as a pale band above and below the keys
-            // and around the home indicator — the one place a second colour could still
-            // get in. `.default` style means no system material, just our fill.
-            let container = AmberInputContainer(
-                frame: CGRect(x: 0, y: 0, width: 0, height: Self.height),
-                inputViewStyle: .default
-            )
-            container.onWidthChange = { [weak self] width in
-                guard let self, self.boardWidth != width else { return }
-                self.boardWidth = width
-                self.host?.rootView = self.keyboard(for: self.parent)
-            }
-            container.backgroundColor = UIColor(parent.palette.color(0.80))
-            container.allowsSelfSizing = true
-            container.translatesAutoresizingMaskIntoConstraints = true
-            container.autoresizingMask = [.flexibleWidth]
-
-            host.view.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(host.view)
-            NSLayoutConstraint.activate([
-                host.view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                host.view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-                host.view.topAnchor.constraint(equalTo: container.topAnchor),
-                host.view.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-            ])
-
-            self.container = container
-            field.inputView = container
+            board.onKey = { [weak self] key in self?.handle(key) }
+            refreshKeyboard(parent)
+            field.inputView = board.container
         }
 
-        /// The palette can change while a field is up, so the keyboard is re-rendered
-        /// rather than rebuilt — rebuilding would drop the shift and plane state.
         func refreshKeyboard(_ parent: AmberTextField) {
-            host?.rootView = keyboard(for: parent)
-            container?.backgroundColor = UIColor(parent.palette.color(0.80))
-        }
-
-        private static let height: CGFloat = 330
-
-        private func keyboard(for parent: AmberTextField) -> AmberKeyboard {
-            AmberKeyboard(palette: parent.palette,
-                          showsTexture: parent.showsTexture,
-                          showsDotCom: parent.showsDotCom,
-                          goLabel: parent.goLabel,
-                          boardWidth: boardWidth) { [weak self] key in
-                self?.handle(key)
-            }
+            board.apply(AmberKeyboardInstaller.Style(palette: parent.palette,
+                                                     showsTexture: parent.showsTexture,
+                                                     showsDotCom: parent.showsDotCom,
+                                                     goLabel: parent.goLabel))
         }
 
         private func handle(_ key: AmberKey) {

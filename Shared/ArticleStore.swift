@@ -125,7 +125,7 @@ final class ArticleStore {
     /// Sidecar files a kind may keep beside `article.json`. Whitelisted rather than
     /// taking any name, so this stays a store for known shapes rather than a place
     /// anything can be dropped.
-    private static let allowedSidecars: Set<String> = ["contents.json"]
+    private static let allowedSidecars: Set<String> = ["contents.json", "highlights.json"]
 
     func folder(for article: SavedArticle) -> URL {
         if let known = queue.sync(execute: { folders[article.id] }) { return known }

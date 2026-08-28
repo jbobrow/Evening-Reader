@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DetailPane: View {
     @Environment(Library.self) private var library
+    @Environment(Highlights.self) private var highlights
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -9,6 +10,9 @@ struct DetailPane: View {
     let article: SavedArticle?
     @Binding var showLibrary: Bool
     @Binding var chromeVisible: Bool
+    /// A passage to travel to, set when one is chosen from the highlights list. Cleared
+    /// by the page once it has been reached.
+    @Binding var revealHighlight: UUID?
     var panelOpen: Bool
     var onOpenLink: (URL) -> Void
     var onDismissArticle: () -> Void
@@ -37,6 +41,30 @@ struct DetailPane: View {
     /// can mark it — the reader's equivalent of `ArticleRow`'s selection highlight.
     @State private var currentChapterAnchor: String?
     @State private var showContents = false
+    /// This reading's own marks, opened from the chrome.
+    @State private var showHighlights = false
+    /// A definition, or a question about a passage. One at a time: both are about the
+    /// same selection, and both take the glass.
+    @State private var panel: ReaderPanel?
+    /// The mark whose card is open — just made, or just tapped.
+    @State private var openMark: Highlight?
+    /// Whether there is a model on this device to ask. Read when a selection appears
+    /// rather than while the callout is being laid out — the answer can change while the
+    /// app is open, but not between one frame and the next.
+    @State private var canAskAI = false
+
+    /// What the reader asked of a selection that the page cannot answer itself.
+    enum ReaderPanel: Identifiable {
+        case define(String)
+        case ask(passage: String, title: String)
+
+        var id: String {
+            switch self {
+            case .define(let term): return "define:" + term
+            case .ask(let passage, _): return "ask:" + passage
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,6 +80,76 @@ struct DetailPane: View {
                 splash
             }
         }
+        .overlay { markCard }
+        .modifier(AmberFullScreenPresentation(isPresented: $showHighlights) {
+            if let article {
+                HighlightsSheet(scope: article) { _, mark in
+                    revealHighlight = mark.id
+                }
+            }
+        })
+        .modifier(AmberItemPresentation(isCompact: isCompact, item: $panel) { panel in
+            switch panel {
+            case .define(let term):
+                DefinitionCard(term: term,
+                               onSearch: {
+                                   self.panel = nil
+                                   onOpenLink(searchURL(for: term))
+                               },
+                               onClose: { self.panel = nil })
+                    // The card sizes itself now — see `entryHeight` — so all this owes
+                    // it is a measure. On a phone the surface behind it is the whole
+                    // glass and the card floats in the middle of it.
+                    .frame(width: 420)
+                    .padding(.horizontal, isCompact ? 20 : 0)
+            case .ask(let passage, let title):
+                AskAISheet(passage: passage, title: title)
+            }
+        })
+    }
+
+    /// The card for a mark — just made, or just tapped. Over the page rather than in a
+    /// sheet: the passage it is about is a few lines away, and covering it would take
+    /// away the thing the note is being written about.
+    @ViewBuilder
+    private var markCard: some View {
+        if let mark = openMark, let article {
+            ZStack {
+                AmberScrim { closeMark() }
+                HighlightCard(
+                    highlight: mark,
+                    onRemove: {
+                        highlights.remove(mark.id, from: article)
+                        closeMark()
+                    },
+                    onClose: closeMark,
+                    onNote: { note in highlights.setNote(note, on: mark.id, in: article) }
+                )
+                .padding(.horizontal, 18)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func closeMark() {
+        withAnimation(.easeOut(duration: 0.16)) { openMark = nil }
+    }
+
+    /// A passage picked out of a list has been reached.
+    ///
+    /// Its card opens here rather than in the list it was picked from, wherever that
+    /// was. This is the source: the words are on the page under the scrim, and a note
+    /// written about them is written about the passage rather than about a fragment
+    /// quoted out of it — which is why the library's own card cannot write one.
+    private func reachedPassage() {
+        guard let id = revealHighlight, let article,
+              let mark = highlights.highlight(id, in: article) else {
+            revealHighlight = nil
+            return
+        }
+        revealHighlight = nil
+        withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
     }
 
     private var isCompact: Bool { sizeClass == .compact }
@@ -62,16 +160,98 @@ struct DetailPane: View {
         return components.url!
     }
 
-    /// A PDF is read-only, so the two actions that make sense are the two it gets. The
-    /// article's `WebEditor` runs its work as script in the page, which is exactly what a
-    /// PDF has none of — but copy was never script to begin with.
-    private func performPDF(_ action: EditAction, on selection: WebSelection) {
+    // MARK: - What a selection can become
+
+    /// What the callout offers for this selection.
+    ///
+    /// Neither a PDF nor a saved article can be written in, so nothing that edits appears
+    /// in either. What is left is what can be done *with* the words: kept, looked up,
+    /// asked about, searched for. Two of the four are conditional — a dictionary has an
+    /// answer for a word and not for a paragraph, and asking needs a model on the device
+    /// — and both simply aren't there when they have nothing to offer.
+    private func actions(for selection: WebSelection) -> [EditAction] {
+        var list: [EditAction] = [.copy]
+        if selection.singleWord != nil { list.append(.define) }
+        list.append(.highlight)
+        if canAskAI { list.append(.askAI) }
+        list.append(.search)
+        return list
+    }
+
+    private func noteSelection(_ found: WebSelection?) {
+        if found != nil { canAskAI = AppleIntelligence.isAvailable }
+        withAnimation(.easeOut(duration: 0.14)) { selection = found }
+    }
+
+    /// The three that are the app's rather than the page's. Answering true means the
+    /// action has been dealt with here and the document should not be asked to do
+    /// anything about it.
+    ///
+    /// Each of them lets the selection go afterwards. The callout is taken down by the
+    /// app either way, but the words stay selected in the document underneath — and the
+    /// page reports its selection again on the next scroll, so a callout the reader
+    /// thought they had dismissed comes back on its own.
+    private func handleShared(_ action: EditAction, on selection: WebSelection,
+                              in article: SavedArticle) -> Bool {
+        switch action {
+        case .define:
+            if let word = selection.singleWord { panel = .define(word) }
+        case .askAI:
+            panel = .ask(passage: selection.tidyText, title: article.displayTitle)
+        case .highlight:
+            mark(selection, in: article)
+        default:
+            return false
+        }
+        deselect(in: article)
+        return true
+    }
+
+    /// Let go of the words, whichever kind of document is holding them.
+    private func deselect(in article: SavedArticle) {
+        if article.isPDF {
+            pdfPager.clearSelection()
+        } else {
+            WebEditor.clearSelection(on: bridge)
+        }
+    }
+
+    /// Keep this passage.
+    ///
+    /// An article's page is asked to anchor it — only the document knows where its own
+    /// text starts and stops — and answers back through `onHighlight`. A PDF has no
+    /// document of ours to ask, so the same job is done through the view.
+    private func mark(_ selection: WebSelection, in article: SavedArticle) {
+        if article.isPDF {
+            guard let captured = pdfPager.captureSelection() else { return }
+            keep(captured, in: article)
+        } else {
+            // Ordered before the deselect that follows: WebKit runs what it is given in
+            // the order it is given it, and the capture needs the selection still there.
+            bridge.runJavaScript("window.__agHL && window.__agHL.capture();")
+        }
+    }
+
+    /// Saves an anchored passage and opens its card, so the note can be written while the
+    /// reason for marking it is still in mind. The highlight is already saved by then —
+    /// closing the card without typing leaves a plain one.
+    private func keep(_ mark: Highlight, in article: SavedArticle) {
+        highlights.add(mark, to: article)
+        withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
+    }
+
+    /// A PDF is read-only, so nothing that edits appears. The article's `WebEditor` runs
+    /// its work as script in the page, which is exactly what a PDF has none of — but copy
+    /// was never script to begin with.
+    private func performPDF(_ action: EditAction, on selection: WebSelection,
+                            in article: SavedArticle) {
+        if handleShared(action, on: selection, in: article) { return }
         switch action {
         case .copy:
-            UIPasteboard.general.string = selection.text
+            UIPasteboard.general.string = selection.tidyText
         case .search:
-            onOpenLink(searchURL(for: selection.text))
-        case .cut, .paste:
+            onOpenLink(searchURL(for: selection.tidyText))
+        default:
             break
         }
         pdfPager.clearSelection()
@@ -105,6 +285,12 @@ struct DetailPane: View {
                 Spacer(minLength: 12)
 
                 AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
+                // What you kept out of this one, where you are reading it. Only once
+                // there is something to keep: an always-present button that opens an
+                // empty list is a button that says nothing about the page you are on.
+                if highlights.count(for: article) > 0 {
+                    AmberIconButton(symbol: "highlighter") { showHighlights = true }
+                }
                 // A book has no page of its own to open in the browser — what the globe
                 // button opens for everything else — so it gets the one piece of chrome
                 // that means something instead: its contents.
@@ -157,27 +343,33 @@ struct DetailPane: View {
                                       self.documentLength = length
                                   },
                                   onTap: toggleChrome,
-                                  onSelection: { found in
-                                      withAnimation(.easeOut(duration: 0.14)) { selection = found }
-                                  },
+                                  onSelection: noteSelection,
+                                  highlights: highlights.list(for: article),
                                   pager: pdfPager)
                         .id(article.id)
                         .task(id: article.id) { liveProgress = article.lastScroll }
-                        // The app's own callout, over a PDF as over an article. Copy and
-                        // search are all a document one cannot write in can offer.
+                        // The app's own callout, over a PDF as over an article.
                         .overlay {
                             GeometryReader { geo in
                                 if let selection {
                                     AmberEditMenuOverlay(
                                         selection: selection,
                                         container: geo.size,
-                                        actions: [.copy, .search]
+                                        actions: actions(for: selection)
                                     ) { action in
-                                        performPDF(action, on: selection)
+                                        performPDF(action, on: selection, in: article)
                                         withAnimation(.easeOut(duration: 0.14)) { self.selection = nil }
                                     }
                                 }
                             }
+                        }
+                        // A passage chosen from the highlights list: turn to its page.
+                        .task(id: revealHighlight) {
+                            guard let target = revealHighlight,
+                                  let mark = highlights.highlight(target, in: article),
+                                  let page = mark.pageIndex else { return }
+                            pdfPager.reveal(pageIndex: page)
+                            reachedPassage()
                         }
                         .overlay {
                             if pageCount > 1, isCompact, scrubberHeight > 0 {
@@ -220,15 +412,21 @@ struct DetailPane: View {
                         },
                         onOpenLink: onOpenLink,
                         onTap: toggleChrome,
-                        onSelection: { found in
-                            withAnimation(.easeOut(duration: 0.14)) { selection = found }
-                        },
+                        onSelection: noteSelection,
                         onPages: { page, total, percent in
                             self.page = page
                             self.pageCount = total
                             self.percent = percent
                         },
                         onChapter: { anchor in currentChapterAnchor = anchor },
+                        highlights: highlights.list(for: article),
+                        revealHighlight: revealHighlight,
+                        onRevealed: reachedPassage,
+                        onHighlight: { mark in keep(mark, in: article) },
+                        onMarkTap: { id in
+                            guard let mark = highlights.highlight(id, in: article) else { return }
+                            withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
+                        },
                         bridge: bridge
                     )
                     .id(article.id)
@@ -261,10 +459,12 @@ struct DetailPane: View {
                                 AmberEditMenuOverlay(
                                     selection: selection,
                                     container: geo.size,
-                                    actions: [.copy, .search]
+                                    actions: actions(for: selection)
                                 ) { action in
-                                    WebEditor.perform(action, on: bridge, selection: selection,
-                                                      search: { onOpenLink(searchURL(for: $0)) })
+                                    if !handleShared(action, on: selection, in: article) {
+                                        WebEditor.perform(action, on: bridge, selection: selection,
+                                                          search: { onOpenLink(searchURL(for: $0)) })
+                                    }
                                     withAnimation(.easeOut(duration: 0.14)) { self.selection = nil }
                                 }
                             }

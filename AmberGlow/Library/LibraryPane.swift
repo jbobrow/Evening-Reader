@@ -11,6 +11,7 @@ struct LibraryPane: View {
 
     var onAdd: () -> Void
     var onBrowse: () -> Void
+    var onHighlights: () -> Void
     var onClose: (() -> Void)?
     var onOpened: () -> Void
     var onGlow: () -> Void
@@ -38,11 +39,13 @@ struct LibraryPane: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 2) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("AMBER GLOW")
                     .font(.system(size: 13, weight: .bold, design: .default))
                     .tracking(2.6)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                     .foregroundStyle(amber.inkStrong)
                 Text("\(library.count(scope: .unread)) unread")
                     .font(.system(size: 11, weight: .medium))
@@ -52,12 +55,18 @@ struct LibraryPane: View {
             Spacer()
             AmberIconButton(symbol: "plus", action: onAdd)
             AmberIconButton(symbol: "globe", action: onBrowse)
+            // What was kept out of the reading, as against what there is to read. It
+            // belongs on the library's chrome rather than the reader's: the list it opens
+            // is the whole library's, and a passage is most often looked for when you are
+            // not on the page it came from.
+            AmberIconButton(symbol: "highlighter", action: onHighlights)
             AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
             if let onClose {
                 AmberIconButton(symbol: "sidebar.left", action: onClose)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.leading, 16)
+        .padding(.trailing, 8)
         .padding(.top, 10)
         .padding(.bottom, 12)
     }

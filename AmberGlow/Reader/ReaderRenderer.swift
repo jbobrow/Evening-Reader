@@ -14,6 +14,8 @@ struct ReaderRenderer {
             "--ink-strong": palette.inkStrongHex,
             "--ink-muted": palette.inkMutedHex,
             "--rule": palette.ruleHex,
+            "--mark": palette.hex(0.70),
+            "--mark-edge": palette.hex(0.30),
             "--size": String(format: "%.2fpx", settings.bodyPointSize),
             "--lh": String(format: "%.3f", settings.lineHeight),
             "--measure": String(format: "%.0fpx", settings.readerColumnPoints),
@@ -112,6 +114,23 @@ struct ReaderRenderer {
           text-rendering: optimizeLegibility;
         }
         ::selection { background: var(--rule); color: var(--ink-strong); }
+
+        /* A highlighter has no colour to spend here — the panel emits one hue and this is
+           not the place to invent a second. What a wash of ink actually does to paper is
+           lower it, so a marked passage is drawn as ground: a band of the ramp sitting
+           between the page and the type, which reads the same way in both polarities
+           without either being a special case. The shadow is not decoration; it closes
+           the hairline gaps between the line boxes of a passage that runs over several
+           lines, so a paragraph reads as one mark and not as a stack of them. */
+        mark.ag-hl {
+          background: var(--mark);
+          box-shadow: 0 0 0 1px var(--mark);
+          color: inherit;
+          border-radius: 2px;
+          cursor: pointer;
+        }
+        /* One that carries a note says so, in the only way left: an edge under it. */
+        mark.ag-hl-note { box-shadow: 0 0 0 1px var(--mark), inset 0 -2px 0 var(--mark-edge); }
 
         .wrap {
           max-width: var(--measure);
@@ -355,6 +374,7 @@ struct ReaderRenderer {
         }, { passive: true });
         \(SelectionReporter.script(handler: "reader"))
         \(DocumentPager.script(handler: "reader"))
+        \(HighlightMarker.script(handler: "reader"))
 
         // Which pictures may be inverted at night.
         //
@@ -503,7 +523,8 @@ struct ReaderRenderer {
         var tapX = 0, tapY = 0, tapAt = 0, tapEligible = false;
         document.addEventListener("pointerdown", function (e) {
           tapX = e.clientX; tapY = e.clientY; tapAt = Date.now();
-          tapEligible = !(e.target && e.target.closest && e.target.closest("a"));
+          tapEligible = !(e.target && e.target.closest &&
+                          e.target.closest("a, mark.ag-hl"));
         }, { passive: true });
         document.addEventListener("pointerup", function (e) {
           if (!tapEligible) return;

@@ -61,6 +61,17 @@ struct ReaderWebView: UIViewRepresentable {
     /// The id of the `.ag-chapter` section currently at the top of the screen, for a
     /// book. Ignored otherwise.
     var onChapter: (String) -> Void = { _ in }
+    /// What is marked on this page, drawn into the document and redrawn whenever the set
+    /// changes. Anchored by offset; see `HighlightMarker`.
+    var highlights: [Highlight] = []
+    /// A passage to bring into view — the jump from the highlights list. Cleared through
+    /// `onRevealed` once it has been done, so it happens once rather than on every layout.
+    var revealHighlight: UUID?
+    var onRevealed: () -> Void = {}
+    /// A passage the reader has just marked, anchored and ready to be saved.
+    var onHighlight: (Highlight) -> Void = { _ in }
+    /// A tap on a mark already on the page.
+    var onMarkTap: (UUID) -> Void = { _ in }
     let bridge: ReaderBridge
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -93,6 +104,8 @@ struct ReaderWebView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.loadIfNeeded(self)
         context.coordinator.applyStyle(self)
+        context.coordinator.applyHighlights(self)
+        context.coordinator.revealIfAsked(self)
     }
 
     static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
@@ -112,6 +125,13 @@ struct ReaderWebView: UIViewRepresentable {
         private var loadedKey: String?
         private var lastStyle: String?
         private var didRestore = false
+        /// What the document was last told to mark, so a redraw is only paid for when
+        /// the set has actually changed — `updateUIView` runs on every glow tweak.
+        private var lastMarks: String?
+        /// True once the document exists to be marked. Highlights and a reveal asked for
+        /// before that are held and run from the `ready` message instead.
+        private var didLoad = false
+        private var pendingReveal: UUID?
 
         init(_ parent: ReaderWebView) { self.parent = parent }
 
@@ -120,6 +140,8 @@ struct ReaderWebView: UIViewRepresentable {
             guard key != loadedKey, let web else { return }
             loadedKey = key
             didRestore = false
+            didLoad = false
+            lastMarks = nil
             let html = ReaderRenderer.document(article: parent.article, body: parent.body,
                                                palette: parent.palette, settings: parent.settings)
             lastStyle = ReaderRenderer.applyStyleScript(palette: parent.palette, settings: parent.settings)
@@ -131,6 +153,43 @@ struct ReaderWebView: UIViewRepresentable {
             guard script != lastStyle, let web else { return }
             lastStyle = script
             web.evaluateJavaScript(script)
+        }
+
+        /// Draws the marks. The script is only run when the set has changed — or when the
+        /// document has just been rebuilt, which `lastMarks` being torn up in
+        /// `loadIfNeeded` is what says.
+        func applyHighlights(_ parent: ReaderWebView, force: Bool = false) {
+            let payload = parent.highlights.compactMap { mark -> [String: Any]? in
+                guard let offset = mark.offset else { return nil }
+                return ["id": mark.id.uuidString, "text": mark.text,
+                        "offset": offset, "note": mark.hasNote]
+            }
+            guard let data = try? JSONSerialization.data(withJSONObject: payload),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            guard didLoad, let web else { return }
+            guard force || json != lastMarks else { return }
+            lastMarks = json
+            web.evaluateJavaScript("window.__agHL && window.__agHL.apply(\(json));")
+        }
+
+        func revealIfAsked(_ parent: ReaderWebView) {
+            guard let target = parent.revealHighlight else { return }
+            pendingReveal = target
+            runReveal()
+        }
+
+        /// A mark can only be scrolled to once it has been drawn, so the two are done in
+        /// order and both are held until the document is there for them.
+        private func runReveal() {
+            guard didLoad, let target = pendingReveal, let web else { return }
+            pendingReveal = nil
+            applyHighlights(parent, force: true)
+            web.evaluateJavaScript(
+                "window.__agHL && window.__agHL.reveal(\"\(target.uuidString)\");")
+            // Off this turn of the loop: this runs inside `updateUIView`, and clearing
+            // the request is a change to the state that drove it.
+            let done = parent.onRevealed
+            DispatchQueue.main.async(execute: done)
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -190,7 +249,10 @@ struct ReaderWebView: UIViewRepresentable {
             case "progress":
                 if let v = dict["value"] as? Double { parent.onProgress(v) }
             case "ready":
+                didLoad = true
                 restoreScroll()
+                applyHighlights(parent, force: true)
+                runReveal()
             case "settled":
                 settleScroll()
             case "pages":
@@ -201,6 +263,17 @@ struct ReaderWebView: UIViewRepresentable {
                 if let anchor = dict["value"] as? String { parent.onChapter(anchor) }
             case "tap":
                 parent.onTap()
+            case "highlight":
+                guard let text = dict["text"] as? String, !text.isEmpty else { return }
+                let chapter = (dict["chapter"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                parent.onHighlight(Highlight(text: text,
+                                             offset: dict["offset"] as? Int,
+                                             progress: dict["progress"] as? Double ?? 0,
+                                             chapterTitle: chapter))
+            case "markTap":
+                if let raw = dict["value"] as? String, let id = UUID(uuidString: raw) {
+                    parent.onMarkTap(id)
+                }
             case "selection":
                 if let web { WebKeyboardBridge.removeEditMenu(from: web) }
                 let text = dict["text"] as? String ?? ""

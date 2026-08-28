@@ -94,3 +94,46 @@ extension View {
         background(GlowSurface(level: level))
     }
 }
+
+
+/// Puts a surface the app did not draw onto the ramp.
+///
+/// A few things arrive already rendered, in somebody else's colours: a PDF's pages, the
+/// system dictionary's card. There is no stylesheet to reach into and no appearance API
+/// to set, so they are treated as photographs of a page rather than as views. Grayscale
+/// strips the colour, contrast maps black-and-white onto ink-and-page, and the multiply
+/// lands what is left on the glow. At night the contrast goes negative, which is the same
+/// flip the whole app makes — the page becomes ink and the ink becomes page.
+struct AmberInk: ViewModifier {
+    @Environment(\.amber) private var amber
+
+    /// Where a white page lands. 0.88 is what every other surface in the app calls paper.
+    var pageLevel: Double = 0.88
+    var isNight: Bool
+
+    /// Where black lands, on paper. The same level as body type.
+    private let inkFloor = 0.045
+
+    private var sign: Double { isNight ? -1 : 1 }
+    private var tint: Color { isNight ? amber.color(0.0) : amber.color(pageLevel) }
+    private var floor: Double {
+        guard isNight else { return inkFloor }
+        let ink = amber.rgb(0.0).0
+        let page = amber.rgb(pageLevel).0
+        return ink > 0 ? min(1, page / ink) : inkFloor
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .grayscale(1)
+            .contrast(sign * (1 - floor))
+            .brightness(floor / 2)
+            .colorMultiply(tint)
+    }
+}
+
+extension View {
+    func amberInk(pageLevel: Double = 0.88, isNight: Bool) -> some View {
+        modifier(AmberInk(pageLevel: pageLevel, isNight: isNight))
+    }
+}
