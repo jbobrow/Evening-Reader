@@ -24,12 +24,24 @@ struct AddLinkPresentation<Sheet: View>: ViewModifier {
     @Binding var isPresented: Bool
     @ViewBuilder var sheet: () -> Sheet
 
+    @Environment(Library.self) private var library
+    @Environment(DisplaySettings.self) private var settings
+
     func body(content: Content) -> some View {
         if isCompact {
-            content.fullScreenCover(isPresented: $isPresented, content: sheet)
+            content.fullScreenCover(isPresented: $isPresented) {
+                sheet()
+                    // See the matching note on BrowseScreen's fullScreenCover: on Mac,
+                    // running the iPad build, this presentation path doesn't reliably
+                    // inherit the window's environment.
+                    .environment(library)
+                    .environment(settings)
+            }
         } else {
             content.sheet(isPresented: $isPresented) {
                 sheet()
+                    .environment(library)
+                    .environment(settings)
                     .presentationBackground { GlowSurface(level: 0.9) }
                     .modifier(FittedSheet())
             }

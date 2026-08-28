@@ -153,6 +153,12 @@ struct RootView: View {
             BrowseScreen(initialURL: target.url) { saved in
                 open(saved)
             }
+            // Full-screen covers are hosted through a separate presentation path on Mac
+            // (running the iPad build) and don't reliably inherit the window's environment
+            // there, so `@Environment(Library.self)` / `@Environment(DisplaySettings.self)`
+            // inside BrowseScreen would find no ancestor and SwiftUI would fatally assert.
+            .environment(library)
+            .environment(settings)
         }
         .onOpenURL(perform: handle)
         // Whatever moved the drawer, any drag that was in flight is finished with. A
