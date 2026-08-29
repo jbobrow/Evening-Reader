@@ -105,19 +105,20 @@ struct AmberItemPresentation<Item: Identifiable, Sheet: View>: ViewModifier {
         if isCompact {
             content.fullScreenCover(item: $item) { value in
                 dressed(sheet(value))
-                    // The presentation's background rather than the panel's. A background
-                    // is only as big as what it is behind, and for the moment before the
-                    // panel has been given its size that is not the screen — which is
-                    // long enough to see what the cover is filled with underneath, and
-                    // that is the system's white.
-                    .presentationBackground { GlowSurface(level: 0.9) }
+                    .background(GlowSurface(level: 0.9))
                     .statusBarHidden(true)
             }
         } else {
             content.sheet(item: $item) { value in
                 dressed(sheet(value))
+                    // Dressed again, and not out of caution: a presentation background is
+                    // hosted apart from the panel it sits behind, and on Mac, running the
+                    // iPad build, that hosting does not inherit the window's environment
+                    // — the same footing `AddLinkPresentation` records above. A surface
+                    // that reads `DisplaySettings` finds no ancestor there.
                     .presentationBackground {
-                        if isCard(value) { CardFace() } else { GlowSurface(level: 0.9) }
+                        if isCard(value) { dressed(CardFace()) }
+                        else { dressed(GlowSurface(level: 0.9)) }
                     }
                     .presentationCornerRadius(isCard(value) ? CardFace.cornerRadius : nil)
                     .modifier(FittedSheet())
@@ -125,11 +126,15 @@ struct AmberItemPresentation<Item: Identifiable, Sheet: View>: ViewModifier {
         }
     }
 
+    /// Everything a panel of this app's needs that it cannot count on finding above it.
+    /// The palette is in the list for the same reason the models are: it is set once at
+    /// the root, and a presentation hosted apart from the window does not inherit it.
     private func dressed<V: View>(_ view: V) -> some View {
         view
             .environment(library)
             .environment(settings)
             .environment(highlights)
+            .environment(\.amber, settings.palette)
     }
 }
 

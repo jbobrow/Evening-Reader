@@ -95,31 +95,68 @@ struct DetailPane: View {
                 }
             }
         })
+        .overlay { definitionCard }
         .modifier(AmberItemPresentation(isCompact: isCompact,
-                                        item: $panel,
+                                        item: sheetPanel,
                                         isCard: \.isDefinition) { panel in
             switch panel {
             case .define(let term):
-                DefinitionCard(term: term,
-                               isCompact: isCompact,
-                               onSearch: {
-                                   self.panel = nil
-                                   onOpenLink(searchURL(for: term))
-                               },
-                               onClose: { self.panel = nil })
-                    // The card sizes itself in height — see `entryWindow` — so all this
-                    // owes it is a width. 420 where there is room for it, and no more
-                    // than the screen where there is not: a fixed 420 hangs off both
-                    // edges of a phone and takes the border and the corners with it,
-                    // and a bare ceiling lets the fitted sheet on a wide screen shrink
-                    // the card to the dictionary's own idea of a width, which is 320 —
-                    // narrow enough that the panel changes its layout underneath us.
+                definition(for: term, drawsOwnFace: false)
+                    // The card sizes itself in height — see `entryWindow` — so all the
+                    // sheet owes it is a width. 420 as an ideal as well as a ceiling: a
+                    // bare ceiling lets a fitted sheet shrink the card to the
+                    // dictionary's own idea of a width, which is 320 — narrow enough
+                    // that the panel changes its layout underneath us.
                     .frame(idealWidth: 420, maxWidth: 420)
-                    .padding(.horizontal, isCompact ? 20 : 0)
             case .ask(let passage, let title):
                 AskAISheet(passage: passage, title: title)
             }
         })
+    }
+
+    /// What is handed to a sheet. On a phone a definition is not — see `definitionCard`
+    /// — and this binding is where that one decision lives, so the panel state can stay
+    /// single: the sheet is simply not asked about a definition it will not be showing.
+    private var sheetPanel: Binding<ReaderPanel?> {
+        Binding(get: { panel.flatMap { isCompact && $0.isDefinition ? nil : $0 } },
+                set: { panel = $0 })
+    }
+
+    /// A definition on a phone: a card over the page, the way a mark's card is.
+    ///
+    /// Not a sheet, because a sheet on a phone has to be full screen — a card
+    /// presentation there brings the system's own furniture with it — and a screen of
+    /// glass under a small card is a screen the reader loses for a word. The page it was
+    /// read on stays where it was, a scrim under the card, and the word a few lines away.
+    ///
+    /// A wide screen keeps the sheet: there it can be fitted to the card, and the card
+    /// floats over the page already.
+    @ViewBuilder
+    private var definitionCard: some View {
+        if isCompact, case .define(let term)? = panel {
+            ZStack {
+                AmberScrim { closePanel() }
+                definition(for: term, drawsOwnFace: true)
+                    .frame(maxWidth: 420)
+                    .padding(.horizontal, 20)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func definition(for term: String, drawsOwnFace: Bool) -> some View {
+        DefinitionCard(term: term,
+                       drawsOwnFace: drawsOwnFace,
+                       onSearch: {
+                           closePanel()
+                           onOpenLink(searchURL(for: term))
+                       },
+                       onClose: closePanel)
+    }
+
+    private func closePanel() {
+        withAnimation(.easeOut(duration: 0.16)) { panel = nil }
     }
 
     /// The card for a mark — just made, or just tapped. Over the page rather than in a
@@ -209,7 +246,11 @@ struct DetailPane: View {
                               in article: SavedArticle) -> Bool {
         switch action {
         case .define:
-            if let word = selection.singleWord { panel = .define(word) }
+            // Animated for the phone's card, which has a transition to run. A sheet
+            // brings its own and does not mind.
+            if let word = selection.singleWord {
+                withAnimation(.easeOut(duration: 0.16)) { panel = .define(word) }
+            }
         case .askAI:
             panel = .ask(passage: selection.tidyText, title: article.displayTitle)
         case .highlight:

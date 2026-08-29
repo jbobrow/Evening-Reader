@@ -81,10 +81,13 @@ struct DefinitionCard: View {
     @Environment(DisplaySettings.self) private var settings
 
     let term: String
-    /// Whether the card is floating on the whole glass or is itself the presentation.
-    /// Told rather than read: inside a sheet that sizes itself to its content, the size
-    /// class is an answer to the question this decides.
-    let isCompact: Bool
+    /// Whether the card draws its own face — fill, corners, hairline, shadow — or is
+    /// set into something already wearing one.
+    ///
+    /// Told rather than read from the size class. Over the page it draws its own. In a
+    /// sheet fitted around it, the sheet's is the one that fits: see
+    /// `AmberItemPresentation`.
+    let drawsOwnFace: Bool
     /// Nothing in the dictionary. The word can still be looked up on the web.
     var onSearch: () -> Void
     var onClose: () -> Void
@@ -177,33 +180,23 @@ struct DefinitionCard: View {
 
     // MARK: - Body
 
-    /// On a phone the surface behind the card is the whole glass, and the card floats in
-    /// the middle of it, wearing its own face. On a wide screen the card *is* the
-    /// presentation: it is handed to a sheet that sizes itself to what it is given, and
-    /// asking for the whole screen there would build a sheet the size of the screen with
-    /// a small card adrift in it.
-    ///
-    /// On that path the face is the sheet's — see `AmberItemPresentation`. The sheet
-    /// comes out a few points larger than the card whatever it is given, so the card
-    /// cannot draw its own edge without a second one appearing outside it. What it draws
-    /// instead is nothing: the sheet is filled, rounded and bordered as a card, and this
-    /// is only what goes inside.
+    /// Over the page, the card draws its own face and carries its own shadow. In a fitted
+    /// sheet it draws neither: the sheet comes out a few points larger than what it was
+    /// fitted to, so a face drawn here would have a second edge outside it. There the
+    /// sheet is filled, rounded and bordered as a card, and this is only what goes
+    /// inside. Either way the card is only as tall as it needs to be, and whatever holds
+    /// it decides where on the screen that lands.
     var body: some View {
-        if isCompact {
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                contents
-                    .background(CardFace())
-                    // Clipped before the shadow, and not only for the corners: an
-                    // unflattened view hands the shadow down to each layer inside it,
-                    // and the entry is a layer — it was casting the card's shadow onto
-                    // the card, a hand's width of dusk under the last line.
-                    .clipShape(RoundedRectangle(cornerRadius: CardFace.cornerRadius,
-                                                style: .continuous))
-                    .shadow(color: amber.color(0.0, opacity: 0.24), radius: 26, y: 8)
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        if drawsOwnFace {
+            contents
+                .background(CardFace())
+                // Clipped before the shadow, and not only for the corners: an
+                // unflattened view hands the shadow down to each layer inside it, and
+                // the entry is a layer — it was casting the card's shadow onto the card,
+                // a hand's width of dusk under the last line.
+                .clipShape(RoundedRectangle(cornerRadius: CardFace.cornerRadius,
+                                            style: .continuous))
+                .shadow(color: amber.color(0.0, opacity: 0.24), radius: 26, y: 8)
         } else {
             contents
         }
