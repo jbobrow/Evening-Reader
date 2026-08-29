@@ -15,6 +15,11 @@ struct ExtractionResult: Codable {
     var wordCount: Int
     var length: Int
     var html: String
+    /// The article as Markdown, from the Defuddle pass. Empty from the app's own
+    /// extractor, which produces HTML only.
+    var markdown: String
+    /// `"amber"` or `"defuddle"` — which pass the body above came from.
+    var source: String
 }
 
 enum ExtractionError: LocalizedError {
@@ -38,7 +43,14 @@ enum ExtractionError: LocalizedError {
     }
 }
 
-/// Loads a page in an off-screen web view and runs the reader extraction script in it.
+/// Loads a page in an off-screen web view and reads the article out of it.
+///
+/// Two passes over the same loaded page. The app's own `extract.js` goes first: it is
+/// written for this reader and its output needs no cleaning up afterwards. Defuddle
+/// follows, always — it is the only source of the Markdown every article keeps as its
+/// portable sidecar, and when the first pass came back with nothing it is also the
+/// second chance. Defuddle carries site-specific extractors for the places a
+/// density-scoring pass reliably fails, Substack among them.
 ///
 /// One extraction at a time — a second call waits its turn rather than fighting over
 /// the shared web view.
@@ -52,10 +64,17 @@ final class ArticleExtractor: NSObject {
     private var isBusy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    private static let script: String? = {
-        guard let url = Bundle.main.url(forResource: "extract", withExtension: "js") else { return nil }
+    private static let script: String? = resource("extract")
+    /// The vendored Defuddle bundle, injected into the page rather than evaluated
+    /// against it: three quarters of a megabyte is a lot to hand `evaluateJavaScript`
+    /// as a string, and as a user script WebKit parses it as part of the load.
+    private static let defuddleBundle: String? = resource("defuddle")
+    private static let defuddleScript: String? = resource("defuddle-run")
+
+    private static func resource(_ name: String) -> String? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "js") else { return nil }
         return try? String(contentsOf: url, encoding: .utf8)
-    }()
+    }
 
     func extract(url: URL) async throws -> ExtractionResult {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
@@ -72,17 +91,48 @@ final class ArticleExtractor: NSObject {
         try await load(url, in: web)
 
         // Give client-side renderers a beat, then try; retry once for slow hydration.
+        // The last answer is kept even when it failed, for its reason and whatever
+        // metadata it did manage to find.
+        var primary: ExtractionResult?
         for delay in [0.35, 1.6] {
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            if let result = try await run(script, in: web), result.ok {
-                return result
-            }
+            let attempt = try await run(script, in: web)
+            primary = attempt ?? primary
+            if attempt?.ok == true { break }
         }
-        // Last attempt so the caller gets the real reason, and any partial metadata.
-        if let result = try await run(script, in: web) {
-            throw ExtractionError.unreadable(result.reason)
-        }
-        throw ExtractionError.unreadable("")
+
+        let second = await runDefuddle(in: web)
+
+        if let primary, primary.ok { return merged(primary, with: second) }
+        // The page defeated the app's own reading of it. Defuddle gets the last word,
+        // and on the sites that habitually defeat it — a Substack post, anything that
+        // ships its article inside a framework shell — usually has the right answer.
+        if let second, second.ok { return second }
+        throw ExtractionError.unreadable(primary?.reason ?? second?.reason ?? "")
+    }
+
+    /// The Defuddle pass, which never throws: a second opinion that failed to arrive is
+    /// not a reason to lose the reading the app already has.
+    private func runDefuddle(in web: WKWebView) async -> ExtractionResult? {
+        guard Self.defuddleBundle != nil, let script = Self.defuddleScript else { return nil }
+        return try? await run(script, in: web)
+    }
+
+    /// The app's own reading of the page, with the Defuddle pass filling the gaps: the
+    /// Markdown sidecar always, and any single piece of metadata the first pass missed.
+    /// Defuddle reads schema.org data, which is often where a byline or a publication
+    /// date is the only place it is stated.
+    private func merged(_ primary: ExtractionResult, with other: ExtractionResult?) -> ExtractionResult {
+        guard let other else { return primary }
+        var out = primary
+        out.markdown = other.markdown
+        if out.title.isEmpty { out.title = other.title }
+        if out.byline.isEmpty { out.byline = other.byline }
+        if out.site.isEmpty { out.site = other.site }
+        if out.published.isEmpty { out.published = other.published }
+        if out.excerpt.isEmpty { out.excerpt = other.excerpt }
+        if out.leadImage.isEmpty { out.leadImage = other.leadImage }
+        return out
     }
 
     // MARK: - serialization
@@ -107,6 +157,15 @@ final class ArticleExtractor: NSObject {
         config.websiteDataStore = .default()          // reuse logins from the in-app browser
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         config.suppressesIncrementalRendering = false
+        if let bundle = Self.defuddleBundle {
+            // Shadowed `module`, `exports` and `define` so the bundle's UMD preamble
+            // takes its browser branch and puts `Defuddle` on the window. Some pages
+            // leak a global `module` of their own, and without this the library would
+            // quietly hand itself to the page instead of to us.
+            let source = "(function(){var module,exports,define;\n\(bundle)\n})();"
+            config.userContentController.addUserScript(
+                WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
 
         let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 1024, height: 1280), configuration: config)
         web.navigationDelegate = self

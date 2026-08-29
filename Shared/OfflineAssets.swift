@@ -26,11 +26,21 @@ enum OfflineAssets {
 
     // MARK: - Rewriting
 
-    static func localize(html: String, article: SavedArticle, store: ArticleStore) async -> String {
+    /// A page's markup with its pictures pointed at the copies on disk, and the record
+    /// of which remote URL became which file. The record is what lets the Markdown
+    /// sidecar point at the same copies without fetching anything a second time.
+    struct Localized {
+        var html: String
+        /// Absolute remote URL -> asset file name, for everything actually stored.
+        var assets: [String: String] = [:]
+    }
+
+    static func localize(html: String, article: SavedArticle, store: ArticleStore) async -> Localized {
         var out = ""
         var rest = Substring(html)
         var budget = maxBytesTotal
         var saved = 0
+        var stored: [String: String] = [:]
 
         while let start = rest.range(of: "<img", options: .caseInsensitive) {
             guard let tagEnd = endOfTag(in: rest, from: start.upperBound) else { break }
@@ -57,6 +67,7 @@ enum OfflineAssets {
                 continue
             }
             saved += 1
+            stored[remote.absoluteString] = name
 
             var rewritten = replace("src", with: "\(scheme)://\(article.id.uuidString)/\(name)", in: tag)
             // Responsive variants would send the reader back to the network for a
@@ -69,7 +80,7 @@ enum OfflineAssets {
             out += rewritten
         }
         out += rest
-        return out
+        return Localized(html: out, assets: stored)
     }
 
     private static func fetch(_ url: URL) async -> Data? {

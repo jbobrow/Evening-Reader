@@ -349,6 +349,10 @@
     leadImage: lead,
     wordCount: words,
     length: articleText.length,
-    html: container.innerHTML
+    html: container.innerHTML,
+    // Filled in by the Defuddle pass, which is where Markdown comes from; declared
+    // here so both extractors answer with the same shape.
+    markdown: "",
+    source: "amber"
   });
 })();

@@ -8,6 +8,7 @@ import CryptoKit
 ///     the-worst-mistake-in-the-history--a1b2c3d4/
 ///         article.json      the metadata, pretty-printed
 ///         body.html         the reader text
+///         body.md           the same article as Markdown, for anything that isn't us
 ///         document.pdf      instead of body.html, for a saved PDF
 ///         assets/           pictures pulled down for offline reading
 ///
@@ -119,6 +120,7 @@ final class ArticleStore {
 
     private static let metadataName = "article.json"
     private static let bodyName = "body.html"
+    private static let markdownName = "body.md"
     private static let documentName = "document.pdf"
     private static let bookName = "book.epub"
     private static let assetsName = "assets"
@@ -161,6 +163,12 @@ final class ArticleStore {
 
     func bodyURL(for article: SavedArticle) -> URL {
         folder(for: article).appendingPathComponent(Self.bodyName)
+    }
+
+    /// The portable copy. Nothing in the app reads this — it is written for whatever
+    /// opens the folder next.
+    func markdownURL(for article: SavedArticle) -> URL {
+        folder(for: article).appendingPathComponent(Self.markdownName)
     }
 
     func documentURL(for article: SavedArticle) -> URL {
@@ -277,6 +285,25 @@ final class ArticleStore {
 
     func readBody(for article: SavedArticle) -> String? {
         try? String(contentsOf: bodyURL(for: article), encoding: .utf8)
+    }
+
+    /// Writes the Markdown sidecar. Its absence is never an error worth surfacing: an
+    /// article whose portable copy could not be written is still a saved article.
+    @discardableResult
+    func writeMarkdown(_ markdown: String, for article: SavedArticle) -> Bool {
+        let dir = folder(for: article)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try markdown.write(to: dir.appendingPathComponent(Self.markdownName),
+                               atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    func readMarkdown(for article: SavedArticle) -> String? {
+        try? String(contentsOf: markdownURL(for: article), encoding: .utf8)
     }
 
     @discardableResult

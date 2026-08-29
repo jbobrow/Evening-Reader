@@ -167,7 +167,13 @@ final class Library {
             // Pull the pictures onto the device before the body is written, so what is
             // stored already points at the copies rather than at the web.
             let offline = await OfflineAssets.localize(html: result.html, article: updated, store: store)
-            updated.state = store.writeBody(offline, for: updated) ? .ready : .failed
+            updated.state = store.writeBody(offline.html, for: updated) ? .ready : .failed
+            // The portable copy, written from the same fetch: same article, same
+            // pictures, in a format that outlives this app.
+            if let sidecar = MarkdownSidecar.document(article: updated, markdown: result.markdown,
+                                                      assets: offline.assets) {
+                store.writeMarkdown(sidecar, for: updated)
+            }
             replace(updated)
         } catch {
             guard var updated = articles.first(where: { $0.id == article.id }) else { return }
