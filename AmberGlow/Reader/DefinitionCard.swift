@@ -25,6 +25,45 @@ private struct DictionaryView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: UIReferenceLibraryViewController, context: Context) {}
 }
 
+/// What the panel's own layout comes to, which is not the same everywhere.
+///
+/// The bar above the entry, and the margin down its left, belong to the dictionary
+/// rather than to the app, and the process that draws them has changed its mind about
+/// both — the bar is a different height on iOS 26 than it was on 17, and was a different
+/// height again on an iPad than on an iPhone before that. Nothing on this side of the
+/// process boundary reports either measure, so they are constants.
+///
+/// They are measured constants, not guesses: each was read off the running panel at two
+/// text sizes and two card widths, on the OS named. To re-measure after an OS that moves
+/// them again, set `DefinitionCard.topCrop` to 0 and its window to `layoutHeight`, and
+/// see where the headword's line box lands under the card's own hairline.
+///
+/// What is *not* here is anything for iOS 18 through 25, which were not measured. They
+/// take the older shape, which is a guess for them, and the way it would show is the
+/// window opening a line off the headword — the same thing that prompted all this.
+private struct PanelMetrics {
+    /// The height above the entry that does not move with the reader's text size: the
+    /// panel's bar, and the rule under its "Dictionary" label. What sits between them —
+    /// the label itself — does move, and is counted separately, in lines.
+    let chrome: CGFloat
+
+    /// The panel's own left margin. The card sets its header on 20, so the difference is
+    /// what the entry has to be nudged by to sit on the same left. This one follows the
+    /// ordinary UIKit rule and has not moved: 16 in a phone-width card, 20 in a wider one.
+    let margin: CGFloat
+
+    static var current: PanelMetrics {
+        let margin: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 20 : 16
+        // Measured on 26.5: the same bar on both idioms, where 17 had two.
+        if #available(iOS 26.0, *) {
+            return PanelMetrics(chrome: 94, margin: margin)
+        }
+        // Measured on 17.0.
+        return PanelMetrics(chrome: UIDevice.current.userInterfaceIdiom == .pad ? 88 : 76,
+                            margin: margin)
+    }
+}
+
 /// A short definition of one word, over the page it was read on.
 ///
 /// What the dictionary hands over is more than a definition: a bar of its own carrying
@@ -42,6 +81,10 @@ struct DefinitionCard: View {
     @Environment(DisplaySettings.self) private var settings
 
     let term: String
+    /// Whether the card is floating on the whole glass or is itself the presentation.
+    /// Told rather than read: inside a sheet that sizes itself to its content, the size
+    /// class is an answer to the question this decides.
+    let isCompact: Bool
     /// Nothing in the dictionary. The word can still be looked up on the web.
     var onSearch: () -> Void
     var onClose: () -> Void
@@ -52,32 +95,55 @@ struct DefinitionCard: View {
 
     // MARK: - Where the panel is cut
 
-    /// One line of the system's body text.
+    /// One line of the entry's text, which the dictionary sets in the system body size.
     ///
-    /// Everything in the panel is set in multiples of it — the bar, the section label,
-    /// the headword, each line of sense — so both cuts are counted in it, and both move
-    /// with the reader's text size rather than against it.
+    /// The lines of an entry are counted in it, and so is the part of the panel's chrome
+    /// that grows with the reader's text size. Not all of the chrome does — see
+    /// `topCrop`, which is where an earlier reading of this went wrong.
     private var line: CGFloat { UIFont.preferredFont(forTextStyle: .body).lineHeight }
 
     /// Down to the headword: past the dictionary's own bar, and past the "Dictionary"
     /// label and the rule under it. What is left at the top of the window is the word
     /// itself, its pronunciation and its part of speech.
-    private var topCrop: CGFloat { round(line * 5.55) }
+    ///
+    /// The bar and the rule do not move with the reader's text size — they are a fixed
+    /// height, drawn by a process that does not take the app's type scale — and only the
+    /// label between them grows, by one line. Counting the whole preamble in lines, as
+    /// this did, slid the window a line and a half down the entry at large text sizes and
+    /// cut the headword off the top of its own definition. The fixed part is not the same
+    /// height on every device either; see `PanelMetrics`.
+    ///
+    /// Measured against the running panel at Large and at xxLarge, on both idioms, and
+    /// lands within a point of the headword's line box in each. A point is leading, not
+    /// letters.
+    private var topCrop: CGFloat { round(metrics.chrome + line) }
 
-    /// The headword, and four lines under it.
+    /// The gap the dictionary leaves between the last line of an entry and the rows it
+    /// puts under it. Measured at about 50pt and near enough flat across the type scale;
+    /// held to 44 here so the window errs on the near side of them.
+    private let rowGap: CGFloat = 44
+
+    /// How many whole lines of entry the window can show.
     ///
-    /// A ceiling rather than a preference. The rows the dictionary puts at the foot of an
-    /// entry — "Search Web", "Manage Dictionaries" — do not sit at the bottom of the
-    /// panel: they follow the entry, a fixed gap below wherever it ends, with the unused
+    /// The rows — "Search Web", "Manage Dictionaries" — do not sit at the foot of the
+    /// panel: they follow the entry, `rowGap` below wherever it ends, with the unused
     /// height falling below *them*. So the window has to stop short of where they would
-    /// land for a one-line entry, which is the shortest there is, and that lands a little
-    /// over five lines below the headword.
+    /// land under the shortest entry there is, which is three lines: a headword, one line
+    /// of sense, and the dictionary's name.
     ///
-    /// Whole lines, so a cut falls between two of them rather than through one. A short
-    /// entry leaves the rest as air, and a long one is faded out at the edge; both read
-    /// as the card rather than as a hole, because the panel's own page is mapped to
+    /// Whole lines, so the cut falls in the leading between two of them rather than
+    /// through the letters of one. That is what the fade at the foot of `entry` is for
+    /// too, and why it only has to be a few points deep.
+    private var visibleLines: Int { 3 + Int(rowGap / line) }
+
+    /// The whole lines, and the fade under them — which lands in the leading below the
+    /// last of them, where there is nothing to ghost. An entry longer than the window has
+    /// its next line caught by the fade instead, and dissolves rather than ends.
+    ///
+    /// A short entry leaves the rest of the window as air, and both it and a faded edge
+    /// read as the card rather than as a hole, because the panel's own page is mapped to
     /// exactly the level the card is filled with. See `pageLevel`.
-    private var entryWindow: CGFloat { round(line * 5) }
+    private var entryWindow: CGFloat { round(line * CGFloat(visibleLines) + fade) }
 
     /// What the dictionary is given to lay out in. Only has to be more than it needs.
     ///
@@ -98,37 +164,57 @@ struct DefinitionCard: View {
     /// Where the panel's white page lands: the card's own fill, so there is no seam
     /// between the two and no edge to the cut. This is the whole of why the crop reads
     /// as a card with padding rather than as a window onto something else.
-    private let pageLevel = 0.93
+    private let pageLevel = CardFace.level
+
+    /// How much the last line softens over, when there is one to soften.
+    private let fade: CGFloat = 6
+
+    private let metrics = PanelMetrics.current
+
+    /// What the panel's own margin is short of the card's, which is what the entry has to
+    /// be padded by to sit on the header's left.
+    private var textInset: CGFloat { 20 - metrics.margin }
 
     // MARK: - Body
 
+    /// On a phone the surface behind the card is the whole glass, and the card floats in
+    /// the middle of it, wearing its own face. On a wide screen the card *is* the
+    /// presentation: it is handed to a sheet that sizes itself to what it is given, and
+    /// asking for the whole screen there would build a sheet the size of the screen with
+    /// a small card adrift in it.
+    ///
+    /// On that path the face is the sheet's — see `AmberItemPresentation`. The sheet
+    /// comes out a few points larger than the card whatever it is given, so the card
+    /// cannot draw its own edge without a second one appearing outside it. What it draws
+    /// instead is nothing: the sheet is filled, rounded and bordered as a card, and this
+    /// is only what goes inside.
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            card
-            Spacer(minLength: 0)
+        if isCompact {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                contents
+                    .background(CardFace())
+                    // Clipped before the shadow, and not only for the corners: an
+                    // unflattened view hands the shadow down to each layer inside it,
+                    // and the entry is a layer — it was casting the card's shadow onto
+                    // the card, a hand's width of dusk under the last line.
+                    .clipShape(RoundedRectangle(cornerRadius: CardFace.cornerRadius,
+                                                style: .continuous))
+                    .shadow(color: amber.color(0.0, opacity: 0.24), radius: 26, y: 8)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            contents
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var card: some View {
+    private var contents: some View {
         VStack(spacing: 0) {
             header
             Hairline()
             if hasEntry { entry } else { missing }
         }
-        .background {
-            ZStack {
-                amber.color(pageLevel)
-                if settings.showTexture { PixelGrid() }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(amber.color(0.62, opacity: 0.5), lineWidth: 1)
-        }
-        .shadow(color: amber.color(0.0, opacity: 0.24), radius: 26, y: 8)
     }
 
     private var header: some View {
@@ -161,17 +247,27 @@ struct DefinitionCard: View {
             .clipped()
             .allowsHitTesting(false)
             .amberInk(pageLevel: pageLevel, isNight: settings.polarity == .night)
-            // An entry longer than the window is let go of rather than sliced: its last
-            // line softens into the card instead of ending on a cut edge. Kept to a few
-            // points, because the line that usually sits at the foot of the window is the
-            // dictionary's own name and it should be readable, not ghosted. Under a short
-            // entry there is nothing down there to fade.
+            // The panel's page is a page of this display like any other, so it takes the
+            // same grid the card around it is drawn with. Matching the level is not
+            // enough on its own: the grid costs the card about four levels, and without
+            // it here the entry reads as a paler block set into the card — the one seam
+            // the level matching does not close.
+            .overlay { if settings.showTexture { PixelGrid() } }
+            // An entry longer than the window is let go of rather than sliced: the line
+            // that would not fit softens into the card instead of arriving on a cut
+            // edge. Only a few points deep, and sitting in the leading under the last
+            // whole line — see `entryWindow` — so the line that did fit stays readable
+            // rather than ghosted, and a short entry has nothing down there to fade.
             .mask {
                 LinearGradient(stops: [.init(color: .black, location: 0),
-                                       .init(color: .black, location: 0.94),
+                                       .init(color: .black, location: 1 - fade / entryWindow),
                                        .init(color: .clear, location: 1)],
                                startPoint: .top, endPoint: .bottom)
             }
+            // The panel keeps a margin of its own, a few points narrower than the card's.
+            // Making up the difference sets the headword on the same left as the word in
+            // the header above it, which is the only place the two renderings meet.
+            .padding(.horizontal, textInset)
             .padding(.top, 6)
             .padding(.bottom, 16)
     }

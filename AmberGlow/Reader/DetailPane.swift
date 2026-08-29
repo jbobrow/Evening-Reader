@@ -64,6 +64,13 @@ struct DetailPane: View {
             case .ask(let passage, _): return "ask:" + passage
             }
         }
+
+        /// A definition arrives as a card; a question fills the panel it is asked in.
+        /// The presentation needs to know which — see `AmberItemPresentation`.
+        var isDefinition: Bool {
+            if case .define = self { return true }
+            return false
+        }
     }
 
     var body: some View {
@@ -88,19 +95,26 @@ struct DetailPane: View {
                 }
             }
         })
-        .modifier(AmberItemPresentation(isCompact: isCompact, item: $panel) { panel in
+        .modifier(AmberItemPresentation(isCompact: isCompact,
+                                        item: $panel,
+                                        isCard: \.isDefinition) { panel in
             switch panel {
             case .define(let term):
                 DefinitionCard(term: term,
+                               isCompact: isCompact,
                                onSearch: {
                                    self.panel = nil
                                    onOpenLink(searchURL(for: term))
                                },
                                onClose: { self.panel = nil })
-                    // The card sizes itself now — see `entryHeight` — so all this owes
-                    // it is a measure. On a phone the surface behind it is the whole
-                    // glass and the card floats in the middle of it.
-                    .frame(width: 420)
+                    // The card sizes itself in height — see `entryWindow` — so all this
+                    // owes it is a width. 420 where there is room for it, and no more
+                    // than the screen where there is not: a fixed 420 hangs off both
+                    // edges of a phone and takes the border and the corners with it,
+                    // and a bare ceiling lets the fitted sheet on a wide screen shrink
+                    // the card to the dictionary's own idea of a width, which is 320 —
+                    // narrow enough that the panel changes its layout underneath us.
+                    .frame(idealWidth: 420, maxWidth: 420)
                     .padding(.horizontal, isCompact ? 20 : 0)
             case .ask(let passage, let title):
                 AskAISheet(passage: passage, title: title)

@@ -96,6 +96,36 @@ extension View {
 }
 
 
+/// The face of a card that floats over the glass: a page a shade brighter than the
+/// surface behind it, the grid over that, a hairline round the edge.
+///
+/// A card would normally draw this itself, and on a phone it does. It is a view of its
+/// own so that a sheet fitted around such a card can be given the same face — a fitted
+/// sheet comes out about five points taller than what it was fitted to, and any other
+/// fill in those five points reads as a second, lighter edge above and below the card,
+/// with corners of its own. See `AmberItemPresentation`.
+struct CardFace: View {
+    @Environment(\.amber) private var amber
+    @Environment(DisplaySettings.self) private var settings
+
+    /// Where a white page lands on the ramp. Shared with `AmberInk`, so that a rendering
+    /// the app did not draw and the card it is set into are the same colour with no seam.
+    static let level = 0.93
+    static let cornerRadius: CGFloat = 20
+
+    var body: some View {
+        ZStack {
+            amber.color(Self.level)
+            if settings.showTexture { PixelGrid() }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+                .strokeBorder(amber.color(0.62, opacity: 0.5), lineWidth: 1)
+        }
+    }
+}
+
 /// Puts a surface the app did not draw onto the ramp.
 ///
 /// A few things arrive already rendered, in somebody else's colours: a PDF's pages, the

@@ -87,6 +87,14 @@ struct AmberFullScreenPresentation<Sheet: View>: ViewModifier {
 struct AmberItemPresentation<Item: Identifiable, Sheet: View>: ViewModifier {
     let isCompact: Bool
     @Binding var item: Item?
+    /// Whether this panel is a card rather than a page.
+    ///
+    /// Only asked on a wide screen, where the panel is handed to a fitted sheet. A panel
+    /// that fills its sheet is a page and takes the glass from here. A card is not: the
+    /// sheet comes out a few points larger than what it was fitted to, so a card that
+    /// drew its own face would have a second, lighter edge above and below it. Instead
+    /// the sheet wears the face, and the panel draws only what goes inside it.
+    var isCard: (Item) -> Bool = { _ in false }
     @ViewBuilder var sheet: (Item) -> Sheet
 
     @Environment(Library.self) private var library
@@ -97,13 +105,21 @@ struct AmberItemPresentation<Item: Identifiable, Sheet: View>: ViewModifier {
         if isCompact {
             content.fullScreenCover(item: $item) { value in
                 dressed(sheet(value))
-                    .background(GlowSurface(level: 0.9))
+                    // The presentation's background rather than the panel's. A background
+                    // is only as big as what it is behind, and for the moment before the
+                    // panel has been given its size that is not the screen — which is
+                    // long enough to see what the cover is filled with underneath, and
+                    // that is the system's white.
+                    .presentationBackground { GlowSurface(level: 0.9) }
                     .statusBarHidden(true)
             }
         } else {
             content.sheet(item: $item) { value in
                 dressed(sheet(value))
-                    .presentationBackground { GlowSurface(level: 0.9) }
+                    .presentationBackground {
+                        if isCard(value) { CardFace() } else { GlowSurface(level: 0.9) }
+                    }
+                    .presentationCornerRadius(isCard(value) ? CardFace.cornerRadius : nil)
                     .modifier(FittedSheet())
             }
         }
