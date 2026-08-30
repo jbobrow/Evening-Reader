@@ -42,6 +42,7 @@ final class Library {
     init(store: ArticleStore = .shared) {
         self.store = store
         articles = store.load()
+        repairStoredDates()
     }
 
     var usesAppGroup: Bool { store.usesAppGroup }
@@ -100,6 +101,7 @@ final class Library {
             }
         }
         articles = merged
+        repairStoredDates()
         processPending()
     }
 
@@ -416,6 +418,55 @@ final class Library {
             if let date = formatter.date(from: text) { return date }
         }
         return nil
+    }
+
+    /// Puts right the dates saved before a day was understood to be a day.
+    ///
+    /// An article saved earlier kept whatever `parseDate` made of it at the time, so a
+    /// day-granularity date is sitting in the library an instant into the wrong one.
+    /// Nothing else will ever correct it: the page is not fetched again, and the stored
+    /// date is what the reader and the sidecar both print.
+    ///
+    /// Only a date that is exactly midnight UTC is touched — the shape a day took on the
+    /// way through. Running this twice changes nothing the second time: a repaired date
+    /// is anchored locally and no longer looks like one of these, and where the reader
+    /// keeps UTC time it already maps to itself. So it can run at every launch, and on
+    /// whatever another device has since written into iCloud, without a marker to say it
+    /// has been here.
+    private func repairStoredDates() {
+        var repaired: [SavedArticle] = []
+        for i in articles.indices {
+            guard let stored = articles[i].publishedAt,
+                  let corrected = Self.localDay(matching: stored) else { continue }
+            articles[i].publishedAt = corrected
+            repaired.append(articles[i])
+        }
+        guard !repaired.isEmpty else { return }
+        store.save(repaired)
+        for article in repaired {
+            guard let sidecar = store.readMarkdown(for: article),
+                  let updated = MarkdownSidecar.repointing(sidecar, published: article.publishedAt)
+            else { continue }
+            store.writeMarkdown(updated, for: article)
+        }
+    }
+
+    /// Local midnight on the day a stored date names, when that date is exactly midnight
+    /// UTC. Nil for anything else — a real moment, or a date already anchored where the
+    /// reader is.
+    static func localDay(matching date: Date) -> Date? {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let parts = utc.dateComponents([.year, .month, .day, .hour, .minute, .second, .nanosecond],
+                                       from: date)
+        guard parts.hour == 0, parts.minute == 0, parts.second == 0, (parts.nanosecond ?? 0) == 0
+        else { return nil }
+        var day = DateComponents()
+        day.year = parts.year
+        day.month = parts.month
+        day.day = parts.day
+        guard let local = Calendar.current.date(from: day), local != date else { return nil }
+        return local
     }
 
     /// Local midnight on the day a string names, for a string that names a day: a bare

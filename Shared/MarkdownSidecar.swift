@@ -22,6 +22,26 @@ enum MarkdownSidecar {
         return frontmatter(for: article) + "\n" + body + "\n"
     }
 
+    /// The same sidecar with its `published:` line put right, or nil when there is
+    /// nothing to change — no frontmatter, no such line, or a line that already says it.
+    ///
+    /// A written sidecar is a file someone may have moved, annotated or filed away, so
+    /// the correction is the one line it is about and nothing else: the file is not
+    /// rebuilt from an article that has since been read, archived or retitled.
+    static func repointing(_ sidecar: String, published: Date?) -> String? {
+        guard let published else { return nil }
+        var lines = sidecar.components(separatedBy: "\n")
+        guard lines.first == "---" else { return nil }
+        guard let end = lines.dropFirst().firstIndex(of: "---") else { return nil }
+        guard let at = lines[1..<end].firstIndex(where: { $0.hasPrefix("published: ") }) else {
+            return nil
+        }
+        let corrected = "published: \(day(published))"
+        guard lines[at] != corrected else { return nil }
+        lines[at] = corrected
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: - Frontmatter
 
     private static func frontmatter(for article: SavedArticle) -> String {
@@ -48,7 +68,7 @@ enum MarkdownSidecar {
         return "\"\(escaped)\""
     }
 
-    private static func day(_ date: Date) -> String {
+    static func day(_ date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
         formatter.timeZone = .current
