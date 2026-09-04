@@ -19,6 +19,8 @@ struct BrowseScreen: View {
     @State private var addressFocused = false
     /// This site, on its way to the front page.
     @State private var siteDraft: SiteDraft?
+    /// The display settings, over the page.
+    @State private var glowOpen = false
     /// Height of the page area, so the scrubber can size its track to it.
     @State private var pageHeight: CGFloat = 0
     /// How much room the scrubber is taking, so the ground under it can match.
@@ -111,6 +113,16 @@ struct BrowseScreen: View {
         }
         .background(GlowSurface(level: 0.88))
         .statusBarHidden(true)
+        .overlay {
+            if glowOpen {
+                GeometryReader { geo in
+                    GlowPanelOverlay(isCompact: isCompact, alignment: .topTrailing,
+                                     top: 54, size: geo.size) {
+                        withAnimation(.drawer) { glowOpen = false }
+                    }
+                }
+            }
+        }
         .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
             NewSiteSheet(draft: draft)
         })
@@ -166,9 +178,11 @@ struct BrowseScreen: View {
         return ink > 0 ? min(1, page / ink) : inkFloor
     }
 
-    /// Seven controls and an address field do not fit across a phone. On a narrow panel
-    /// the row splits in two: the field gets the top line to itself, and the travel and
-    /// save controls sit under it, pushed to the ends they belong to.
+    /// On a phone the bar is one line — close, the address, the lamp — and back and
+    /// forward are the swipes from the edges, which the web view already answers to. A
+    /// second line, with Save and Read, comes in only when the page turns out to be an
+    /// article: on a shelf or a feed there is nothing to keep, and a button that would
+    /// save nothing is a button that says the app has not looked.
     @ViewBuilder
     private var bar: some View {
         if isCompact {
@@ -176,30 +190,41 @@ struct BrowseScreen: View {
                 HStack(spacing: 4) {
                     closeButton
                     addressField
+                    glowButton
                 }
-                HStack(spacing: 4) {
-                    backButton
-                    forwardButton
-                    Spacer(minLength: 12)
-                    pinButton
-                    saveButton
-                    readButton
+                if model.isSaveable {
+                    HStack(spacing: 8) {
+                        Spacer(minLength: 12)
+                        saveButton
+                        readButton
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
+            .animation(.easeOut(duration: 0.22), value: model.isSaveable)
         } else {
             HStack(spacing: 4) {
                 closeButton
                 backButton
                 forwardButton
                 addressField
-                pinButton
-                saveButton
-                readButton
+                glowButton
+                if model.isSaveable {
+                    saveButton
+                    readButton
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
+            .animation(.easeOut(duration: 0.22), value: model.isSaveable)
+        }
+    }
+
+    private var glowButton: some View {
+        AmberIconButton(symbol: "sun.max", isActive: glowOpen) {
+            withAnimation(.drawer) { glowOpen.toggle() }
         }
     }
 
@@ -226,17 +251,26 @@ struct BrowseScreen: View {
     }
 
     /// Keep a door to this site: a tile on the front page, as against the page itself,
-    /// which Save keeps. Filled once there is one, and then it has nothing more to do.
-    private var pinButton: some View {
+    /// which Save keeps. It sits at the head of the address, where the site is named,
+    /// and fills once there is a tile — after which it has nothing more to do. While a
+    /// page is on its way the same spot shows that instead.
+    private var siteMark: some View {
         let pinned = pinnedSite != nil
-        return AmberIconButton(symbol: pinned ? "pin.fill" : "pin", isActive: pinned) {
+        let symbol = model.isLoading ? "arrow.triangle.2.circlepath" : (pinned ? "pin.fill" : "pin")
+        return Button {
             guard let url = model.currentURL, let host = url.host,
                   let root = URL(string: "\(url.scheme ?? "https")://\(host)") else { return }
             siteDraft = SiteDraft(name: Self.siteName(from: model.pageTitle, host: host),
                                   address: root.absoluteString)
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(pinned || model.isLoading ? amber.inkFaint : amber.ink)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
         }
-        .disabled(pinned || model.currentURL == nil)
-        .opacity(model.currentURL == nil ? 0.3 : 1)
+        .buttonStyle(.plain)
+        .disabled(pinned || model.isLoading || model.currentURL == nil)
     }
 
     /// A name for a site, from what the page calls itself. Titles put the site last,
@@ -270,10 +304,8 @@ struct BrowseScreen: View {
     }
 
     private var addressField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: model.isLoading ? "arrow.triangle.2.circlepath" : "lock")
-                .font(.system(size: 11))
-                .foregroundStyle(amber.inkFaint)
+        HStack(spacing: 6) {
+            siteMark
             AmberTextField(text: $address,
                            isFocused: $addressFocused,
                            placeholder: "Search or enter address",
@@ -302,8 +334,9 @@ struct BrowseScreen: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.leading, 6)
+        .padding(.trailing, 10)
+        .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(amber.color(0.79))

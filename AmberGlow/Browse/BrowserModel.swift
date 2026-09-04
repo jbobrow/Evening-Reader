@@ -23,6 +23,10 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     var isLoading: Bool = false
     var canGoBack: Bool = false
     var canGoForward: Bool = false
+    /// Whether what is loaded reads as an article — something with a body of prose the
+    /// reader could pull out and keep — as against a feed, a player, a shelf, a form.
+    /// A PDF always is. Save and Read are offered only when this is true.
+    var isSaveable: Bool = false
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
@@ -37,6 +41,9 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// reports itself; a PDF has no document of ours to put a script in, so the same job
     /// is done from the scroll view — see `PDFPager`.
     @ObservationIgnored private let pdfPager = PDFPager()
+    /// A page that changes its address without loading — a feed, a reader app — is
+    /// asked again a moment after it has moved, since nothing else will ask.
+    @ObservationIgnored private var probeTask: Task<Void, Never>?
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -86,7 +93,11 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
                 }
             },
             web.observe(\.url, options: [.initial, .new]) { [weak self] w, _ in
-                MainActor.assumeIsolated { self?.currentURL = w.url }
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.currentURL = w.url
+                    self.scheduleProbe()
+                }
             },
             web.observe(\.title, options: [.initial, .new]) { [weak self] w, _ in
                 MainActor.assumeIsolated { self?.pageTitle = w.title ?? "" }
@@ -149,6 +160,45 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageIndicator.hide(in: webView)
         reportPDFPosition()
+        probeSaveable()
+    }
+
+    /// Is there an article here? Counted rather than judged: a couple of hundred words
+    /// of paragraph text inside the page's main region is prose worth keeping, and a
+    /// player, a feed or a login form never has that many.
+    private static let saveableProbe = """
+    (function () {
+      var root = document.querySelector('article')
+        || document.querySelector('main, [role="main"]')
+        || document.body;
+      if (!root) { return false; }
+      var words = 0, ps = root.querySelectorAll('p');
+      for (var i = 0; i < ps.length; i++) {
+        var t = ps[i].innerText || '';
+        words += t.split(/\\s+/).filter(function (w) { return w.length > 0; }).length;
+        if (words >= 200) { return true; }
+      }
+      return false;
+    })()
+    """
+
+    private func probeSaveable() {
+        if showingPDF {
+            isSaveable = true
+            return
+        }
+        web.evaluateJavaScript(Self.saveableProbe) { [weak self] result, _ in
+            MainActor.assumeIsolated { self?.isSaveable = (result as? Bool) ?? false }
+        }
+    }
+
+    private func scheduleProbe() {
+        probeTask?.cancel()
+        probeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard !Task.isCancelled else { return }
+            self?.probeSaveable()
+        }
     }
 
     /// What is arriving, so a PDF can be told from a page. Nothing is refused here; the
@@ -158,6 +208,8 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
                  decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         if navigationResponse.isForMainFrame {
             showingPDF = navigationResponse.response.mimeType == "application/pdf"
+            // A new document, not yet read: nothing to save until it has been looked at.
+            isSaveable = showingPDF
             // The new document has not said where it is yet, and the last one's numbers
             // are not its own. The scrubber goes away until something reports again.
             pdfPager.stop()
