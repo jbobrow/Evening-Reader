@@ -64,6 +64,55 @@ struct WebTint {
 
           \(DocumentPager.script(handler: "browse"))
 
+          // A plain tap on the page — not a link, a control, a drag or a selection —
+          // is reported, so the bar can come back.
+          (function () {
+            if (window.__agTapReporter) return;
+            window.__agTapReporter = true;
+            var x0 = 0, y0 = 0, t0 = 0;
+            var controls = 'a,button,input,textarea,select,label,video,audio,summary,'
+              + 'iframe,[role=button],[role=link],[onclick],[contenteditable]';
+            document.addEventListener('touchstart', function (e) {
+              if (e.touches.length !== 1) { t0 = 0; return; }
+              x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+            }, { passive: true, capture: true });
+            document.addEventListener('touchend', function (e) {
+              if (!t0) return;
+              var t = e.changedTouches[0], held = Date.now() - t0;
+              t0 = 0;
+              if (held > 350 || Math.abs(t.clientX - x0) > 10 || Math.abs(t.clientY - y0) > 10) return;
+              var el = document.elementFromPoint(t.clientX, t.clientY);
+              if (el && el.closest && el.closest(controls)) return;
+              var sel = window.getSelection && window.getSelection();
+              if (sel && !sel.isCollapsed) return;
+              window.webkit.messageHandlers.browse.postMessage({ name: 'tap' });
+            }, { passive: true, capture: true });
+
+            // Scrolling, wherever it happens. An app-like page scrolls a box of its own
+            // and the document never moves, so the web view's own scroll view would
+            // never know. Listening in the capture phase hears every box. Only a change
+            // of direction, past a little travel, is reported — never every frame.
+            var tops = new WeakMap(), run = 0, shown = true;
+            var say = function (show) {
+              if (show === shown) return;
+              shown = show;
+              window.webkit.messageHandlers.browse.postMessage({ name: 'chrome', show: show });
+            };
+            document.addEventListener('scroll', function (e) {
+              var el = (e.target === document) ? (document.scrollingElement || document.documentElement) : e.target;
+              if (!el || typeof el.scrollTop !== 'number') return;
+              var top = el.scrollTop, prev = tops.get(el);
+              tops.set(el, top);
+              if (prev === undefined) return;
+              var d = top - prev;
+              if (Math.abs(d) < 1) return;
+              run = ((d > 0) === (run > 0)) ? run + d : d;
+              if (top <= 8) { say(true); run = 0; return; }
+              if (run > 24 && top > 80) { say(false); run = 0; }
+              else if (run < -24) { say(true); run = 0; }
+            }, { passive: true, capture: true });
+          })();
+
           // Fullscreen is refused.
           //
           // It is presented in a window of its own, above everything the app draws, and

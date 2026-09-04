@@ -27,6 +27,9 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// reader could pull out and keep — as against a feed, a player, a shelf, a form.
     /// A PDF always is. Save and Read are offered only when this is true.
     var isSaveable: Bool = false
+    /// Whether the bar has been put away. Reading down a page puts it away; coming
+    /// back up, a tap on the page, or a new page brings it back.
+    var chromeHidden: Bool = false
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
@@ -44,6 +47,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// A page that changes its address without loading — a feed, a reader app — is
     /// asked again a moment after it has moved, since nothing else will ask.
     @ObservationIgnored private var probeTask: Task<Void, Never>?
+    @ObservationIgnored private var lastOffset: CGFloat = 0
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -90,6 +94,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
                     guard let self else { return }
                     self.pageIndicator.hide(in: self.web)
                     self.reportPDFPosition()
+                    self.trackScroll()
                 }
             },
             web.observe(\.url, options: [.initial, .new]) { [weak self] w, _ in
@@ -182,6 +187,21 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     })()
     """
 
+    /// The bar follows the reading: a page going up under the finger puts it away, a
+    /// page coming back down brings it out, and the top of a page always has it.
+    private func trackScroll() {
+        let y = web.scrollView.contentOffset.y
+        let delta = y - lastOffset
+        lastOffset = y
+        if y <= 8 {
+            if chromeHidden { chromeHidden = false }
+        } else if delta > 8, y > 80, !chromeHidden {
+            chromeHidden = true
+        } else if delta < -8, chromeHidden {
+            chromeHidden = false
+        }
+    }
+
     private func probeSaveable() {
         if showingPDF {
             isSaveable = true
@@ -210,6 +230,8 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             showingPDF = navigationResponse.response.mimeType == "application/pdf"
             // A new document, not yet read: nothing to save until it has been looked at.
             isSaveable = showingPDF
+            chromeHidden = false
+            lastOffset = 0
             // The new document has not said where it is yet, and the last one's numbers
             // are not its own. The scrubber goes away until something reports again.
             pdfPager.stop()
@@ -289,6 +311,19 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             page = dict["page"] as? Int ?? 1
             pageCount = dict["total"] as? Int ?? 1
             percent = dict["percent"] as? Double ?? 0
+            return
+        }
+        if name == "chrome" {
+            let show = dict["show"] as? Bool ?? true
+            if chromeHidden == show { chromeHidden = !show }
+            return
+        }
+        if name == "tap" {
+            // A plain tap on the page turns the bar over, as it does in the reader. The
+            // page's own controls are left out by the script that reports it, so what
+            // arrives here is a tap on nothing in particular — which on a page that
+            // moves its content without scrolling is the only way to put the bar away.
+            chromeHidden.toggle()
             return
         }
         guard name == "selection" else { return }

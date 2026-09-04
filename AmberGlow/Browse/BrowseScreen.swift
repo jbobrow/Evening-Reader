@@ -28,16 +28,23 @@ struct BrowseScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            bar
-            if model.isLoading {
-                GeometryReader { geo in
-                    Rectangle()
-                        .fill(amber.color(0.30))
-                        .frame(width: geo.size.width * model.progress, height: 2)
+            // The bar goes away as the page is read down and comes back as it is read
+            // up, or on a tap — the same room the reader gives a page.
+            if !model.chromeHidden {
+                VStack(spacing: 0) {
+                    bar
+                    if model.isLoading {
+                        GeometryReader { geo in
+                            Rectangle()
+                                .fill(amber.color(0.30))
+                                .frame(width: geo.size.width * model.progress, height: 2)
+                        }
+                        .frame(height: 2)
+                    } else {
+                        Hairline()
+                    }
                 }
-                .frame(height: 2)
-            } else {
-                Hairline()
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
             // Same split as the reader: the page runs to the bezel, the scrubber stays
             // inside the safe area so it is not sitting on the home indicator.
@@ -111,6 +118,7 @@ struct BrowseScreen: View {
             .background { HeightReader(height: $pageHeight) }
             .onPreferenceChange(ScrubberFootprint.self) { scrubberHeight = $0 }
         }
+        .animation(.easeOut(duration: 0.22), value: model.chromeHidden)
         .background(GlowSurface(level: 0.88))
         .statusBarHidden(true)
         .overlay {
@@ -178,10 +186,9 @@ struct BrowseScreen: View {
         return ink > 0 ? min(1, page / ink) : inkFloor
     }
 
-    /// On a phone the bar is one line — close, the address, the lamp — and back and
-    /// forward are the swipes from the edges, which the web view already answers to. A
-    /// second line, with Save and Read, comes in only when the page turns out to be an
-    /// article: on a shelf or a feed there is nothing to keep, and a button that would
+    /// On a phone the bar is two lines: close, the address and the lamp; then travel at
+    /// one end and, when the page turns out to be an article, Save and Read at the
+    /// other. On a shelf or a feed there is nothing to keep, and a button that would
     /// save nothing is a button that says the app has not looked.
     @ViewBuilder
     private var bar: some View {
@@ -192,13 +199,14 @@ struct BrowseScreen: View {
                     addressField
                     glowButton
                 }
-                if model.isSaveable {
-                    HStack(spacing: 8) {
-                        Spacer(minLength: 12)
+                HStack(spacing: 8) {
+                    travelChip(symbol: "chevron.left", enabled: model.canGoBack) { model.web.goBack() }
+                    travelChip(symbol: "chevron.right", enabled: model.canGoForward) { model.web.goForward() }
+                    Spacer(minLength: 12)
+                    if model.isSaveable {
                         saveButton
                         readButton
                     }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
             .padding(.horizontal, 10)
@@ -220,6 +228,18 @@ struct BrowseScreen: View {
             .padding(.vertical, 8)
             .animation(.easeOut(duration: 0.22), value: model.isSaveable)
         }
+    }
+
+    /// Back and forward as chips, in the row the chips live in.
+    private func travelChip(symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 14)
+        }
+        .buttonStyle(AmberButtonStyle(kind: .outline, size: 13))
+        .opacity(enabled ? 1 : 0.3)
+        .disabled(!enabled)
     }
 
     private var glowButton: some View {
