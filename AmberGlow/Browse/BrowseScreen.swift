@@ -27,32 +27,31 @@ struct BrowseScreen: View {
     @State private var scrubberHeight: CGFloat = 0
 
     var body: some View {
-        // The glass is read whole so the strip can sit in the band above the page —
-        // beside the island, where the status bar would be — while the page keeps the
-        // safe area it always had.
-        GeometryReader { glass in
-            let safeTop = glass.safeAreaInsets.top
-            ZStack(alignment: .top) {
-                pane
-                    .padding(.top, safeTop)
-                if model.appMode, !model.chromeHidden {
-                    appStrip(safeTop: safeTop)
-                        .transition(.opacity)
-                }
+        // The page keeps the safe area it always had. Only the strip reaches into the
+        // band above it — beside the island, where the status bar would be — and it is
+        // the one thing here that ignores the inset.
+        ZStack(alignment: .top) {
+            pane
+            if model.appMode, !model.chromeHidden {
+                appStrip(safeTop: Self.topInset)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .ignoresSafeArea(.container, edges: .top)
+                    .transition(.opacity)
             }
-            .animation(.easeOut(duration: 0.22), value: model.chromeHidden)
-            .animation(.easeOut(duration: 0.22), value: model.appMode)
-            .background(GlowSurface(level: 0.88))
-            .overlay {
-                if glowOpen {
+        }
+        .animation(.easeOut(duration: 0.22), value: model.chromeHidden)
+        .animation(.easeOut(duration: 0.22), value: model.appMode)
+        .background(GlowSurface(level: 0.88))
+        .overlay {
+            if glowOpen {
+                GeometryReader { geo in
                     GlowPanelOverlay(isCompact: isCompact, alignment: .topTrailing,
-                                     top: safeTop + 54, size: glass.size) {
+                                     top: 54, size: geo.size) {
                         withAnimation(.drawer) { glowOpen = false }
                     }
                 }
             }
         }
-        .ignoresSafeArea(.container, edges: .top)
         .statusBarHidden(true)
         .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
             NewSiteSheet(draft: draft)
@@ -207,8 +206,18 @@ struct BrowseScreen: View {
             Spacer()
             glowButton
         }
-        .padding(.horizontal, 8)
+        // Well in from the corners, whose radius comes a long way down the glass.
+        .padding(.horizontal, 18)
         .padding(.top, max(0, centre - buttonHeight / 2))
+    }
+
+    /// How much of the top the cutout keeps clear, from the window itself. Read there
+    /// rather than from the layout: what SwiftUI reports inside a presented cover has
+    /// come back as zero on the way in, and the window always knows.
+    private static var topInset: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first?.safeAreaInsets.top ?? 0
     }
 
     /// The site a page belongs to, if it is one of the reader's own.
