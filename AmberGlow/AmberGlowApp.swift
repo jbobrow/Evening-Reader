@@ -237,6 +237,9 @@ struct RootView: View {
     /// it stays put.
     private func open(_ article: SavedArticle) {
         selection = article.id
+        // Opened to read is read, whichever way it was opened — the same as picking it
+        // from the list.
+        library.markRead(article)
         library.noteOpened(article)
         guard isCompact else { return }
         withAnimation(.drawer) { showLibrary = false }
