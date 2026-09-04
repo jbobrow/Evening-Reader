@@ -235,11 +235,12 @@ struct HomePane: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5),
                       alignment: .leading, spacing: 14) {
                 ForEach(sites.sites) { site in
-                    Button { onBrowse(site.url) } label: {
-                        SiteTile(site: site, icon: sites.icon(for: site))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                    // A tap and a long press on a plain view, as the library's rows
+                    // do. A button would take the touch for itself, and the press that
+                    // opens the menu would never arrive.
+                    SiteTile(site: site, icon: sites.icon(for: site))
+                        .contentShape(Rectangle())
+                        .onTapGesture { onBrowse(site.url) }
                     .overlay {
                         GeometryReader { geo in
                             let frame = geo.frame(in: .named("homePane"))
