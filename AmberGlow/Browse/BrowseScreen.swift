@@ -27,10 +27,75 @@ struct BrowseScreen: View {
     @State private var scrubberHeight: CGFloat = 0
 
     var body: some View {
+        // The glass is read whole so the strip can sit in the band above the page —
+        // beside the island, where the status bar would be — while the page keeps the
+        // safe area it always had.
+        GeometryReader { glass in
+            let safeTop = glass.safeAreaInsets.top
+            ZStack(alignment: .top) {
+                pane
+                    .padding(.top, safeTop)
+                if model.appMode, !model.chromeHidden {
+                    appStrip(band: max(safeTop, 44))
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.22), value: model.chromeHidden)
+            .animation(.easeOut(duration: 0.22), value: model.appMode)
+            .background(GlowSurface(level: 0.88))
+            .overlay {
+                if glowOpen {
+                    GlowPanelOverlay(isCompact: isCompact, alignment: .topTrailing,
+                                     top: safeTop + 54, size: glass.size) {
+                        withAnimation(.drawer) { glowOpen = false }
+                    }
+                }
+            }
+        }
+        .ignoresSafeArea(.container, edges: .top)
+        .statusBarHidden(true)
+        .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
+            NewSiteSheet(draft: draft)
+        })
+        .onAppear {
+            model.applyTint(showGrid: settings.showTexture, isNight: isNight)
+            if let initialURL {
+                address = initialURL.absoluteString
+                model.isAppSite = site(for: initialURL) != nil
+                model.chromeHidden = model.isAppSite
+                model.load(initialURL)
+            } else {
+                addressFocused = true
+            }
+        }
+        .onChange(of: settings.showTexture) { _, grid in
+            model.applyTint(showGrid: grid, isNight: isNight)
+            WebKeyboardBridge.shared.refresh(palette: settings.palette, showsTexture: grid)
+        }
+        .onChange(of: settings.polarity) { _, polarity in
+            model.applyTint(showGrid: settings.showTexture, isNight: polarity == .night)
+        }
+        .onChange(of: settings.palette) { _, palette in
+            WebKeyboardBridge.shared.refresh(palette: palette, showsTexture: settings.showTexture)
+        }
+        .onChange(of: model.currentURL) { _, url in
+            model.isAppSite = url.flatMap(site(for:)) != nil
+            guard !addressFocused, let url else { return }
+            address = url.absoluteString
+        }
+        // Pinning the site you are on makes it one of the apps from here on.
+        .onChange(of: pinnedSite?.id) { _, id in
+            model.isAppSite = id != nil
+        }
+    }
+
+    /// The bar, the page and the scrubber: everything below the band.
+    private var pane: some View {
         VStack(spacing: 0) {
             // The bar goes away as the page is read down and comes back as it is read
-            // up, or on a tap — the same room the reader gives a page.
-            if !model.chromeHidden {
+            // up, or on a tap — the same room the reader gives a page. On one of the
+            // reader's own sites it is not the bar that comes back but the strip.
+            if !model.chromeHidden, !model.appMode {
                 VStack(spacing: 0) {
                     bar
                     if model.isLoading {
@@ -118,45 +183,27 @@ struct BrowseScreen: View {
             .background { HeightReader(height: $pageHeight) }
             .onPreferenceChange(ScrubberFootprint.self) { scrubberHeight = $0 }
         }
-        .animation(.easeOut(duration: 0.22), value: model.chromeHidden)
-        .background(GlowSurface(level: 0.88))
-        .statusBarHidden(true)
-        .overlay {
-            if glowOpen {
-                GeometryReader { geo in
-                    GlowPanelOverlay(isCompact: isCompact, alignment: .topTrailing,
-                                     top: 54, size: geo.size) {
-                        withAnimation(.drawer) { glowOpen = false }
-                    }
-                }
+    }
+
+    /// What a site kept as an app gets on a tap: a way out, a way back when there is
+    /// one, and the lamp — in the band above the page, so the page is never covered.
+    private func appStrip(band: CGFloat) -> some View {
+        HStack(spacing: 4) {
+            closeButton
+            if model.canGoBack {
+                AmberIconButton(symbol: "chevron.left") { model.web.goBack() }
             }
+            Spacer()
+            glowButton
         }
-        .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
-            NewSiteSheet(draft: draft)
-        })
-        .onAppear {
-            model.applyTint(showGrid: settings.showTexture, isNight: isNight)
-            if let initialURL {
-                address = initialURL.absoluteString
-                model.load(initialURL)
-            } else {
-                addressFocused = true
-            }
-        }
-        .onChange(of: settings.showTexture) { _, grid in
-            model.applyTint(showGrid: grid, isNight: isNight)
-            WebKeyboardBridge.shared.refresh(palette: settings.palette, showsTexture: grid)
-        }
-        .onChange(of: settings.polarity) { _, polarity in
-            model.applyTint(showGrid: settings.showTexture, isNight: polarity == .night)
-        }
-        .onChange(of: settings.palette) { _, palette in
-            WebKeyboardBridge.shared.refresh(palette: palette, showsTexture: settings.showTexture)
-        }
-        .onChange(of: model.currentURL) { _, url in
-            guard !addressFocused, let url else { return }
-            address = url.absoluteString
-        }
+        .padding(.horizontal, 8)
+        .frame(height: band)
+    }
+
+    /// The site a page belongs to, if it is one of the reader's own.
+    private func site(for url: URL) -> Site? {
+        guard let host = url.host else { return nil }
+        return sites.site(forHost: host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
     }
 
     /// Where a white page lands on the ramp — the same level the app's own surfaces use,
@@ -266,8 +313,7 @@ struct BrowseScreen: View {
 
     /// Whether the site this page is on already has a tile on the front page.
     private var pinnedSite: Site? {
-        guard let host = model.currentURL?.host else { return nil }
-        return sites.site(forHost: host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
+        model.currentURL.flatMap(site(for:))
     }
 
     /// Keep a door to this site: a tile on the front page, as against the page itself,

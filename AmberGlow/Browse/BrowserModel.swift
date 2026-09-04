@@ -30,6 +30,13 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// Whether the bar has been put away. Reading down a page puts it away; coming
     /// back up, a tap on the page, or a new page brings it back.
     var chromeHidden: Bool = false
+    /// Whether the page belongs to one of the reader's own sites — a door kept on the
+    /// front page. Such a site carries its own navigation, so the bar keeps out of the
+    /// way: put away as each page arrives, and a tap shows only a strip.
+    var isAppSite: Bool = false
+    /// A site's page that is not an article. The moment one turns out to be — a pinned
+    /// paper's story, say — the full bar is back, so Save and Read are reachable.
+    var appMode: Bool { isAppSite && !isSaveable }
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
@@ -194,10 +201,10 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         let delta = y - lastOffset
         lastOffset = y
         if y <= 8 {
-            if chromeHidden { chromeHidden = false }
+            if chromeHidden, !appMode { chromeHidden = false }
         } else if delta > 8, y > 80, !chromeHidden {
             chromeHidden = true
-        } else if delta < -8, chromeHidden {
+        } else if delta < -8, chromeHidden, !appMode {
             chromeHidden = false
         }
     }
@@ -208,7 +215,14 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             return
         }
         web.evaluateJavaScript(Self.saveableProbe) { [weak self] result, _ in
-            MainActor.assumeIsolated { self?.isSaveable = (result as? Bool) ?? false }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let saveable = (result as? Bool) ?? false
+                // An article on a site kept as an app gets its bar back, so the
+                // buttons for keeping it are there to be seen.
+                if saveable, !self.isSaveable, self.isAppSite { self.chromeHidden = false }
+                self.isSaveable = saveable
+            }
         }
     }
 
@@ -230,7 +244,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             showingPDF = navigationResponse.response.mimeType == "application/pdf"
             // A new document, not yet read: nothing to save until it has been looked at.
             isSaveable = showingPDF
-            chromeHidden = false
+            chromeHidden = isAppSite
             lastOffset = 0
             // The new document has not said where it is yet, and the last one's numbers
             // are not its own. The scrubber goes away until something reports again.
@@ -314,7 +328,10 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             return
         }
         if name == "chrome" {
+            // On a site kept as an app, scrolling only ever puts the strip away; it
+            // is the tap that brings it out.
             let show = dict["show"] as? Bool ?? true
+            if show, appMode { return }
             if chromeHidden == show { chromeHidden = !show }
             return
         }
