@@ -58,7 +58,10 @@ struct HomePane: View {
                     .transition(.move(edge: .leading))
             }
         }
-        .clipped()
+        // Clipped so the list slides in behind the drawer's edge rather than over the
+        // page beside it — but with a mask that runs into the safe-area bands, so a
+        // scrim put up over the pane can still cover the whole glass.
+        .mask { Rectangle().ignoresSafeArea() }
         .onChange(of: isOpen) { _, open in
             guard !open else { return }
             // After the drawer has finished leaving, so the swap is never seen.
