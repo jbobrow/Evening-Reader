@@ -96,7 +96,7 @@ struct HomePane: View {
 
     private var header: some View {
         HStack(spacing: 2) {
-            Text("AMBER GLOW")
+            Text("EVENING READER")
                 .font(.system(size: 13, weight: .bold, design: .default))
                 .tracking(2.6)
                 .lineLimit(1)
@@ -192,7 +192,7 @@ struct HomePane: View {
             Text("Nothing to read yet.")
                 .font(.system(size: 20, weight: .medium, design: .serif))
                 .foregroundStyle(amber.inkStrong)
-            Text("Share a page to Amber Glow from Safari, share a book from Files, or paste a link.")
+            Text("Share a page to Evening Reader from Safari, share a book from Files, or paste a link.")
                 .font(.system(size: 13))
                 .lineSpacing(2)
                 .foregroundStyle(amber.inkFaint)

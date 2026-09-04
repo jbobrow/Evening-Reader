@@ -231,7 +231,7 @@ struct AddLinkSheet: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 AmberCaption(text: "Bringing in Safari's Reading List")
-                Text("iOS keeps the Reading List private to Safari, so it can't be imported directly. In Safari, open a saved page, tap Share, and choose **Save to Amber Glow** — the article lands in this library, stripped down and lit.")
+                Text("iOS keeps the Reading List private to Safari, so it can't be imported directly. In Safari, open a saved page, tap Share, and choose **Save to Evening Reader** — the article lands in this library, stripped down and lit.")
                     .font(.system(size: 13))
                     .lineSpacing(3)
                     .foregroundStyle(amber.inkMuted)

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The whole app is drawn from a single one-dimensional ramp.
 ///
-/// Every color in Amber Glow is produced by `AmberPalette.color(_:)` from a grayscale
+/// Every color in Evening Reader is produced by `AmberPalette.color(_:)` from a grayscale
 /// *level* — 0 is ink, 1 is the brightest the panel emits. Nothing in the UI is allowed
 /// to introduce a second hue, which is what makes the result read as a backlit amber
 /// panel rather than a beige-tinted iPad app.

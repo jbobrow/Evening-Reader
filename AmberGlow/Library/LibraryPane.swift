@@ -215,7 +215,7 @@ struct LibraryPane: View {
                 .font(.system(size: 16, design: .serif))
                 .foregroundStyle(amber.inkMuted)
             if scope != .archive {
-                Text("Share a page to Amber Glow from Safari, share a book from Files, or paste a link.")
+                Text("Share a page to Evening Reader from Safari, share a book from Files, or paste a link.")
                     .font(.system(size: 13))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(amber.inkFaint)
@@ -243,7 +243,7 @@ struct LibraryPane: View {
             noteRow(symbol: "icloud", text: "Looking for your iCloud library…")
         case .local:
             noteRow(symbol: "icloud.slash",
-                    text: "iCloud isn't available, so this library stays on this device. Turn on iCloud Drive for Amber Glow in Settings to see what you saved elsewhere.")
+                    text: "iCloud isn't available, so this library stays on this device. Turn on iCloud Drive for Evening Reader in Settings to see what you saved elsewhere.")
         }
     }
 

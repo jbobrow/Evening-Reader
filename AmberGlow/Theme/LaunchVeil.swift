@@ -19,7 +19,7 @@ struct LaunchVeil: View {
     var body: some View {
         ZStack {
             Color.black
-            Text("Amber Glow")
+            Text("Evening Reader")
                 .font(.system(size: sizeClass == .compact ? 34 : 42,
                               weight: .regular, design: .serif))
                 .tracking(1.2)

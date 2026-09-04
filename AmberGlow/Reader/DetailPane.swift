@@ -634,7 +634,7 @@ struct DetailPane: View {
             // The couplet is set to the glass it is on: at 40pt its first line needs more
             // width than a phone has, and the line breaks are the whole point of it — so
             // the type gives way rather than the wrap.
-            Text("When the lights go off,\nenjoy the amber glow.")
+            Text("Soft on the eyes,\nwarmth for the soul.")
                 .font(.system(size: isCompact ? 27 : 40, weight: .regular, design: .serif))
                 .multilineTextAlignment(.center)
                 .lineSpacing(isCompact ? 4 : 6)

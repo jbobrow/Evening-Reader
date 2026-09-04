@@ -2,7 +2,7 @@ import UIKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// "Save to Amber Glow" in the share sheet — the supported way to get a page out of
+/// "Save to Evening Reader" in the share sheet — the supported way to get a page out of
 /// Safari (including one opened from the Reading List) and into the library.
 final class ShareViewController: UIViewController {
 
@@ -111,7 +111,7 @@ final class ShareViewController: UIViewController {
             phase = .failed(failure.problem.title, detail: failure.problem.detail)
             finish(after: 3.2)
         } catch {
-            phase = .failed("That doesn't look like a book Amber Glow can open.")
+            phase = .failed("That doesn't look like a book Evening Reader can open.")
             finish(after: 1.8)
         }
     }
@@ -202,7 +202,7 @@ enum SavePhase: Equatable {
     var headline: String {
         switch self {
         case .working: return "Saving…"
-        case .saved: return "Saved to Amber Glow"
+        case .saved: return "Saved to Evening Reader"
         case .failed(let message, _): return message
         }
     }

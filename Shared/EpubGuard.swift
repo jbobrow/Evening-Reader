@@ -28,14 +28,14 @@ enum EpubGuard {
             case .locked:
                 return "Library loans and most store purchases carry Adobe or LCP "
                     + "protection, which only their own app can open — Libby keeps its "
-                    + "loans inside Libby. Amber Glow reads books that aren't locked: "
+                    + "loans inside Libby. Evening Reader reads books that aren't locked: "
                     + "Standard Ebooks, Project Gutenberg, and DRM-free purchases from the "
                     + "stores that offer them."
             case .fulfillmentFile:
                 return "An .acsm file is a note telling Adobe's software which book to "
                     + "fetch and lock to your account. There is no book inside it to read."
             case .notAnEpub:
-                return "This file isn't something Amber Glow knows how to open as a book."
+                return "This file isn't something Evening Reader knows how to open as a book."
             }
         }
     }

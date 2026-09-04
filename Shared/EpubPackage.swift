@@ -124,7 +124,7 @@ enum EpubError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notAnEpub: return "This isn't a readable EPUB — its container is missing or damaged."
-        case .malformed: return "This EPUB's manifest doesn't describe a book Amber Glow can open."
+        case .malformed: return "This EPUB's manifest doesn't describe a book Evening Reader can open."
         }
     }
 }

@@ -50,7 +50,7 @@ struct RootView: View {
     /// A site being added or changed.
     @State private var siteDraft: SiteDraft?
     /// Set when a file opened from outside the app (Files, Mail, another app's "Open
-    /// in…") turns out not to be a book Amber Glow can read — a lock the app cannot
+    /// in…") turns out not to be a book Evening Reader can read — a lock the app cannot
     /// open, or something that isn't an EPUB at all.
     @State private var bookImportProblem: EpubGuard.Problem?
 
@@ -347,7 +347,7 @@ struct RootView: View {
         }
     }
 
-    /// A book opened from outside the app turned out to be one Amber Glow can't read.
+    /// A book opened from outside the app turned out to be one Evening Reader can't read.
     /// An acknowledgement, not a choice — there is nothing to confirm or cancel.
     @ViewBuilder
     private var bookImportProblemOverlay: some View {
@@ -392,7 +392,7 @@ struct RootView: View {
 
     /// amberglow://add?url=… and amberglow://read?url=… so Shortcuts can hand pages over
     /// — or a book, handed over as a file URL by Files, Mail, or another app's "Open in
-    /// Amber Glow".
+    /// Evening Reader".
     private func handle(_ url: URL) {
         if url.isFileURL {
             importBookFile(at: url)

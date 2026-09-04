@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The reader never opens this file. It is there so a folder in the library is worth
 /// something outside this app — dropped into an Obsidian vault, opened in any editor,
-/// or read years from now by something that has never heard of Amber Glow. The store
+/// or read years from now by something that has never heard of Evening Reader. The store
 /// already treats a folder as the complete, portable thing; this is the part of it that
 /// anything else can read.
 ///
