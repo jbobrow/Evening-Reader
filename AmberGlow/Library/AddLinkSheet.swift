@@ -27,6 +27,7 @@ struct AddLinkPresentation<Sheet: View>: ViewModifier {
     @Environment(Library.self) private var library
     @Environment(DisplaySettings.self) private var settings
     @Environment(Highlights.self) private var highlights
+    @Environment(Sites.self) private var sites
 
     func body(content: Content) -> some View {
         if isCompact {
@@ -38,6 +39,7 @@ struct AddLinkPresentation<Sheet: View>: ViewModifier {
                     .environment(library)
                     .environment(settings)
                     .environment(highlights)
+                    .environment(sites)
             }
         } else {
             content.sheet(isPresented: $isPresented) {
@@ -45,6 +47,7 @@ struct AddLinkPresentation<Sheet: View>: ViewModifier {
                     .environment(library)
                     .environment(settings)
                     .environment(highlights)
+                    .environment(sites)
                     .presentationBackground { GlowSurface(level: 0.9) }
                     .modifier(FittedSheet())
             }
@@ -65,6 +68,7 @@ struct AmberFullScreenPresentation<Sheet: View>: ViewModifier {
     @Environment(Library.self) private var library
     @Environment(DisplaySettings.self) private var settings
     @Environment(Highlights.self) private var highlights
+    @Environment(Sites.self) private var sites
 
     func body(content: Content) -> some View {
         content.fullScreenCover(isPresented: $isPresented) {
@@ -74,6 +78,7 @@ struct AmberFullScreenPresentation<Sheet: View>: ViewModifier {
                 .environment(library)
                 .environment(settings)
                 .environment(highlights)
+                .environment(sites)
         }
     }
 }
@@ -100,6 +105,7 @@ struct AmberItemPresentation<Item: Identifiable, Sheet: View>: ViewModifier {
     @Environment(Library.self) private var library
     @Environment(DisplaySettings.self) private var settings
     @Environment(Highlights.self) private var highlights
+    @Environment(Sites.self) private var sites
 
     func body(content: Content) -> some View {
         if isCompact {
@@ -134,6 +140,7 @@ struct AmberItemPresentation<Item: Identifiable, Sheet: View>: ViewModifier {
             .environment(library)
             .environment(settings)
             .environment(highlights)
+            .environment(sites)
             .environment(\.amber, settings.palette)
     }
 }

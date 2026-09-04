@@ -29,6 +29,9 @@ struct SavedArticle: Codable, Identifiable, Hashable {
     var addedAt: Date = .now
     var publishedAt: Date?
     var readAt: Date?
+    /// When it was last opened to read, whatever its state. `readAt` is set once and
+    /// stays; this one moves, and is what makes an article the one to continue.
+    var openedAt: Date?
     var lastScroll: Double = 0
     var isArchived: Bool = false
     var state: State = .pending
@@ -70,6 +73,23 @@ struct SavedArticle: Codable, Identifiable, Hashable {
     }
 
     var estimatedMinutes: Int { max(1, Int((Double(wordCount) / 235.0).rounded())) }
+
+    /// What is left, for something part-way through: "14 min left", "3 pages left". Nil
+    /// for anything not yet begun, where the whole length is the honest figure.
+    var remainingLabel: String? {
+        guard lastScroll > 0.02 else { return nil }
+        let fraction = max(0, 1 - lastScroll)
+        if isPDF {
+            guard let pages = pageCount, pages > 0 else { return nil }
+            let left = max(1, Int((Double(pages) * fraction).rounded()))
+            return left == 1 ? "1 page left" : "\(left) pages left"
+        }
+        let minutes = max(1, Int((Double(estimatedMinutes) * fraction).rounded()))
+        guard minutes >= 60 else { return "\(minutes) min left" }
+        let hours = minutes / 60
+        let rest = minutes % 60
+        return rest == 0 ? "\(hours) hr left" : "\(hours) hr \(rest) min left"
+    }
 
     var host: String {
         guard var h = url.host else { return url.absoluteString }

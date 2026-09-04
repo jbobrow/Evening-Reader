@@ -318,10 +318,15 @@ struct DetailPane: View {
 
     // MARK: - Chrome
 
+    /// What brings the drawer out. On a phone the drawer is the whole screen and the
+    /// front page is where you came from, so the button is a way back; on a wide panel
+    /// the drawer slides over the page, and the button says so.
+    private var drawerSymbol: String { isCompact ? "chevron.left" : "sidebar.left" }
+
     private func chrome(for article: SavedArticle) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                AmberIconButton(symbol: "sidebar.left") {
+                AmberIconButton(symbol: drawerSymbol) {
                     withAnimation(.drawer) { showLibrary = true }
                 }
 
@@ -618,7 +623,7 @@ struct DetailPane: View {
     private var splash: some View {
         VStack(spacing: 0) {
             HStack {
-                AmberIconButton(symbol: "sidebar.left") {
+                AmberIconButton(symbol: drawerSymbol) {
                     withAnimation(.drawer) { showLibrary = true }
                 }
                 Spacer()
@@ -635,7 +640,7 @@ struct DetailPane: View {
                 .lineSpacing(isCompact ? 4 : 6)
                 .foregroundStyle(amber.inkStrong)
                 .padding(.horizontal, isCompact ? 26 : 40)
-            Text("Pick something from the library, or add a link.")
+            Text("Pick something from the front page, or add a link.")
                 .font(.system(size: isCompact ? 13 : 14))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(amber.inkFaint)

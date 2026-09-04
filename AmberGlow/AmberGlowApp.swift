@@ -5,6 +5,7 @@ struct AmberGlowApp: App {
     @State private var settings = DisplaySettings()
     @State private var library = Library()
     @State private var highlights = Highlights()
+    @State private var sites = Sites()
 
     var body: some Scene {
         WindowGroup {
@@ -12,6 +13,7 @@ struct AmberGlowApp: App {
                 .environment(settings)
                 .environment(library)
                 .environment(highlights)
+                .environment(sites)
                 .environment(\.amber, settings.palette)
                 .tint(settings.palette.ink)
                 .preferredColorScheme(.light)   // we paint every surface ourselves
@@ -30,6 +32,7 @@ struct RootView: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(Library.self) private var library
     @Environment(Highlights.self) private var highlights
+    @Environment(Sites.self) private var sites
     @Environment(\.amber) private var amber
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -44,6 +47,8 @@ struct RootView: View {
     /// page it came off. Cleared by the reader once it has been reached.
     @State private var revealHighlight: UUID?
     @State private var browseTarget: BrowseTarget?
+    /// A site being added or changed.
+    @State private var siteDraft: SiteDraft?
     /// Set when a file opened from outside the app (Files, Mail, another app's "Open
     /// in…") turns out not to be a book Amber Glow can read — a lock the app cannot
     /// open, or something that isn't an EPUB at all.
@@ -157,6 +162,9 @@ struct RootView: View {
                 open(library.add(url: url))
             }
         })
+        .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
+            NewSiteSheet(draft: draft)
+        })
         .modifier(AmberFullScreenPresentation(isPresented: $showHighlights) {
             HighlightsSheet { article, mark in
                 open(article)
@@ -179,6 +187,7 @@ struct RootView: View {
             // inside BrowseScreen would find no ancestor and SwiftUI would fatally assert.
             .environment(library)
             .environment(settings)
+            .environment(sites)
         }
         .onOpenURL(perform: handle)
         // Whatever moved the drawer, any drag that was in flight is finished with. A
@@ -189,11 +198,14 @@ struct RootView: View {
             drawerDrag = 0
             drawerTracking = false
         }
+        // The sites live beside the library, and move into iCloud with it.
+        .onChange(of: library.syncState) { _, _ in sites.refreshFromDisk() }
         .onChange(of: scenePhase) { _, phase in
             // What came down from iCloud arrived as whole folders, so what is held about
             // any of them is stale. The library re-reads itself; the marks are told to.
             if phase == .active {
                 library.pickUpInbox()
+                sites.refreshFromDisk()
                 highlights.forget()
             }
             if phase == .background { library.persist() }
@@ -225,6 +237,7 @@ struct RootView: View {
     /// it stays put.
     private func open(_ article: SavedArticle) {
         selection = article.id
+        library.noteOpened(article)
         guard isCompact else { return }
         withAnimation(.drawer) { showLibrary = false }
     }
@@ -280,22 +293,28 @@ struct RootView: View {
         .zIndex(1)
     }
 
+    /// The drawer's contents: the front page, with the library a push away inside it.
     @ViewBuilder
     private func libraryPane() -> some View {
-        LibraryPane(
+        HomePane(
             scope: $scope,
             search: $search,
             selection: $selection,
+            isOpen: showLibrary,
             onAdd: { showAdd = true },
-            onBrowse: { browseTarget = BrowseTarget(url: nil) },
             onHighlights: { showHighlights = true },
-            onClose: { withAnimation(.drawer) { showLibrary = false } },
+            // On a phone the drawer is the screen; there is no page beside it to close
+            // onto, and the front page is the place to be rather than a thing to put away.
+            onClose: isCompact ? nil : { withAnimation(.drawer) { showLibrary = false } },
             onOpened: { withAnimation(.drawer) { showLibrary = false } },
             onGlow: { toggleGlow(.library) },
             panelOpen: glowPanel == .library,
             onRequestDelete: { article in
                 withAnimation(.easeOut(duration: 0.18)) { confirmDelete = article }
-            }
+            },
+            onBrowse: { browseTarget = BrowseTarget(url: $0) },
+            onAddSite: { siteDraft = SiteDraft() },
+            onEditSite: { siteDraft = SiteDraft(editing: $0) }
         )
         .background(GlowSurface(level: 0.83, bloomStrength: 0.25))
         .overlay(alignment: .trailing) { amber.rule.frame(width: 1) }

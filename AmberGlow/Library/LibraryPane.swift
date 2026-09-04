@@ -10,12 +10,9 @@ struct LibraryPane: View {
     @Binding var selection: SavedArticle.ID?
 
     var onAdd: () -> Void
-    var onBrowse: () -> Void
-    var onHighlights: () -> Void
-    var onClose: (() -> Void)?
+    /// Back to the front page this list was pushed in over.
+    var onBack: () -> Void
     var onOpened: () -> Void
-    var onGlow: () -> Void
-    var panelOpen: Bool
     var onRequestDelete: (SavedArticle) -> Void
     /// Which row's menu is open, and where in the pane it should hang.
     @State private var rowMenu: (article: SavedArticle, y: CGFloat)?
@@ -40,32 +37,21 @@ struct LibraryPane: View {
 
     private var header: some View {
         HStack(spacing: 2) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("AMBER GLOW")
-                    .font(.system(size: 13, weight: .bold, design: .default))
-                    .tracking(2.6)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+            AmberIconButton(symbol: "chevron.left", action: onBack)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Library")
+                    .font(.system(size: 22, weight: .semibold, design: .serif))
                     .foregroundStyle(amber.inkStrong)
                 Text("\(library.count(scope: .unread)) unread")
                     .font(.system(size: 11, weight: .medium))
                     .tracking(0.6)
                     .foregroundStyle(amber.inkFaint)
             }
+            .padding(.leading, 4)
             Spacer()
             AmberIconButton(symbol: "plus", action: onAdd)
-            AmberIconButton(symbol: "globe", action: onBrowse)
-            // What was kept out of the reading, as against what there is to read. It
-            // belongs on the library's chrome rather than the reader's: the list it opens
-            // is the whole library's, and a passage is most often looked for when you are
-            // not on the page it came from.
-            AmberIconButton(symbol: "highlighter", action: onHighlights)
-            AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
-            if let onClose {
-                AmberIconButton(symbol: "sidebar.left", action: onClose)
-            }
         }
-        .padding(.leading, 16)
+        .padding(.leading, 6)
         .padding(.trailing, 8)
         .padding(.top, 10)
         .padding(.bottom, 12)
@@ -140,6 +126,7 @@ struct LibraryPane: View {
                             .onTapGesture {
                                 selection = item.id
                                 library.markRead(item)
+                                library.noteOpened(item)
                                 onOpened()
                             }
                             // Track where the row sits so the menu can hang off it. The
@@ -228,7 +215,7 @@ struct LibraryPane: View {
                 .font(.system(size: 16, design: .serif))
                 .foregroundStyle(amber.inkMuted)
             if scope != .archive {
-                Text("Share a page to Amber Glow from Safari, share a book from Files, paste a link, or browse the web here.")
+                Text("Share a page to Amber Glow from Safari, share a book from Files, or paste a link.")
                     .font(.system(size: 13))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(amber.inkFaint)

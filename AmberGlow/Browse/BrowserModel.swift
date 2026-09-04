@@ -115,13 +115,14 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     func submit(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        if let url = Self.url(from: trimmed) {
-            load(url)
-        } else {
-            var components = URLComponents(string: "https://duckduckgo.com/")!
-            components.queryItems = [URLQueryItem(name: "q", value: trimmed)]
-            if let url = components.url { load(url) }
-        }
+        load(Self.url(from: trimmed) ?? Self.searchURL(for: trimmed))
+    }
+
+    /// A web search for some words.
+    static func searchURL(for text: String) -> URL {
+        var components = URLComponents(string: "https://duckduckgo.com/")!
+        components.queryItems = [URLQueryItem(name: "q", value: text)]
+        return components.url ?? URL(string: "https://duckduckgo.com/")!
     }
 
     static func url(from text: String) -> URL? {

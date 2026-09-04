@@ -4,6 +4,7 @@ import SwiftUI
 /// and re-lit with the same amber ramp as the rest of the app.
 struct BrowseScreen: View {
     @Environment(Library.self) private var library
+    @Environment(Sites.self) private var sites
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
     @Environment(\.dismiss) private var dismiss
@@ -16,6 +17,8 @@ struct BrowseScreen: View {
     @State private var address = ""
     @State private var savedFlash = false
     @State private var addressFocused = false
+    /// This site, on its way to the front page.
+    @State private var siteDraft: SiteDraft?
     /// Height of the page area, so the scrubber can size its track to it.
     @State private var pageHeight: CGFloat = 0
     /// How much room the scrubber is taking, so the ground under it can match.
@@ -108,6 +111,9 @@ struct BrowseScreen: View {
         }
         .background(GlowSurface(level: 0.88))
         .statusBarHidden(true)
+        .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
+            NewSiteSheet(draft: draft)
+        })
         .onAppear {
             model.applyTint(showGrid: settings.showTexture, isNight: isNight)
             if let initialURL {
@@ -175,6 +181,7 @@ struct BrowseScreen: View {
                     backButton
                     forwardButton
                     Spacer(minLength: 12)
+                    pinButton
                     saveButton
                     readButton
                 }
@@ -187,6 +194,7 @@ struct BrowseScreen: View {
                 backButton
                 forwardButton
                 addressField
+                pinButton
                 saveButton
                 readButton
             }
@@ -209,6 +217,44 @@ struct BrowseScreen: View {
         AmberIconButton(symbol: "chevron.right") { model.web.goForward() }
             .opacity(model.canGoForward ? 1 : 0.3)
             .disabled(!model.canGoForward)
+    }
+
+    /// Whether the site this page is on already has a tile on the front page.
+    private var pinnedSite: Site? {
+        guard let host = model.currentURL?.host else { return nil }
+        return sites.site(forHost: host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
+    }
+
+    /// Keep a door to this site: a tile on the front page, as against the page itself,
+    /// which Save keeps. Filled once there is one, and then it has nothing more to do.
+    private var pinButton: some View {
+        let pinned = pinnedSite != nil
+        return AmberIconButton(symbol: pinned ? "pin.fill" : "pin", isActive: pinned) {
+            guard let url = model.currentURL, let host = url.host,
+                  let root = URL(string: "\(url.scheme ?? "https")://\(host)") else { return }
+            siteDraft = SiteDraft(name: Self.siteName(from: model.pageTitle, host: host),
+                                  address: root.absoluteString)
+        }
+        .disabled(pinned || model.currentURL == nil)
+        .opacity(model.currentURL == nil ? 0.3 : 1)
+    }
+
+    /// A name for a site, from what the page calls itself. Titles put the site last,
+    /// after a dash or a bar; failing that, the host's own name will do.
+    static func siteName(from title: String, host: String) -> String {
+        for separator in [" | ", " — ", " – ", " - ", " · ", " • "] {
+            if let last = title.components(separatedBy: separator).last,
+               last != title {
+                let candidate = last.trimmingCharacters(in: .whitespaces)
+                if !candidate.isEmpty, candidate.count <= 28 { return candidate }
+            }
+        }
+        if !title.isEmpty, title.count <= 28 { return title }
+        var bare = host
+        if bare.hasPrefix("www.") { bare.removeFirst(4) }
+        let labels = bare.split(separator: ".")
+        let name = labels.count >= 2 ? labels[labels.count - 2] : (labels.first ?? Substring(bare))
+        return name.prefix(1).uppercased() + name.dropFirst()
     }
 
     private var saveButton: some View {

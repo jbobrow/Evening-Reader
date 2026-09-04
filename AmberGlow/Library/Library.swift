@@ -71,6 +71,18 @@ final class Library {
 
     func count(scope: Scope) -> Int { list(scope: scope, search: "").count }
 
+    /// The reading to go back to: whatever was opened last and is still on the shelf.
+    var continueReading: SavedArticle? {
+        articles
+            .filter { !$0.isArchived && $0.openedAt != nil }
+            .max { ($0.openedAt ?? .distantPast) < ($1.openedAt ?? .distantPast) }
+    }
+
+    /// The last thing to arrive.
+    var justSaved: SavedArticle? {
+        articles.filter { !$0.isArchived }.max { $0.addedAt < $1.addedAt }
+    }
+
     func body(for article: SavedArticle) -> String? {
         store.readBody(for: article)
     }
@@ -98,6 +110,9 @@ final class Library {
                 if local.state == .ready, merged[i].state != .ready { merged[i] = local }
                 else if local.lastScroll > merged[i].lastScroll { merged[i].lastScroll = local.lastScroll }
                 if local.readAt != nil, merged[i].readAt == nil { merged[i].readAt = local.readAt }
+                if let opened = local.openedAt, opened > (merged[i].openedAt ?? .distantPast) {
+                    merged[i].openedAt = opened
+                }
             }
         }
         articles = merged
@@ -274,6 +289,14 @@ final class Library {
     func markRead(_ article: SavedArticle) {
         guard var found = articles.first(where: { $0.id == article.id }), found.readAt == nil else { return }
         found.readAt = .now
+        replace(found)
+    }
+
+    /// Opened to read, now. Kept apart from `markRead`, which records the first time
+    /// only: this is the one the front page follows.
+    func noteOpened(_ article: SavedArticle) {
+        guard var found = articles.first(where: { $0.id == article.id }) else { return }
+        found.openedAt = .now
         replace(found)
     }
 

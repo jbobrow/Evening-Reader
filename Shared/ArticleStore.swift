@@ -80,6 +80,12 @@ final class ArticleStore {
                     let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
                     guard isDir else { continue }
                     let destination = cloud.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+                    // The sites folder is one folder of folders, and is carried across
+                    // one site at a time so what is already there keeps its own.
+                    if dir.lastPathComponent == Self.sitesName {
+                        Self.adoptChildren(of: dir, into: destination, droppingDuplicates: false)
+                        continue
+                    }
                     guard !fm.fileExists(atPath: destination.path) else { continue }
                     try? fm.setUbiquitous(true, itemAt: dir, destinationURL: destination)
                 }
@@ -107,12 +113,39 @@ final class ArticleStore {
                 let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
                 guard isDir else { continue }
                 let destination = root.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+                if dir.lastPathComponent == Self.sitesName {
+                    Self.adoptChildren(of: dir, into: destination, droppingDuplicates: true)
+                    continue
+                }
                 if fm.fileExists(atPath: destination.path) {
                     try? fm.removeItem(at: dir)          // already have it
                 } else {
                     try? fm.setUbiquitous(true, itemAt: dir, destinationURL: destination)
                 }
             }
+        }
+    }
+
+    /// Moves each folder inside `source` into iCloud under `destination`, one at a time.
+    /// A folder already at the destination came from another device and wins; the local
+    /// copy is dropped only where asked, and `source` is removed once it is empty.
+    private static func adoptChildren(of source: URL, into destination: URL, droppingDuplicates: Bool) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(at: source,
+                                                        includingPropertiesForKeys: [.isDirectoryKey],
+                                                        options: [.skipsHiddenFiles]) else { return }
+        try? fm.createDirectory(at: destination, withIntermediateDirectories: true)
+        for child in entries {
+            let target = destination.appendingPathComponent(child.lastPathComponent, isDirectory: true)
+            if fm.fileExists(atPath: target.path) {
+                if droppingDuplicates { try? fm.removeItem(at: child) }
+                continue
+            }
+            try? fm.setUbiquitous(true, itemAt: child, destinationURL: target)
+        }
+        if droppingDuplicates,
+           let left = try? fm.contentsOfDirectory(atPath: source.path), left.isEmpty {
+            try? fm.removeItem(at: source)
         }
     }
 
@@ -124,6 +157,11 @@ final class ArticleStore {
     private static let documentName = "document.pdf"
     private static let bookName = "book.epub"
     private static let assetsName = "assets"
+    /// The sites, beside the articles rather than among them: one folder of folders,
+    /// each the shape `Sites` gives it.
+    static let sitesName = "Sites"
+
+    var sitesRoot: URL { root.appendingPathComponent(Self.sitesName, isDirectory: true) }
     /// Sidecar files a kind may keep beside `article.json`. Whitelisted rather than
     /// taking any name, so this stays a store for known shapes rather than a place
     /// anything can be dropped.
