@@ -93,7 +93,9 @@ struct NewSiteSheet: View {
                 AmberCaption(text: "Name")
                 field(text: $name, focused: $nameFocused, placeholder: "Libby",
                       showsDotCom: false, goLabel: "Next", monospaced: false) {
-                    addressFocused = true
+                    // A beat after the name field has let go, so the two are never
+                    // asking for the keyboard in the same turn.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { addressFocused = true }
                 }
             }
 

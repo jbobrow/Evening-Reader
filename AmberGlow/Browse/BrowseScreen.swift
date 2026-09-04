@@ -36,7 +36,7 @@ struct BrowseScreen: View {
                 pane
                     .padding(.top, safeTop)
                 if model.appMode, !model.chromeHidden {
-                    appStrip(band: max(safeTop, 44))
+                    appStrip(safeTop: safeTop)
                         .transition(.opacity)
                 }
             }
@@ -187,8 +187,19 @@ struct BrowseScreen: View {
 
     /// What a site kept as an app gets on a tap: a way out, a way back when there is
     /// one, and the lamp — in the band above the page, so the page is never covered.
-    private func appStrip(band: CGFloat) -> some View {
-        HStack(spacing: 4) {
+    ///
+    /// Set to the cutout it shares the band with. Beside an island the buttons sit
+    /// level with it; beside a notch, which runs from the very top, their bottom edge
+    /// meets its bottom edge. The inset is what tells the two apart: an island phone
+    /// keeps about 59 points clear, a notch phone 47. With no cutout at all the strip
+    /// takes a band of its own.
+    private func appStrip(safeTop: CGFloat) -> some View {
+        let buttonHeight: CGFloat = 34
+        let centre: CGFloat
+        if safeTop >= 54 { centre = safeTop / 2 }
+        else if safeTop >= 44 { centre = buttonHeight / 2 }
+        else { centre = 22 }
+        return HStack(spacing: 4) {
             closeButton
             if model.canGoBack {
                 AmberIconButton(symbol: "chevron.left") { model.web.goBack() }
@@ -197,7 +208,7 @@ struct BrowseScreen: View {
             glowButton
         }
         .padding(.horizontal, 8)
-        .frame(height: band)
+        .padding(.top, max(0, centre - buttonHeight / 2))
     }
 
     /// The site a page belongs to, if it is one of the reader's own.
