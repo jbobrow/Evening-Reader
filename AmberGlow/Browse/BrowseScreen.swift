@@ -27,13 +27,17 @@ struct BrowseScreen: View {
     @State private var scrubberHeight: CGFloat = 0
 
     var body: some View {
-        // The page keeps the safe area it always had. Only the strip reaches into the
-        // band above it — beside the island, where the status bar would be — and it is
-        // the one thing here that ignores the inset.
+        // The page keeps the safe area it always had. Only the strip and its ground
+        // reach into the band above it, and they are the one thing here that ignores
+        // the inset.
         ZStack(alignment: .top) {
             pane
             if model.appMode, !model.chromeHidden {
-                appStrip(safeTop: Self.topInset)
+                StripGround(height: Self.groundHeight)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .ignoresSafeArea(.container, edges: .top)
+                    .transition(.opacity)
+                appStrip
                     .frame(maxWidth: .infinity, alignment: .top)
                     .ignoresSafeArea(.container, edges: .top)
                     .transition(.opacity)
@@ -43,14 +47,19 @@ struct BrowseScreen: View {
         .animation(.easeOut(duration: 0.22), value: model.appMode)
         .background(GlowSurface(level: 0.88))
         .overlay {
-            if glowOpen {
-                GeometryReader { geo in
+            // The reader outside the condition, so it is the panel itself that comes
+            // and goes — and the panel's own transition, up from the bottom on a phone,
+            // is the one that plays. Conditional on the reader, the reader was what
+            // appeared, and it only knows how to fade.
+            GeometryReader { geo in
+                if glowOpen {
                     GlowPanelOverlay(isCompact: isCompact, alignment: .topTrailing,
                                      top: 54, size: geo.size) {
                         withAnimation(.drawer) { glowOpen = false }
                     }
                 }
             }
+            .allowsHitTesting(glowOpen)
         }
         .statusBarHidden(true)
         .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
@@ -153,12 +162,17 @@ struct BrowseScreen: View {
                                 AmberEditMenuOverlay(
                                     selection: selection,
                                     container: geo.size,
-                                    actions: menuActions(for: selection)
-                                ) { action in
-                                    WebEditor.perform(action, on: model, selection: selection,
-                                                      search: { model.submit($0) })
-                                    model.selection = nil
-                                }
+                                    actions: menuActions(for: selection),
+                                    perform: { action in
+                                        WebEditor.perform(action, on: model, selection: selection,
+                                                          search: { model.submit($0) })
+                                        model.selection = nil
+                                    },
+                                    onPaste: { text in
+                                        WebEditor.paste(text, on: model)
+                                        model.selection = nil
+                                    }
+                                )
                             }
                         }
                     }
@@ -187,18 +201,12 @@ struct BrowseScreen: View {
     /// What a site kept as an app gets on a tap: a way out, a way back when there is
     /// one, and the lamp — in the band above the page, so the page is never covered.
     ///
-    /// Set to the cutout it shares the band with. Beside an island the buttons sit
-    /// level with it; beside a notch, which runs from the very top, their bottom edge
-    /// meets its bottom edge. The inset is what tells the two apart: an island phone
-    /// keeps about 59 points clear, a notch phone 47. With no cutout at all the strip
-    /// takes a band of its own.
-    private func appStrip(safeTop: CGFloat) -> some View {
-        let buttonHeight: CGFloat = 34
-        let centre: CGFloat
-        if safeTop >= 54 { centre = safeTop / 2 }
-        else if safeTop >= 44 { centre = buttonHeight / 2 }
-        else { centre = 22 }
-        return HStack(spacing: 4) {
+    /// Set beside the cutout, on the page itself, with the page's own surface solid
+    /// behind the buttons and fading out beneath them, so they present on the content
+    /// rather than cut into it — the same treatment the scrubber gets at the other
+    /// corner.
+    private var appStrip: some View {
+        HStack(spacing: 4) {
             closeButton
             if model.canGoBack {
                 AmberIconButton(symbol: "chevron.left") { model.web.goBack() }
@@ -208,8 +216,16 @@ struct BrowseScreen: View {
         }
         // Well in from the corners, whose radius comes a long way down the glass.
         .padding(.horizontal, 18)
-        .padding(.top, max(0, centre - buttonHeight / 2))
+        .padding(.top, Self.stripTop)
     }
+
+    /// Where the strip's buttons start. Level with the cutout's lower half on a phone,
+    /// so they sit in the solid part of the ground with the fade running out below
+    /// them; a little in from the edge on a glass with no cutout at all.
+    private static var stripTop: CGFloat { max(topInset - 24, 14) }
+
+    /// How far the ground reaches: solid behind the buttons, fading out beneath them.
+    private static var groundHeight: CGFloat { max(topInset, 24) + 92 }
 
     /// How much of the top the cutout keeps clear, from the window itself. Read there
     /// rather than from the layout: what SwiftUI reports inside a presented cover has
@@ -316,7 +332,13 @@ struct BrowseScreen: View {
     }
 
     private var closeButton: some View {
-        AmberIconButton(symbol: "xmark") { dismiss() }
+        AmberIconButton(symbol: "xmark") {
+            // Let go of the keyboard before the cover goes, so it is seen to go down
+            // rather than found still standing over whatever is underneath.
+            addressFocused = false
+            AmberKeyboardInstaller.putAway()
+            dismiss()
+        }
     }
 
     private var backButton: some View {
@@ -451,5 +473,27 @@ struct BrowseScreen: View {
                 savedFlash = false
             }
         }
+    }
+}
+
+/// The ground under the app strip: the panel's own surface, fading out below the
+/// buttons so they sit on the page the way the scrubber sits on it — presented gently
+/// on top of the content, rather than a bar cut across it.
+private struct StripGround: View {
+    /// How far down the fade reaches, from the very top of the glass.
+    var height: CGFloat
+
+    var body: some View {
+        GlowSurface()
+            .compositingGroup()
+            .mask(alignment: .top) {
+                LinearGradient(stops: [
+                    .init(color: .white, location: 0),
+                    .init(color: .white, location: 0.5),
+                    .init(color: .clear, location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+                .frame(height: height)
+            }
+            .allowsHitTesting(false)
     }
 }

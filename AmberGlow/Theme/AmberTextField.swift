@@ -22,6 +22,12 @@ struct AmberTextField: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
+    /// A field taken down while it still has the keyboard would take the keyboard with
+    /// it in one step. Letting go first gives it its usual way down.
+    static func dismantleUIView(_ view: UITextField, coordinator: Coordinator) {
+        if view.isFirstResponder { view.resignFirstResponder() }
+    }
+
     func makeUIView(context: Context) -> UITextField {
         let field = AmberInputTextField()
         field.delegate = context.coordinator
@@ -88,8 +94,15 @@ struct AmberTextField: UIViewRepresentable {
         var parent: AmberTextField
         weak var field: UITextField?
         private let board = AmberKeyboardInstaller()
+        /// The callout over a selection, drawn by the app since the system's is refused.
+        private let callout = FieldCallout()
 
         init(_ parent: AmberTextField) { self.parent = parent }
+
+        deinit {
+            let callout = self.callout
+            Task { @MainActor in callout.hide() }
+        }
 
         func installKeyboard(_ parent: AmberTextField, on field: UITextField) {
             board.onKey = { [weak self] key in self?.handle(key) }
@@ -128,15 +141,45 @@ struct AmberTextField: UIViewRepresentable {
                 field.cut(nil)
             case .copy:
                 field.copy(nil)
-            case .paste:
-                field.paste(nil)
-            case .shift, .plane:
+                CopiedFlash.show(in: board.container,
+                                 center: CGPoint(x: board.container.bounds.midX, y: 23),
+                                 palette: parent.palette)
+            case .paste(let text):
+                // Over the selection, or at the caret — what the field's own paste does.
+                field.insertText(text)
+            case .autofill, .shift, .plane:
                 break   // handled inside the keyboard's own state
             }
         }
 
+        /// The callout's actions. Cut and copy come off the callout, so it is taken down
+        /// with them; paste arrives with its text.
+        private func performFromCallout(_ action: EditAction) {
+            guard let field else { return }
+            switch action {
+            case .cut: field.cut(nil)
+            case .copy: field.copy(nil)
+            default: break
+            }
+            callout.hide()
+        }
+
+        private func showCallout(for field: UITextField) {
+            callout.update(for: field, palette: parent.palette,
+                           perform: { [weak self] in self?.performFromCallout($0) },
+                           onPaste: { [weak self] text in
+                               self?.field?.insertText(text)
+                               self?.callout.hide()
+                           })
+        }
+
         @objc func editingChanged(_ field: UITextField) {
             parent.text = field.text ?? ""
+            callout.hide()
+        }
+
+        func textFieldDidChangeSelection(_ textField: UITextField) {
+            showCallout(for: textField)
         }
 
         func textFieldDidBeginEditing(_ textField: UITextField) {
@@ -145,6 +188,7 @@ struct AmberTextField: UIViewRepresentable {
 
         func textFieldDidEndEditing(_ textField: UITextField) {
             if parent.isFocused { parent.isFocused = false }
+            callout.hide()
         }
 
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {

@@ -19,7 +19,72 @@ import ObjectiveC
 @MainActor
 final class WebKeyboardBridge {
     static let shared = WebKeyboardBridge()
-    private init() {}
+    private init() {
+        keyboardObserver = NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard self.wantsSystemKeyboard,
+                      Date().timeIntervalSince(self.loanStarted) > 0.5 else { return }
+                // The loan ends the moment the keyboard is down, whatever took it
+                // down — the reader letting the field go, or the password picker
+                // coming up over it. Ended here, while nothing is showing, what comes
+                // back is the panel's own board, presented fresh from the bottom.
+                // Ended later, with the system keyboard up, it would have to be
+                // swapped out in place, and UIKit draws that swap as the new board
+                // flying in from the top corner — which was seen on the phone after
+                // every pick from 1Password.
+                self.endLoan()
+                // Reloaded now, while hidden, and not left to the re-showing: UIKit
+                // brings back the keyboard it last had without asking again, and
+                // that was the system's — seen coming up, then swapped, after the
+                // pick. With the field still the first responder the reload changes
+                // what is waiting to come back, and shows nothing itself.
+                if self.content?.isFirstResponder == true {
+                    self.content?.reloadInputViews()
+                }
+            }
+        }
+    }
+
+    /// The page says which field has the focus, which decides whether the AutoFill key
+    /// is offered. A new field while the system keyboard is still up also ends the loan
+    /// — the fallback, since the loan normally ends while the keyboard is down (see the
+    /// hide observer), and a swap with a keyboard showing is the one UIKit animates.
+    func focusedField(isLogin: Bool) {
+        if focusedFieldIsLogin != isLogin {
+            focusedFieldIsLogin = isLogin
+            host?.rootView = keyboard(palette: palette, showsTexture: showsTexture)
+        }
+        if wantsSystemKeyboard {
+            endLoan()
+            swapKeyboard(on: content)
+        }
+    }
+
+    /// Changes what the field shows without the change being drawn.
+    ///
+    /// UIKit animates a change of input view while the keyboard is up, and animates the
+    /// incoming view from wherever it last was. For the panel's keyboard coming back
+    /// from the loan that is nowhere in particular — it was taken out of the hierarchy
+    /// with a frame at the origin — which reads as a board flying in from the top
+    /// corner to settle behind the one on its way out. So it is put where it will end
+    /// up first, and the swap is made with animation off.
+    private func swapKeyboard(on target: UIView?) {
+        if let container, container.superview == nil, let window = target?.window {
+            // In the window's terms, since that is how a view with no superview is read:
+            // at the foot of the glass, where the keyboard is.
+            container.frame = CGRect(x: 0, y: window.bounds.height - Self.height,
+                                     width: window.bounds.width, height: Self.height)
+        }
+        UIView.performWithoutAnimation { target?.reloadInputViews() }
+    }
+
+    private func endLoan() {
+        wantsSystemKeyboard = false
+        veil.hide()
+    }
 
     private weak var web: WKWebView?
     /// Held directly: once the class is swapped its name no longer matches the lookup.
@@ -37,7 +102,28 @@ final class WebKeyboardBridge {
     /// Set false to leave web fields on the system keyboard.
     static var isEnabled = true
 
+    /// True while the reader has asked for the system keyboard instead — for AutoFill.
+    ///
+    /// Password AutoFill, from the system's Passwords or from a manager like 1Password,
+    /// is offered on the system keyboard's own bar, which is drawn out of process and
+    /// cannot be reached from here; there is no API a browser can call to bring the
+    /// picker up on its own. So the AutoFill key on the panel's keyboard steps aside
+    /// for it: the field is handed the system keyboard, grey and all, for as long as it
+    /// is up. Once the keyboard goes away the panel's own is back for the next field.
+    private(set) var wantsSystemKeyboard = false
+    /// When the loan began. The swap that starts it can post a hide of its own on the
+    /// way to the system keyboard, which must not be taken for the keyboard going down.
+    private var loanStarted = Date.distantPast
+    /// Whether the field with the focus is one AutoFill has anything for. The key that
+    /// steps aside is offered on those and nowhere else: on a search box it would only
+    /// be a way to a grey keyboard.
+    private var focusedFieldIsLogin = false
+    /// What is drawn over the system keyboard while it is on loan.
+    private let veil = KeyboardVeil()
+
     private static let height: CGFloat = 330
+
+    private var keyboardObserver: NSObjectProtocol?
 
     // MARK: - Attaching
 
@@ -66,6 +152,14 @@ final class WebKeyboardBridge {
         if String(describing: type(of: content)).hasPrefix("AmberGlow_") { return content }
         guard let subclass = subclass(for: content) else { return nil }
         object_setClass(content, subclass)
+        // The content view in its dark dress, for good. The system keyboard takes its
+        // light or dark look from the first responder's own traits — and that is the
+        // content view, not the web view. Darkened alone it gets every system keyboard
+        // that ever surfaces here, on loan for AutoFill or brought back by the system
+        // after a password picker, in dark; the page, which reads the web view's
+        // traits, goes on believing it is light. WebKit's own pickers for a page's
+        // date and select fields come out dark for the same reason, which is no loss.
+        content.overrideUserInterfaceStyle = .dark
         content.inputAssistantItem.leadingBarButtonGroups = []
         content.inputAssistantItem.trailingBarButtonGroups = []
         removeEditMenu(from: web)
@@ -117,13 +211,15 @@ final class WebKeyboardBridge {
                       showsTexture: showsTexture,
                       showsDotCom: false,
                       goLabel: "Go",
+                      showsAutofill: focusedFieldIsLogin,
                       boardWidth: boardWidth) { [weak self] key in
             self?.handle(key)
         }
     }
 
-    /// The view the keyboard should be handed to UIKit as.
-    static var inputView: UIView? { shared.container }
+    /// The view the keyboard should be handed to UIKit as — or nothing, while the
+    /// system's has been asked for.
+    static var inputView: UIView? { shared.wantsSystemKeyboard ? nil : shared.container }
 
     // MARK: - Keys
 
@@ -138,10 +234,23 @@ final class WebKeyboardBridge {
         case .backspace:   input?.deleteBackward()
         case .go:          submitFocusedField(in: web)
         case .hide:        web.endEditing(true)
-        case .selectAll:   (target as? UIResponder)?.perform(NSSelectorFromString("selectAll:"), with: nil)
-        case .cut:         (target as? UIResponder)?.perform(NSSelectorFromString("cut:"), with: nil)
-        case .copy:        (target as? UIResponder)?.perform(NSSelectorFromString("copy:"), with: nil)
-        case .paste:       (target as? UIResponder)?.perform(NSSelectorFromString("paste:"), with: nil)
+        case .selectAll:   target?.perform(NSSelectorFromString("selectAll:"), with: nil)
+        case .cut:         target?.perform(NSSelectorFromString("cut:"), with: nil)
+        case .copy:
+            target?.perform(NSSelectorFromString("copy:"), with: nil)
+            if let container {
+                CopiedFlash.show(in: container, center: CGPoint(x: container.bounds.midX, y: 23),
+                                 palette: palette)
+            }
+        case .paste(let text):
+            // Typed in rather than sent as `paste:` — that would have the content view
+            // read the pasteboard itself, and the system ask about it.
+            input?.insertText(text)
+        case .autofill:
+            wantsSystemKeyboard = true
+            loanStarted = Date()
+            swapKeyboard(on: target)
+            veil.show(over: web.window?.windowScene, palette: palette)
         case .shift, .plane: break
         }
     }
@@ -206,12 +315,19 @@ final class WebKeyboardBridge {
         }
         guard let created = objc_allocateClassPair(base, name, 0) else { return nil }
 
-        // inputView -> the app's keyboard.
+        // inputView -> the app's keyboard; or, while the system's has been asked for,
+        // whatever WebKit would have offered.
         let inputSel = #selector(getter: UIView.inputView)
-        let inputBlock: @convention(block) (AnyObject) -> UIView? = { _ in
-            MainActor.assumeIsolated { WebKeyboardBridge.inputView }
-        }
-        if let method = class_getInstanceMethod(UIView.self, inputSel) {
+        if let method = class_getInstanceMethod(base, inputSel) {
+            typealias Original = @convention(c) (AnyObject, Selector) -> UIView?
+            let original = unsafeBitCast(method_getImplementation(method), to: Original.self)
+            let inputBlock: @convention(block) (AnyObject) -> UIView? = { obj in
+                MainActor.assumeIsolated {
+                    WebKeyboardBridge.shared.wantsSystemKeyboard
+                        ? original(obj, inputSel)
+                        : WebKeyboardBridge.inputView
+                }
+            }
             class_addMethod(created, inputSel,
                             imp_implementationWithBlock(inputBlock),
                             method_getTypeEncoding(method))
@@ -237,6 +353,11 @@ final class WebKeyboardBridge {
             let original = unsafeBitCast(method_getImplementation(method), to: Original.self)
             let block: @convention(block) (AnyObject) -> UITextInputAssistantItem = { obj in
                 let item = original(obj, assistSel)
+                // Left as it comes while the system keyboard is on loan: the bar is
+                // part of what was asked for.
+                if MainActor.assumeIsolated({ WebKeyboardBridge.shared.wantsSystemKeyboard }) {
+                    return item
+                }
                 item.leadingBarButtonGroups = []
                 item.trailingBarButtonGroups = []
                 return item
@@ -318,5 +439,80 @@ final class SystemPageIndicator {
         return name.contains("PageLabel")
             || name.contains("PageNumber")
             || name.contains("PageIndicator")
+    }
+}
+
+/// A pane of amber under the system keyboard, for the time it is on loan.
+///
+/// The keyboard is drawn by another process and no filter of the app's reaches it; nor
+/// can a window of the app's get above it — whatever level it is given, the keyboard
+/// stays on top. What the keyboard does do is let the ground show through: its material
+/// blurs whatever lies beneath, and takes on the colour. So the pane goes *under* it,
+/// over the app, exactly where the keyboard stands, and the keyboard comes out with the
+/// warmth of the panel in its ground rather than the grey of nothing. Asked for in its
+/// dark dress (see `.autofill`), that is a dark keyboard lit from below in amber.
+@MainActor
+final class KeyboardVeil {
+    private var window: UIWindow?
+    private let pane = UIView()
+    private var observers: [NSObjectProtocol] = []
+    /// Where the keyboard last was, in screen coordinates. Kept from the start rather
+    /// than from the moment the veil is asked for: by then the keyboard has already
+    /// announced itself, and there would be nothing to put the pane over.
+    private var keyboardFrame: CGRect = .zero
+
+    init() {
+        observers = [UIResponder.keyboardWillChangeFrameNotification,
+                     UIResponder.keyboardDidShowNotification,
+                     UIResponder.keyboardWillHideNotification].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                MainActor.assumeIsolated { self?.follow(note) }
+            }
+        }
+    }
+
+    func show(over scene: UIWindowScene?, palette: AmberPalette) {
+        guard let scene else { return }
+        if window == nil {
+            let window = UIWindow(windowScene: scene)
+            // Above the app's own windows, sheets included; the keyboard is above it
+            // regardless, and is meant to be.
+            window.windowLevel = .alert + 1
+            window.backgroundColor = .clear
+            window.isUserInteractionEnabled = false
+            // A window of its own would otherwise bring the status bar back with it.
+            window.rootViewController = VeilController()
+            window.rootViewController?.view.backgroundColor = .clear
+            window.rootViewController?.view.addSubview(pane)
+            window.isHidden = false
+            self.window = window
+        }
+        pane.backgroundColor = UIColor(palette.color(0.15)).withAlphaComponent(0.7)
+        place()
+    }
+
+    func hide() {
+        window?.isHidden = true
+        window = nil
+        pane.removeFromSuperview()
+    }
+
+    private func follow(_ note: Notification) {
+        guard let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+        else { return }
+        keyboardFrame = note.name == UIResponder.keyboardWillHideNotification ? .zero : frame
+        let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        UIView.animate(withDuration: duration) { self.place() }
+    }
+
+    private func place() {
+        guard let window else { return }
+        let local = window.convert(keyboardFrame, from: nil)
+        pane.frame = local.intersection(window.bounds)
+    }
+
+    private final class VeilController: UIViewController {
+        override var prefersStatusBarHidden: Bool { true }
+        override var prefersHomeIndicatorAutoHidden: Bool { true }
     }
 }

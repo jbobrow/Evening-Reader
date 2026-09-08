@@ -64,6 +64,10 @@ struct HomePane: View {
         .mask { Rectangle().ignoresSafeArea() }
         .onChange(of: isOpen) { _, open in
             guard !open else { return }
+            // The drawer is leaving for a page; a keyboard raised for the search has
+            // nothing to type into there and goes down with it.
+            if queryFocused { queryFocused = false }
+            AmberKeyboardInstaller.putAway()
             // After the drawer has finished leaving, so the swap is never seen.
             Task {
                 try? await Task.sleep(nanoseconds: 500_000_000)
@@ -474,6 +478,9 @@ struct HomePane: View {
     private func leaveSearch() {
         queryFocused = false
         query = ""
+        // Let go of the keyboard now, before the bar it belongs to is taken away — a
+        // field removed while it still has the keyboard loses it without a transition.
+        AmberKeyboardInstaller.putAway()
         withAnimation(.easeOut(duration: 0.18)) { searching = false }
     }
 

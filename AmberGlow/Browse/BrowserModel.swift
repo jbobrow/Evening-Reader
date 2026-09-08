@@ -40,6 +40,10 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
+    /// The frames inside the current page, as each one announced itself. A change of
+    /// polarity has to reach them one by one: script run against the view goes to the
+    /// top document only.
+    @ObservationIgnored private var frames: [WKFrameInfo] = []
     /// A PDF can be browsed to as well as opened from the library, and WebKit puts its
     /// own page indicator over it either way.
     @ObservationIgnored private let pageIndicator = SystemPageIndicator()
@@ -167,6 +171,11 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// has to be asked, since WebKit leaves the view standing and empty.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         webView.reload()
+    }
+
+    /// A new page: the old page's frames are gone with it.
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        frames.removeAll()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -335,6 +344,14 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             if chromeHidden == show { chromeHidden = !show }
             return
         }
+        if name == "field" {
+            WebKeyboardBridge.shared.focusedField(isLogin: dict["login"] as? Bool ?? false)
+            return
+        }
+        if name == "frame" {
+            if !message.frameInfo.isMainFrame { frames.append(message.frameInfo) }
+            return
+        }
         if name == "tap" {
             // A plain tap on the page turns the bar over, as it does in the reader. The
             // page's own controls are left out by the script that reports it, so what
@@ -370,6 +387,9 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         controller.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentEnd,
                                              forMainFrameOnly: false))
         web.evaluateJavaScript(script)
+        for frame in frames {
+            web.evaluateJavaScript(script, in: frame, in: .page) { _ in }
+        }
     }
 }
 

@@ -378,9 +378,11 @@ final class Library {
         }
     }
 
-    func addFromClipboard() {
-        let pasteboard = UIPasteboard.general
-        if let url = pasteboard.url ?? pasteboard.string.flatMap(BrowserModel.url(from:)) {
+    /// Keep whatever link was pasted. The text comes from the system's paste control
+    /// (see `AmberPasteControl`) rather than from reading the pasteboard here — reading
+    /// it is what makes the system ask first.
+    func add(pasted text: String) {
+        if let url = BrowserModel.url(from: text) {
             add(url: url)
         }
     }

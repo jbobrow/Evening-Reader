@@ -215,11 +215,19 @@ struct AddLinkSheet: View {
 
             HStack(spacing: 10) {
                 if library.clipboardMayHoldLink {
-                    Button("Paste") {
-                        if let url = UIPasteboard.general.url { text = url.absoluteString }
-                        else if let s = UIPasteboard.general.string { text = s }
+                    // The system's paste control, dressed as the outline button beside
+                    // it: the tap on it is the permission, so the link arrives without
+                    // the system's own dialog.
+                    AmberPasteControl(palette: settings.palette, fill: 0.82, fontSize: 15,
+                                      cornerStyle: .medium) { pasted in
+                        text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
                     }
-                    .buttonStyle(AmberButtonStyle(kind: .outline))
+                    .frame(width: 88, height: 39)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(amber.color(0.40), lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
                 }
                 Spacer()
                 Button("Save & read", action: commit)

@@ -17,7 +17,13 @@ enum AmberKey: Hashable {
     case selectAll
     case cut
     case copy
-    case paste
+    /// Carries the text: the key is the system's own paste control (see
+    /// `AmberPasteControl`), which hands the clipboard over itself rather than
+    /// reporting a tap — that is what lets it be read without the system asking first.
+    case paste(String)
+    /// Hand this field to the system keyboard, whose bar is where Password AutoFill
+    /// lives. Offered on web fields only.
+    case autofill
 }
 
 /// A keyboard drawn by the app, on the app's ramp.
@@ -34,6 +40,9 @@ struct AmberKeyboard: View {
     var showsTexture: Bool
     var showsDotCom: Bool
     var goLabel: String
+    /// Whether to offer the way to the system keyboard for AutoFill. The app's own fields
+    /// have nothing to fill; a login form on a web page does.
+    var showsAutofill: Bool = false
     /// Width of the board, handed down from UIKit. The keyboard is a field's `inputView`,
     /// so it is not in the app's view tree and has no size class to read — and measuring
     /// itself from the inside feeds a layout change back into the layout being computed,
@@ -128,28 +137,55 @@ struct AmberKeyboard: View {
             stripKey("Select All", .selectAll)
             stripKey("Cut", .cut)
             stripKey("Copy", .copy)
-            stripKey("Paste", .paste)
+            pasteKey
+            if showsAutofill {
+                stripKey("AutoFill", symbol: "key.fill", .autofill)
+            }
         }
         .padding(.bottom, 1)
     }
 
-    private func stripKey(_ label: String, _ key: AmberKey) -> some View {
+    private func stripKey(_ label: String, symbol: String? = nil, _ key: AmberKey) -> some View {
         Button { onKey(key) } label: {
-            Text(label)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(amber.ink)
-                .frame(maxWidth: .infinity)
-                .frame(height: 30)
-                .background {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(amber.color(0.86))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .strokeBorder(amber.color(0.66, opacity: 0.4), lineWidth: 1)
-                        }
+            HStack(spacing: 5) {
+                if let symbol {
+                    Image(systemName: symbol)
+                        .font(.system(size: 11, weight: .medium))
                 }
+                Text(label)
+                    .font(.system(size: 12.5, weight: .medium))
+            }
+            .foregroundStyle(amber.ink)
+            .frame(maxWidth: .infinity)
+            .frame(height: 30)
+            .background { stripKeyFace }
         }
         .buttonStyle(.plain)
+    }
+
+    /// The Paste key is the system's control in the app's clothes: it is the one way to
+    /// take the clipboard without the system putting up its own grey question first.
+    private var pasteKey: some View {
+        AmberPasteControl(palette: amber, fill: 0.86, fontSize: 12.5, cornerStyle: .medium) {
+            onKey(.paste($0))
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 30)
+        .background { stripKeyFace }
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(amber.color(0.66, opacity: 0.4), lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var stripKeyFace: some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(amber.color(0.86))
+            .overlay {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(amber.color(0.66, opacity: 0.4), lineWidth: 1)
+            }
     }
 
     @ViewBuilder
@@ -320,6 +356,25 @@ struct AmberKeyCap: View {
 final class AmberInputContainer: UIInputView {
     var onWidthChange: ((CGFloat) -> Void)?
     private var reported: CGFloat = 0
+    /// The glass this board was last on, so it can be parked in the right place on it.
+    private var screen: CGRect = .zero
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if let window { screen = window.screen.bounds }
+    }
+
+    /// Parked where the keyboard stands whenever the board is taken out of the
+    /// hierarchy. UIKit animates an input view coming back from wherever it last was,
+    /// and a board left at the origin comes back flying in from the top corner — which
+    /// is what was seen after AutoFill, as the panel's keyboard returned behind the
+    /// system's. Parked at the foot of the glass, it comes back from where it is going.
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        guard superview == nil, screen.height > 0 else { return }
+        let height = bounds.height > 0 ? bounds.height : 330
+        frame = CGRect(x: 0, y: screen.height - height, width: screen.width, height: height)
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()

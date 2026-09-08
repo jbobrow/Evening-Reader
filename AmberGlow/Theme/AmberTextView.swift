@@ -32,6 +32,12 @@ struct AmberTextView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
+    /// A field taken down while it still has the keyboard would take the keyboard with
+    /// it in one step. Letting go first gives it its usual way down.
+    static func dismantleUIView(_ view: UITextView, coordinator: Coordinator) {
+        if view.isFirstResponder { view.resignFirstResponder() }
+    }
+
     func makeUIView(context: Context) -> UITextView {
         let view = AmberInputTextView()
         view.delegate = context.coordinator
@@ -89,8 +95,15 @@ struct AmberTextView: UIViewRepresentable {
         var parent: AmberTextView
         weak var view: UITextView?
         private let board = AmberKeyboardInstaller()
+        /// The callout over a selection, drawn by the app since the system's is refused.
+        private let callout = FieldCallout()
 
         init(_ parent: AmberTextView) { self.parent = parent }
+
+        deinit {
+            let callout = self.callout
+            Task { @MainActor in callout.hide() }
+        }
 
         func installKeyboard(_ parent: AmberTextView, on view: UITextView) {
             board.onKey = { [weak self] key in self?.handle(key) }
@@ -118,15 +131,39 @@ struct AmberTextView: UIViewRepresentable {
                 if case .go = key { parent.onSubmit() }
             case .selectAll:    view.selectAll(nil)
             case .cut:          view.cut(nil)
-            case .copy:         view.copy(nil)
-            case .paste:        view.paste(nil)
-            case .shift, .plane: break   // handled inside the keyboard's own state
+            case .copy:
+                view.copy(nil)
+                CopiedFlash.show(in: board.container,
+                                 center: CGPoint(x: board.container.bounds.midX, y: 23),
+                                 palette: parent.palette)
+            case .paste(let text): view.insertText(text)
+            case .autofill, .shift, .plane: break   // handled inside the keyboard's own state
             }
+        }
+
+        private func performFromCallout(_ action: EditAction) {
+            guard let view else { return }
+            switch action {
+            case .cut: view.cut(nil)
+            case .copy: view.copy(nil)
+            default: break
+            }
+            callout.hide()
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            callout.update(for: textView, palette: parent.palette,
+                           perform: { [weak self] in self?.performFromCallout($0) },
+                           onPaste: { [weak self] text in
+                               self?.view?.insertText(text)
+                               self?.callout.hide()
+                           })
         }
 
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text ?? ""
             (textView as? AmberInputTextView)?.refreshPlaceholder()
+            callout.hide()
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
@@ -135,6 +172,7 @@ struct AmberTextView: UIViewRepresentable {
 
         func textViewDidEndEditing(_ textView: UITextView) {
             if parent.isFocused { parent.isFocused = false }
+            callout.hide()
         }
     }
 }

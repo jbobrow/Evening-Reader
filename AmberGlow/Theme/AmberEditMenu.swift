@@ -91,6 +91,11 @@ struct AmberEditMenu: View {
     /// off at the edge of the glass.
     var width: CGFloat?
     var perform: (EditAction) -> Void
+    /// Where pasted text goes. Paste is the one item not answered through `perform`: it
+    /// is drawn as the system's own paste control (see `AmberPasteControl`), which is
+    /// what lets the clipboard be read without the system asking first, and that control
+    /// hands over the text itself rather than reporting a tap.
+    var onPaste: ((String) -> Void)? = nil
 
     var body: some View {
         let content = EditAction.width(of: actions)
@@ -120,14 +125,22 @@ struct AmberEditMenu: View {
                     amber.color(0.62, opacity: 0.45)
                         .frame(width: 1, height: 18)
                 }
-                Button { perform(action) } label: {
-                    Text(action.label)
-                        .font(Font(EditAction.labelFont))
-                        .foregroundStyle(amber.ink)
-                        .frame(width: action.width, height: EditAction.height)
-                        .contentShape(Rectangle())
+                if action == .paste {
+                    AmberPasteControl(palette: amber, fill: 0.93, fontSize: 14,
+                                      cornerStyle: .capsule) { text in
+                        onPaste?(text)
+                    }
+                    .frame(width: action.width, height: EditAction.height)
+                } else {
+                    Button { perform(action) } label: {
+                        Text(action.label)
+                            .font(Font(EditAction.labelFont))
+                            .foregroundStyle(amber.ink)
+                            .frame(width: action.width, height: EditAction.height)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(EditMenuButtonStyle())
                 }
-                .buttonStyle(EditMenuButtonStyle())
             }
         }
     }
@@ -143,10 +156,17 @@ private struct EditMenuButtonStyle: ButtonStyle {
 
 /// Positions the callout against the selection, keeping it on screen.
 struct AmberEditMenuOverlay: View {
+    @Environment(\.amber) private var amber
+
     let selection: WebSelection
     let container: CGSize
     let actions: [EditAction]
     var perform: (EditAction) -> Void
+    var onPaste: ((String) -> Void)? = nil
+
+    /// Where the callout stands, in the window, so that when Copy takes it down the word
+    /// that the copy happened can be put up in the same place — after this view is gone.
+    @State private var placed: CGRect = .zero
 
     private let margin: CGFloat = 8
 
@@ -161,9 +181,22 @@ struct AmberEditMenuOverlay: View {
         let x = min(max(selection.rect.midX - width / 2, margin),
                     max(margin, container.width - width - margin))
 
-        AmberEditMenu(actions: actions, width: width, perform: perform)
+        AmberEditMenu(actions: actions, width: width, perform: { action in
+            if action == .copy {
+                CopiedFlash.show(over: placed, in: Self.window, palette: amber)
+            }
+            perform(action)
+        }, onPaste: onPaste)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { placed = $0 }
             .position(x: x + width / 2, y: y + height / 2)
             .transition(.opacity.combined(with: .scale(scale: 0.94)))
+    }
+
+    /// The window the global coordinate space belongs to.
+    private static var window: UIWindow? {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first
     }
 }
 
@@ -181,12 +214,25 @@ enum SelectionReporter {
           };
 
           var report = function () {
+            var el = document.activeElement;
+            // A run selected inside a text control is not part of the document's
+            // selection: getSelection() has nothing to say about it, and a range over
+            // it has no size. The control itself knows both — what is selected, and
+            // where it stands.
+            if (el && /^(input|textarea)$/i.test(el.tagName || "") &&
+                typeof el.selectionStart === "number" && el.selectionEnd > el.selectionStart) {
+              var run = String(el.value || "").substring(el.selectionStart, el.selectionEnd);
+              if (!run.trim()) { post({ name: "selection", text: "" }); return; }
+              var b = el.getBoundingClientRect();
+              post({ name: "selection", text: run, editable: !el.readOnly && !el.disabled,
+                     x: b.left, y: b.top, w: b.width, h: b.height });
+              return;
+            }
             var sel = window.getSelection();
             if (!sel || sel.isCollapsed || sel.rangeCount === 0) { post({ name: "selection", text: "" }); return; }
             var text = String(sel);
             if (!text.trim()) { post({ name: "selection", text: "" }); return; }
             var r = sel.getRangeAt(0).getBoundingClientRect();
-            var el = document.activeElement;
             var editable = !!(el && (el.isContentEditable ||
                                      /^(input|textarea)$/i.test(el.tagName || "")));
             post({ name: "selection", text: text, editable: editable,
@@ -224,17 +270,22 @@ enum WebEditor {
         case .cut:
             UIPasteboard.general.string = selection.tidyText
             web.runJavaScript("document.execCommand('delete');")
-        case .paste:
-            guard let text = UIPasteboard.general.string,
-                  let encoded = try? JSONEncoder().encode(text),
-                  let literal = String(data: encoded, encoding: .utf8) else { return }
-            web.runJavaScript("document.execCommand('insertText', false, \(literal));")
         case .search:
             search(selection.tidyText)
             clearSelection(on: web)
-        case .define, .highlight, .askAI:
+        case .paste, .define, .highlight, .askAI:
+            // Paste never arrives here: the menu's paste item is the system's own
+            // control, which delivers the text to `paste(_:on:)` directly. Reading the
+            // pasteboard from here instead is what would bring up the system's dialog.
             break
         }
+    }
+
+    /// Puts pasted text into the page, over whatever is selected.
+    static func paste(_ text: String, on web: WKWebViewLike) {
+        guard let encoded = try? JSONEncoder().encode(text),
+              let literal = String(data: encoded, encoding: .utf8) else { return }
+        web.runJavaScript("document.execCommand('insertText', false, \(literal));")
     }
 
     static func clearSelection(on web: WKWebViewLike) {

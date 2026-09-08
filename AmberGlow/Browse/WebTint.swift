@@ -27,8 +27,12 @@ struct WebTint {
         // again, tinted by the same ink as everything else. Applied to the element
         // directly rather than to an ancestor, so it holds regardless of whether the
         // element got its own compositing layer.
+        //
+        // `!important`, because a site's own filter on the element — a brightness
+        // tweak, a blur-up placeholder — is set inline as often as not, and an inline
+        // style beats an ordinary rule. What it does not beat is an important one.
         let mediaInvert = isNight
-            ? "img, video, canvas { filter: invert(1); }"
+            ? "img, video, canvas { filter: invert(1) !important; }"
             : ""
 
         return """
@@ -59,6 +63,100 @@ struct WebTint {
             '}',
             '\(mediaInvert)'
           ].join('\\n');
+
+          // The media rule again, inside every shadow root.
+          //
+          // A page's stylesheet stops at a shadow boundary, and a player built as a web
+          // component keeps its <video> behind one — which is how a video came to be
+          // the one thing on a page still showing as a negative at night. Roots opened
+          // from here on are caught as they are made; roots that already exist, and
+          // the ones the parser made, are found by walking. One shared sheet, adopted
+          // by each root rather than appended to it, so a component that rewrites its
+          // own contents does not throw the rule out with them — and so a change of
+          // polarity is one edit rather than one per root.
+          (function () {
+            var S = window.__agShadow;
+            if (!S) {
+              S = window.__agShadow = { css: '', sheet: null, roots: [] };
+              try { S.sheet = new CSSStyleSheet(); } catch (e) { S.sheet = null; }
+              S.style = function (root) {
+                try {
+                  if (S.sheet) {
+                    if (root.adoptedStyleSheets.indexOf(S.sheet) < 0) {
+                      root.adoptedStyleSheets = root.adoptedStyleSheets.concat([S.sheet]);
+                    }
+                  } else {
+                    var el = root.querySelector('style#ag-media-style');
+                    if (!el) {
+                      el = document.createElement('style');
+                      el.id = 'ag-media-style';
+                      root.appendChild(el);
+                    }
+                    el.textContent = S.css;
+                  }
+                } catch (e) {}
+              };
+              S.adopt = function (root) {
+                if (!root || root.__agAdopted) return;
+                root.__agAdopted = true;
+                S.roots.push(root);
+                S.style(root);
+              };
+              S.sweep = function (node) {
+                if (!node || !node.querySelectorAll) return;
+                var all = node.querySelectorAll('*');
+                for (var i = 0; i < all.length; i++) {
+                  var r = all[i].shadowRoot;
+                  if (r && !r.__agAdopted) { S.adopt(r); S.sweep(r); }
+                }
+              };
+              var orig = Element.prototype.attachShadow;
+              if (orig) {
+                Element.prototype.attachShadow = function (init) {
+                  var root = orig.call(this, init);
+                  S.adopt(root);
+                  return root;
+                };
+              }
+            }
+            S.css = '\(mediaInvert)';
+            if (S.sheet) { try { S.sheet.replaceSync(S.css); } catch (e) {} }
+            S.roots.forEach(S.style);
+            S.sweep(document);
+          })();
+
+          // Which field has the focus, and whether it is one AutoFill has anything
+          // for — a password, or a name or address that stands beside one.
+          (function () {
+            if (window.__agFieldReporter) return;
+            window.__agFieldReporter = true;
+            var loginLike = function (el) {
+              if (!el || !/^input$/i.test(el.tagName || "")) return false;
+              var type = String(el.type || "").toLowerCase();
+              var auto = String(el.getAttribute("autocomplete") || "").toLowerCase();
+              if (type === "password" || type === "email") return true;
+              if (/username|password|email|one-time-code|tel/.test(auto)) return true;
+              var form = el.form || (el.closest ? el.closest("form") : null);
+              return !!(form && form.querySelector && form.querySelector('input[type="password"]'));
+            };
+            var report = function (el) {
+              try {
+                window.webkit.messageHandlers.browse.postMessage({ name: "field", login: loginLike(el) });
+              } catch (e) {}
+            };
+            document.addEventListener("focusin", function (e) { report(e.target); }, { capture: true, passive: true });
+            var active = document.activeElement;
+            if (active && /^(input|textarea)$/i.test(active.tagName || "")) report(active);
+          })();
+
+          // Each frame says hello once, so a change of polarity can be sent to it
+          // later: script run against the web view reaches the top document only, and
+          // the frames a page is built from — an embedded player, an ad — would keep
+          // the old rule until they were reloaded.
+          if (!window.__agFrameSaid) {
+            window.__agFrameSaid = true;
+            try { window.webkit.messageHandlers.browse.postMessage({ name: 'frame' }); } catch (e) {}
+          }
 
           \(SelectionReporter.script(handler: "browse"))
 
@@ -141,17 +239,33 @@ struct WebTint {
                 { configurable: true, get: function () { return false; } });
             } catch (e) {}
 
-            var pin = function () {
-              var list = document.getElementsByTagName("video");
+            var pinAll = function (list) {
               for (var i = 0; i < list.length; i++) {
                 list[i].setAttribute("playsinline", "");
                 list[i].setAttribute("webkit-playsinline", "");
               }
             };
+            var pin = function () {
+              pinAll(document.getElementsByTagName("video"));
+              // Players built as web components keep their <video> behind a shadow
+              // boundary, where getElementsByTagName does not look.
+              var S = window.__agShadow;
+              if (S) {
+                S.sweep(document);
+                for (var i = 0; i < S.roots.length; i++) {
+                  try { pinAll(S.roots[i].querySelectorAll("video")); } catch (e) {}
+                }
+              }
+            };
             pin();
             if (window.MutationObserver && document.documentElement) {
-              new MutationObserver(pin).observe(document.documentElement,
-                                                { childList: true, subtree: true });
+              // Settled rather than on every mutation: a walk of the whole tree is
+              // the wrong price for each node a busy page adds.
+              var pending;
+              new MutationObserver(function () {
+                clearTimeout(pending);
+                pending = setTimeout(pin, 300);
+              }).observe(document.documentElement, { childList: true, subtree: true });
             }
           })();
 

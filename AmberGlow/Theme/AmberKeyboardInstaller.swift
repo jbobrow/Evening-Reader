@@ -70,6 +70,15 @@ final class AmberKeyboardInstaller {
         render()
     }
 
+    /// Asks whatever has the keyboard to let it go, now. Used where a field is about to
+    /// leave the screen with the keyboard still up: resigned first, the keyboard goes
+    /// down the way it always does; removed with the keyboard still standing, it is
+    /// simply gone from one frame to the next.
+    static func putAway() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil, from: nil, for: nil)
+    }
+
     /// The palette can change while a field is up, so the board is re-rendered rather
     /// than rebuilt — rebuilding would drop the shift and plane state.
     func apply(_ style: Style) {

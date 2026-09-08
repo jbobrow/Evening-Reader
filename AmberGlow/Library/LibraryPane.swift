@@ -93,17 +93,31 @@ struct LibraryPane: View {
             AmberSegmented(selection: $scope, options: Library.Scope.allCases, label: \.label)
 
             if library.clipboardMayHoldLink && scope != .archive {
-                Button {
-                    library.addFromClipboard()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "doc.on.clipboard")
-                        Text("Save the link on your clipboard")
-                        Spacer()
+                // The offer, with the system's paste control as the key that takes it
+                // up — the one way to read the clipboard without the system asking.
+                HStack(spacing: 10) {
+                    Image(systemName: "doc.on.clipboard")
+                    Text("Save the link on your clipboard")
+                    Spacer(minLength: 8)
+                    // Held at the size the system wants for it. Squeezed below its
+                    // own minimum the control keeps its face and drops its label.
+                    AmberPasteControl(palette: settings.palette, fill: 0.70, fontSize: 13,
+                                      cornerStyle: .medium) { pasted in
+                        library.add(pasted: pasted)
                     }
-                    .font(.system(size: 13))
+                    .frame(width: 84, height: 34)
                 }
-                .buttonStyle(AmberButtonStyle(kind: .outline, size: 13))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(amber.ink)
+                .padding(.leading, 14)
+                .padding(.trailing, 5)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(amber.color(0.82, opacity: 0.9))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(amber.color(0.40), lineWidth: 1))
+                )
             }
         }
         .padding(.horizontal, 14)
