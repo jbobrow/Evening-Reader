@@ -72,7 +72,11 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         web = WKWebView(frame: .zero, configuration: config)
         web.allowsBackForwardNavigationGestures = true
         web.allowsLinkPreview = false
-        web.customUserAgent = ArticleExtractor.desktopUserAgent
+        // The desktop page on an iPad, the phone page on a phone — what Safari does.
+        // The desktop page on a phone was laid out for far more width than there is:
+        // content ran off the left edge and video sat letterboxed in a column meant
+        // for a wider layout.
+        web.customUserAgent = ArticleExtractor.browsingUserAgent
         // Opaque, and backed with white.
         //
         // The page is filtered on its way to the ramp — luminance, then squeezed into the
@@ -370,6 +374,28 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
                          width: dict["w"] as? Double ?? 0, height: dict["h"] as? Double ?? 0),
             isEditable: dict["editable"] as? Bool ?? false
         )
+    }
+
+    /// Lets the page go when the browser is closed.
+    ///
+    /// The user content controller holds its message handler strongly, and this model
+    /// is that handler while it holds the web view that holds the controller — a ring
+    /// nothing ever let go of. Every browser closed left its page alive behind the
+    /// screen, still running: a YouTube page kept its player, and WebKit lets one
+    /// media session play at a time in a process, so the next YouTube page opened
+    /// could not — "playback error", on every video after the first. The ring is
+    /// broken here, and the page is sent to nothing first so whatever it was playing
+    /// stops now rather than when the view is finally freed.
+    func retire() {
+        probeTask?.cancel()
+        observations = []
+        web.stopLoading()
+        web.navigationDelegate = nil
+        web.uiDelegate = nil
+        let controller = web.configuration.userContentController
+        controller.removeAllUserScripts()
+        controller.removeScriptMessageHandler(forName: "browse")
+        web.loadHTMLString("", baseURL: nil)
     }
 
     /// (Re)install the page-side preparation. The grayscale + amber mapping itself is

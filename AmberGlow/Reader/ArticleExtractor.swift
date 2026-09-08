@@ -227,6 +227,29 @@ final class ArticleExtractor: NSObject {
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 " +
         "(KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
+    /// What Safari on an iPhone says it is. For *browsing* on a phone, as against
+    /// extracting: a desktop page laid out for a thousand points and shown on three
+    /// hundred and ninety comes out with its edges past the glass and its video
+    /// letterboxed in a column meant for a wider one. Safari itself asks for the
+    /// desktop page on an iPad and the phone page on a phone; so does the browser.
+    ///
+    /// With the version the device is really running, not a fixed one: YouTube reads
+    /// the version to decide how to stream, and told it was iOS 17.0 — before Managed
+    /// Media Source — it fell back to HLS, and its HLS for a 4K video failed to decode
+    /// in the web view where Safari, saying what it was, played the same video.
+    static var phoneUserAgent: String {
+        let version = UIDevice.current.systemVersion
+        let major = version.split(separator: ".").first.map(String.init) ?? version
+        return "Mozilla/5.0 (iPhone; CPU iPhone OS \(version.replacingOccurrences(of: ".", with: "_")) " +
+            "like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) " +
+            "Version/\(major).0 Mobile/15E148 Safari/604.1"
+    }
+
+    /// The one the browser uses on this device.
+    static var browsingUserAgent: String {
+        UIDevice.current.userInterfaceIdiom == .phone ? phoneUserAgent : desktopUserAgent
+    }
+
     static var activeWindow: UIWindow? {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }

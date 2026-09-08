@@ -76,6 +76,9 @@ struct BrowseScreen: View {
                 addressFocused = true
             }
         }
+        // The page goes with the browser: stopped, and let go of. Left to the view's
+        // own release it would never have gone — see `BrowserModel.retire`.
+        .onDisappear { model.retire() }
         .onChange(of: settings.showTexture) { _, grid in
             model.applyTint(showGrid: grid, isNight: isNight)
             WebKeyboardBridge.shared.refresh(palette: settings.palette, showsTexture: grid)
