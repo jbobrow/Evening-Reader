@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Type
 
@@ -56,6 +57,11 @@ struct AmberSlider: View {
         let span = range.upperBound - range.lowerBound
         guard span > 0 else { return 0 }
         return clamp01((value - range.lowerBound) / span)
+    }
+
+    private func set(from x: Double, usable: Double) {
+        let f = clamp01((x - thumbWidth / 2) / usable)
+        value = range.lowerBound + f * (range.upperBound - range.lowerBound)
     }
 
     var body: some View {
@@ -119,14 +125,18 @@ struct AmberSlider: View {
                         .position(x: x, y: geo.size.height / 2)
                 }
                 .frame(height: geo.size.height)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { g in
-                            let f = clamp01((g.location.x - thumbWidth / 2) / usable)
-                            value = range.lowerBound + f * (range.upperBound - range.lowerBound)
-                        }
-                )
+                // The slider sits in a panel that scrolls, and either the slider has
+                // the touch or the page does — decided the moment the finger lands. On
+                // the thumb, the slider owns everything that follows, in whatever
+                // direction the finger goes; anywhere else, the page does, and the
+                // slider does not move. Handled in UIKit, where a recognizer can begin
+                // at touch-down and shut the scrolling out, or fail and leave it the
+                // touch — a SwiftUI drag could be made to do neither. See `HandleDrag`.
+                .overlay {
+                    HandleDrag(handleX: x, handleWidth: thumbWidth) { centre in
+                        set(from: centre, usable: usable)
+                    }
+                }
             }
             .frame(height: thumbHeight)
 
@@ -137,6 +147,86 @@ struct AmberSlider: View {
                     .frame(width: 18)
             }
         }
+    }
+}
+
+/// A drag of the slider's handle, and nothing else.
+///
+/// The view covers the track. A touch that lands on the handle begins the drag at
+/// once — before the finger has moved at all — which is what keeps the page from
+/// scrolling under it: a recognizer that has begun shuts the others out. A touch that
+/// lands anywhere else fails at once, and the page has it. There is no tap: the track
+/// is not a control, only the handle is.
+private struct HandleDrag: UIViewRepresentable {
+    /// The handle's centre, in the view's coordinates.
+    var handleX: CGFloat
+    var handleWidth: CGFloat
+    /// Where the handle's centre should move to.
+    var onChange: (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        let drag = HandleRecognizer(target: context.coordinator, action: #selector(Coordinator.drag(_:)))
+        view.addGestureRecognizer(drag)
+        context.coordinator.recognizer = drag
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.handleX = handleX
+        coordinator.onChange = onChange
+        // A little wider than the handle draws, for the finger's sake.
+        let reach = handleWidth / 2 + 10
+        coordinator.recognizer?.hits = { point in abs(point.x - handleX) <= reach }
+    }
+
+    final class Coordinator: NSObject {
+        var handleX: CGFloat = 0
+        var onChange: (CGFloat) -> Void = { _ in }
+        weak var recognizer: HandleRecognizer?
+        /// Where on the handle the finger landed, so the handle follows the finger
+        /// from where it was rather than jumping to centre itself under it.
+        private var grip: CGFloat = 0
+
+        @objc func drag(_ g: HandleRecognizer) {
+            guard let view = g.view else { return }
+            let x = g.location(in: view).x
+            switch g.state {
+            case .began: grip = x - handleX
+            case .changed: onChange(x - grip)
+            default: break
+            }
+        }
+    }
+}
+
+/// Begins on touch-down if the touch is on the handle, and fails on touch-down if not.
+private final class HandleRecognizer: UIGestureRecognizer {
+    var hits: (CGPoint) -> Bool = { _ in false }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard state == .possible, let touch = touches.first, let view else { return }
+        state = hits(touch.location(in: view)) ? .began : .failed
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        if state == .began || state == .changed { state = .changed }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        if state == .began || state == .changed { state = .ended }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        if state == .began || state == .changed { state = .cancelled }
     }
 }
 
