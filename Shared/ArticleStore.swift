@@ -466,6 +466,18 @@ final class ArticleStore {
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
+    /// What the body file is right now, as one string: its size and when it was last
+    /// written, or "" when there is no file. Changes exactly when the text would read
+    /// differently, so it is the key a reader can hold the text under.
+    func bodyStamp(for article: SavedArticle) -> String {
+        let url = bodyURL(for: article)
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        else { return "" }
+        let size = values.fileSize ?? 0
+        let stamp = values.contentModificationDate?.timeIntervalSinceReferenceDate ?? 0
+        return "\(size)|\(stamp)"
+    }
+
     /// The saved text exists but is still on its way down from iCloud.
     func isBodyDownloading(for article: SavedArticle) -> Bool {
         isDownloading(bodyURL(for: article))

@@ -136,7 +136,9 @@ struct ReaderWebView: UIViewRepresentable {
         init(_ parent: ReaderWebView) { self.parent = parent }
 
         func loadIfNeeded(_ parent: ReaderWebView) {
-            let key = parent.article.id.uuidString + "|" + String(parent.body.count)
+            // Bytes rather than characters: `count` on a String walks every grapheme,
+            // which for a novel is real work, and this runs on every update.
+            let key = parent.article.id.uuidString + "|" + String(parent.body.utf8.count)
             guard key != loadedKey, let web else { return }
             loadedKey = key
             didRestore = false

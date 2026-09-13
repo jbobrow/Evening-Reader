@@ -52,6 +52,8 @@ struct DetailPane: View {
     /// rather than while the callout is being laid out — the answer can change while the
     /// app is open, but not between one frame and the next.
     @State private var canAskAI = false
+    /// The open article's text, read once — see `articleContent`.
+    @State private var loadedBody: Library.LoadedBody?
 
     /// What the reader asked of a selection that the page cannot answer itself.
     enum ReaderPanel: Identifiable {
@@ -87,6 +89,8 @@ struct DetailPane: View {
                 splash
             }
         }
+        // A novel's text is not kept around once nothing is reading it.
+        .onChange(of: article?.id) { _, id in if id == nil { loadedBody = nil } }
         .overlay { markCard }
         .modifier(AmberFullScreenPresentation(isPresented: $showHighlights) {
             if let article {
@@ -471,124 +475,12 @@ struct DetailPane: View {
                 .background { HeightReader(height: $pageHeight) }
                 .onPreferenceChange(ScrubberFootprint.self) { scrubberHeight = $0 }
                 .onDisappear { pdfPager.stop() }
-            } else if let body = library.body(for: article) {
-                // The page runs to the physical bottom of the glass; the scrubber does
-                // not. It is a control, so it stays a sibling of the web view rather than
-                // an overlay on it — that keeps it inside the safe area and off the home
-                // indicator, which on a phone reaches 34pt up from the bezel.
-                ZStack(alignment: .bottomTrailing) {
-                    ReaderWebView(
-                        article: article,
-                        body: body,
-                        palette: settings.palette,
-                        settings: settings,
-                        onProgress: { p in
-                            liveProgress = p
-                            library.setScroll(p, for: article)
-                        },
-                        onOpenLink: onOpenLink,
-                        onTap: toggleChrome,
-                        onSelection: noteSelection,
-                        onPages: { page, total, percent in
-                            self.page = page
-                            self.pageCount = total
-                            self.percent = percent
-                        },
-                        onChapter: { anchor in currentChapterAnchor = anchor },
-                        highlights: highlights.list(for: article),
-                        revealHighlight: revealHighlight,
-                        onRevealed: reachedPassage,
-                        onHighlight: { mark in keep(mark, in: article) },
-                        onMarkTap: { id in
-                            guard let mark = highlights.highlight(id, in: article) else { return }
-                            withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
-                        },
-                        bridge: bridge
-                    )
-                    .id(article.id)
-                    .task(id: article.id) {
-                        liveProgress = article.lastScroll
-                        chapters = article.isBook ? BookContents.read(for: article, store: .shared) : []
-                        currentChapterAnchor = nil
-                    }
-                    .modifier(AddLinkPresentation(isCompact: isCompact, isPresented: $showContents) {
-                        ContentsSheet(article: article, chapters: chapters,
-                                     currentAnchor: currentChapterAnchor) { chapter in
-                            bridge.runJavaScript("window.__ag && window.__ag.goto('\(chapter.href)');")
-                        }
-                    })
-                    // The ground goes on the page, not on the control, so it can be the
-                    // page — and it runs to the bezel with it, so the pool has no edge
-                    // where the safe area starts. Under the callout, so a selection made
-                    // down in that corner still reads.
-                    .overlay {
-                        if pageCount > 1, isCompact, scrubberHeight > 0 {
-                            ScrubberGround(height: scrubberHeight)
-                                .transition(.opacity.animation(.easeOut(duration: 0.22)))
-                        }
-                    }
-                    // The callout is drawn by the app, over the page, because the system
-                    // one is presented in its own window and cannot be given a colour.
-                    .overlay {
-                        GeometryReader { geo in
-                            if let selection {
-                                AmberEditMenuOverlay(
-                                    selection: selection,
-                                    container: geo.size,
-                                    actions: actions(for: selection)
-                                ) { action in
-                                    if !handleShared(action, on: selection, in: article) {
-                                        WebEditor.perform(action, on: bridge, selection: selection,
-                                                          search: { onOpenLink(searchURL(for: $0)) })
-                                    }
-                                    withAnimation(.easeOut(duration: 0.14)) { self.selection = nil }
-                                }
-                            }
-                        }
-                    }
-                    // The web view is otherwise inset by the home-indicator safe area,
-                    // which left a visible ledge where the document's fill stopped.
-                    .ignoresSafeArea(.container, edges: .bottom)
-
-                    if pageCount > 1 {
-                        PageScrubber(page: page,
-                                     total: pageCount,
-                                     percent: percent,
-                                     style: Binding(get: { settings.progressStyle },
-                                                    set: { settings.progressStyle = $0 }),
-                                     available: pageHeight) { velocity in
-                            bridge.runJavaScript("window.__agPager && window.__agPager.autoScroll(\(velocity));")
-                        }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 18)
-                    }
-                }
-                // Measured from behind rather than around: the scrubber's tap is a
-                // zero-distance drag competing with WebKit's own recognisers, and it
-                // does not survive another layout container being put in its way.
-                .background { HeightReader(height: $pageHeight) }
-                .onPreferenceChange(ScrubberFootprint.self) { scrubberHeight = $0 }
             } else {
-                message(icon: "doc.questionmark",
-                        title: "The saved text went missing.",
-                        detail: "Read it again to fetch a fresh copy.") {
-                    Button("Read it again") { library.retry(article) }
-                        .buttonStyle(AmberButtonStyle(kind: .solid))
-                }
+                articleContent(for: article)
             }
 
         case .pending:
-            VStack(spacing: 18) {
-                AmberSpinner()
-                Text(article.isBook ? "Opening the book…" : "Setting the type…")
-                    .font(.system(size: 15, design: .serif))
-                    .foregroundStyle(amber.inkMuted)
-                Text(article.sourceLabel)
-                    .font(.system(size: 11, weight: .medium))
-                    .tracking(0.6)
-                    .foregroundStyle(amber.inkFaint)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            settingType(for: article)
 
         case .failed where article.isBook:
             message(icon: "text.badge.xmark",
@@ -610,6 +502,149 @@ struct DetailPane: View {
                 }
             }
         }
+    }
+
+    /// An article's page, from the text held for it — see `Library.LoadedBody`.
+    ///
+    /// Held rather than read here. This view is redrawn on every scroll report, which
+    /// is every frame of a scroll, and reading the file on each of them was a novel's
+    /// worth of bytes per frame. The text is read once, off this thread, and again only
+    /// when its stamp moves — the file rewritten, or the article read again.
+    @ViewBuilder
+    private func articleContent(for article: SavedArticle) -> some View {
+        let stamp = library.bodyStamp(for: article)
+        ZStack {
+            if let loaded = loadedBody, loaded.stamp == stamp {
+                if let body = loaded.text {
+                    articlePage(for: article, body: body)
+                } else {
+                    message(icon: "doc.questionmark",
+                            title: "The saved text went missing.",
+                            detail: "Read it again to fetch a fresh copy.") {
+                        Button("Read it again") { library.retry(article) }
+                            .buttonStyle(AmberButtonStyle(kind: .solid))
+                    }
+                }
+            } else {
+                settingType(for: article)
+            }
+        }
+        .task(id: stamp) {
+            loadedBody = await library.loadBody(for: article, stamp: stamp)
+        }
+    }
+
+    private func settingType(for article: SavedArticle) -> some View {
+        VStack(spacing: 18) {
+            AmberSpinner()
+            Text(article.isBook ? "Opening the book…" : "Setting the type…")
+                .font(.system(size: 15, design: .serif))
+                .foregroundStyle(amber.inkMuted)
+            Text(article.sourceLabel)
+                .font(.system(size: 11, weight: .medium))
+                .tracking(0.6)
+                .foregroundStyle(amber.inkFaint)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func articlePage(for article: SavedArticle, body: String) -> some View {
+        // The page runs to the physical bottom of the glass; the scrubber does
+        // not. It is a control, so it stays a sibling of the web view rather than
+        // an overlay on it — that keeps it inside the safe area and off the home
+        // indicator, which on a phone reaches 34pt up from the bezel.
+        ZStack(alignment: .bottomTrailing) {
+            ReaderWebView(
+                article: article,
+                body: body,
+                palette: settings.palette,
+                settings: settings,
+                onProgress: { p in
+                    liveProgress = p
+                    library.setScroll(p, for: article)
+                },
+                onOpenLink: onOpenLink,
+                onTap: toggleChrome,
+                onSelection: noteSelection,
+                onPages: { page, total, percent in
+                    self.page = page
+                    self.pageCount = total
+                    self.percent = percent
+                },
+                onChapter: { anchor in currentChapterAnchor = anchor },
+                highlights: highlights.list(for: article),
+                revealHighlight: revealHighlight,
+                onRevealed: reachedPassage,
+                onHighlight: { mark in keep(mark, in: article) },
+                onMarkTap: { id in
+                    guard let mark = highlights.highlight(id, in: article) else { return }
+                    withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
+                },
+                bridge: bridge
+            )
+            .id(article.id)
+            .task(id: article.id) {
+                liveProgress = article.lastScroll
+                chapters = article.isBook ? BookContents.read(for: article, store: .shared) : []
+                currentChapterAnchor = nil
+            }
+            .modifier(AddLinkPresentation(isCompact: isCompact, isPresented: $showContents) {
+                ContentsSheet(article: article, chapters: chapters,
+                             currentAnchor: currentChapterAnchor) { chapter in
+                    bridge.runJavaScript("window.__ag && window.__ag.goto('\(chapter.href)');")
+                }
+            })
+            // The ground goes on the page, not on the control, so it can be the
+            // page — and it runs to the bezel with it, so the pool has no edge
+            // where the safe area starts. Under the callout, so a selection made
+            // down in that corner still reads.
+            .overlay {
+                if pageCount > 1, isCompact, scrubberHeight > 0 {
+                    ScrubberGround(height: scrubberHeight)
+                        .transition(.opacity.animation(.easeOut(duration: 0.22)))
+                }
+            }
+            // The callout is drawn by the app, over the page, because the system
+            // one is presented in its own window and cannot be given a colour.
+            .overlay {
+                GeometryReader { geo in
+                    if let selection {
+                        AmberEditMenuOverlay(
+                            selection: selection,
+                            container: geo.size,
+                            actions: actions(for: selection)
+                        ) { action in
+                            if !handleShared(action, on: selection, in: article) {
+                                WebEditor.perform(action, on: bridge, selection: selection,
+                                                  search: { onOpenLink(searchURL(for: $0)) })
+                            }
+                            withAnimation(.easeOut(duration: 0.14)) { self.selection = nil }
+                        }
+                    }
+                }
+            }
+            // The web view is otherwise inset by the home-indicator safe area,
+            // which left a visible ledge where the document's fill stopped.
+            .ignoresSafeArea(.container, edges: .bottom)
+
+            if pageCount > 1 {
+                PageScrubber(page: page,
+                             total: pageCount,
+                             percent: percent,
+                             style: Binding(get: { settings.progressStyle },
+                                            set: { settings.progressStyle = $0 }),
+                             available: pageHeight) { velocity in
+                    bridge.runJavaScript("window.__agPager && window.__agPager.autoScroll(\(velocity));")
+                }
+                .padding(.trailing, 16)
+                .padding(.bottom, 18)
+            }
+        }
+        // Measured from behind rather than around: the scrubber's tap is a
+        // zero-distance drag competing with WebKit's own recognisers, and it
+        // does not survive another layout container being put in its way.
+        .background { HeightReader(height: $pageHeight) }
+        .onPreferenceChange(ScrubberFootprint.self) { scrubberHeight = $0 }
     }
 
     @ViewBuilder

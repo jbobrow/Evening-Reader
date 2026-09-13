@@ -91,6 +91,25 @@ final class Library {
         store.readBody(for: article)
     }
 
+    /// The saved text, read once and held by the reader under this stamp. The reader
+    /// re-reads only when the stamp moves — the file rewritten, or the article read
+    /// again — rather than on every render, which for a page that reports its scroll
+    /// every frame was every frame, and for a novel was megabytes each time.
+    struct LoadedBody: Equatable {
+        var stamp: String
+        var text: String?
+    }
+
+    func bodyStamp(for article: SavedArticle) -> String {
+        "\(article.id)|\(article.state.rawValue)|\(store.bodyStamp(for: article))"
+    }
+
+    func loadBody(for article: SavedArticle, stamp: String) async -> LoadedBody {
+        let store = self.store
+        let text = await Task.detached(priority: .userInitiated) { store.readBody(for: article) }.value
+        return LoadedBody(stamp: stamp, text: text)
+    }
+
     func documentURL(for article: SavedArticle) -> URL {
         store.documentURL(for: article)
     }

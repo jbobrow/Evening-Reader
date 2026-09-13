@@ -1,4 +1,5 @@
 import SwiftUI
+import ImageIO
 
 struct LibraryPane: View {
     @Environment(Library.self) private var library
@@ -284,10 +285,18 @@ struct LibraryPane: View {
 private struct CoverThumbnail: View {
     @Environment(\.amber) private var amber
     let url: URL
+    @State private var image: UIImage?
+
+    init(url: URL) {
+        self.url = url
+        // One already made is used at once, so a row scrolled back into view does not
+        // show its cover arriving a frame late.
+        _image = State(initialValue: CoverThumbnails.cached(url))
+    }
 
     var body: some View {
         Group {
-            if let image = UIImage(contentsOfFile: url.path) {
+            if let image {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -303,6 +312,45 @@ private struct CoverThumbnail: View {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .strokeBorder(amber.rule, lineWidth: 1)
         }
+        .task(id: url) {
+            if image == nil { image = await CoverThumbnails.image(for: url) }
+        }
+    }
+}
+
+/// Covers at the size the list draws them, made off the main thread and kept.
+///
+/// A cover is drawn for a bookstore, not a 38pt row: decoding one whole on the main
+/// thread — which `UIImage(contentsOfFile:)` in a row's body did, on every render —
+/// is a stall per book per scroll. ImageIO can decode straight to a thumbnail instead,
+/// which never holds the full picture at all.
+enum CoverThumbnails {
+    private static let cache = NSCache<NSURL, UIImage>()
+    /// Three device pixels per point, at the row's 54pt height, with some room over.
+    private static let maxPixel: CGFloat = 200
+
+    static func cached(_ url: URL) -> UIImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    static func image(for url: URL) async -> UIImage? {
+        if let hit = cached(url) { return hit }
+        let made = await Task.detached(priority: .utility) { Self.downsample(url) }.value
+        if let made { cache.setObject(made, forKey: url as NSURL) }
+        return made
+    }
+
+    private nonisolated static func downsample(_ url: URL) -> UIImage? {
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else { return nil }
+        let options = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ] as CFDictionary
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return nil }
+        return UIImage(cgImage: cg)
     }
 }
 

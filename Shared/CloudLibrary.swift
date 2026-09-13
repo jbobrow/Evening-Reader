@@ -74,25 +74,53 @@ final class CloudLibrary {
         query = nil
     }
 
+    /// Files already asked for, and when, so a placeholder still on its way is not
+    /// asked for again on every update the query reports while it comes down.
+    private var requested: [String: Date] = [:]
+
     private func harvest(_ query: NSMetadataQuery) {
         query.disableUpdates()
         defer { query.enableUpdates() }
 
-        var pending = 0
+        var waiting: [(rank: Int, url: URL)] = []
         for i in 0..<query.resultCount {
             guard let item = query.result(at: i) as? NSMetadataItem,
                   let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL else { continue }
             let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String
             if status != NSMetadataUbiquitousItemDownloadingStatusCurrent {
-                // Ask for it. This is what turns a placeholder into a readable file.
-                try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-                pending += 1
+                waiting.append((Self.rank(url), url))
             }
         }
+
+        // Everything is asked for — a saved article has to open with no network, which
+        // is the point of saving it — but in an order: what the list is drawn from
+        // first, then the text, then the pictures and the books' own files. A library
+        // arriving on a new device reads before it is illustrated.
+        let now = Date.now
+        for (_, url) in waiting.sorted(by: { $0.rank < $1.rank }) {
+            if let last = requested[url.path], now.timeIntervalSince(last) < 60 { continue }
+            requested[url.path] = now
+            // Ask for it. This is what turns a placeholder into a readable file.
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        }
+        if waiting.isEmpty { requested.removeAll() }
+
         // Tell the library either way: files that already arrived are worth reloading for,
         // and the ones still coming will trigger another update when they land.
         NotificationCenter.default.post(name: Self.didChange, object: nil,
-                                        userInfo: ["pending": pending])
+                                        userInfo: ["pending": waiting.count])
+    }
+
+    /// Lower comes down first.
+    private static func rank(_ url: URL) -> Int {
+        switch url.lastPathComponent {
+        case "article.json", "site.json": return 0
+        case "contents.json", "highlights.json": return 1
+        case "body.html", "body.md", "icon.png": return 2
+        case "document.pdf": return 3
+        case "book.epub": return 5
+        default: return url.pathComponents.contains("assets") ? 4 : 3
+        }
     }
 
     deinit { stop() }
