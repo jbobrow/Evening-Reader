@@ -383,6 +383,22 @@ struct DetailPane: View {
     @ViewBuilder
     private func content(for article: SavedArticle) -> some View {
         switch article.state {
+        case .ready where library.isDownloading(article):
+            // Saved on another device, and iCloud has not brought it here yet. Reading a
+            // placeholder would hold the app until it did — see `ArticleStore.isReadable`
+            // — so the page waits visibly instead, and is redrawn when the file lands.
+            VStack(spacing: 18) {
+                AmberSpinner()
+                Text("Fetching from iCloud…")
+                    .font(.system(size: 15, design: .serif))
+                    .foregroundStyle(amber.inkMuted)
+                Text(article.sourceLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .tracking(0.6)
+                    .foregroundStyle(amber.inkFaint)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
         case .ready:
             if article.isPDF {
                 // The same furniture an article gets. A PDF is a different kind of

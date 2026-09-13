@@ -50,7 +50,6 @@ final class Sites {
 
     init(store: ArticleStore = .shared) {
         self.store = store
-        refreshFromDisk()
         observer = NotificationCenter.default.addObserver(
             forName: CloudLibrary.didChange, object: nil, queue: .main
         ) { [weak self] _ in
@@ -58,32 +57,47 @@ final class Sites {
         }
     }
 
+    /// Read the folders again, without waiting.
     func refreshFromDisk() {
+        Task { await reload() }
+    }
+
+    /// Reads the folders off this thread and replaces the list when they are in. The
+    /// sites live beside the library, in iCloud with it, and a folder there can be a
+    /// placeholder; see `ArticleStore.isReadable`.
+    func reload() async {
+        let root = store.sitesRoot
+        let store = self.store
+        let (found, map) = await Task.detached(priority: .userInitiated) {
+            Self.scan(root: root, store: store)
+        }.value
+        sites = found
+        folders = map
+        icons.removeAll()
+    }
+
+    private nonisolated static func scan(root: URL, store: ArticleStore) -> ([Site], [UUID: URL]) {
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(at: store.sitesRoot,
+        guard let entries = try? fm.contentsOfDirectory(at: root,
                                                         includingPropertiesForKeys: [.isDirectoryKey],
                                                         options: [.skipsHiddenFiles])
-        else {
-            sites = []
-            folders = [:]
-            return
-        }
+        else { return ([], [:]) }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         var found: [Site] = []
         var map: [UUID: URL] = [:]
         for dir in entries {
             let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-            guard isDir,
-                  let data = try? Data(contentsOf: dir.appendingPathComponent(Self.metadataName)),
+            guard isDir else { continue }
+            let meta = dir.appendingPathComponent(Self.metadataName)
+            guard store.isReadable(meta),
+                  let data = try? Data(contentsOf: meta),
                   let site = try? decoder.decode(Site.self, from: data) else { continue }
             map[site.id] = dir
             found.append(site)
         }
         // In the order they were added, like anything laid out by hand.
-        sites = found.sorted { $0.addedAt < $1.addedAt }
-        folders = map
-        icons.removeAll()
+        return (found.sorted { $0.addedAt < $1.addedAt }, map)
     }
 
     func site(forHost host: String) -> Site? {
@@ -93,8 +107,10 @@ final class Sites {
     /// The site's own icon, if one was fetched when it was added.
     func icon(for site: Site) -> UIImage? {
         if let cached = icons[site.id] { return cached }
-        guard let dir = folders[site.id],
-              let data = try? Data(contentsOf: dir.appendingPathComponent(Self.iconName)),
+        guard let dir = folders[site.id] else { return nil }
+        let file = dir.appendingPathComponent(Self.iconName)
+        guard store.isReadable(file),
+              let data = try? Data(contentsOf: file),
               let image = UIImage(data: data) else { return nil }
         icons[site.id] = image
         return image

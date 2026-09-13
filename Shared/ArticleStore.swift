@@ -34,7 +34,24 @@ final class ArticleStore {
     private let legacyAssetsDir: URL
     private let queue = DispatchQueue(label: "com.amberglow.store", qos: .userInitiated)
     /// article id -> its folder, so an amber-asset:// URL can be resolved without a scan.
+    /// Under its own lock rather than the queue: it is looked up from the main thread on
+    /// every render, and must not wait behind a scan the queue is in the middle of.
     private var folders: [UUID: URL] = [:]
+    private let foldersLock = NSLock()
+
+    private func knownFolder(_ id: UUID) -> URL? {
+        foldersLock.withLock { folders[id] }
+    }
+
+    private func setFolder(_ url: URL?, for id: UUID) {
+        foldersLock.withLock { folders[id] = url }
+    }
+
+    /// Where the library was last found in iCloud, so the next launch can start there.
+    ///
+    /// The app's own defaults rather than the group's: the share extension has no iCloud
+    /// entitlement and must go on writing to the app group, whatever the app remembers.
+    private static let cloudRootKey = "store.cloudRoot"
 
     static let shared = ArticleStore()
 
@@ -56,6 +73,68 @@ final class ArticleStore {
         legacyAssetsDir = localRoot.appendingPathComponent("Assets", isDirectory: true)
         try? fm.createDirectory(at: localRoot, withIntermediateDirectories: true)
         migrateIfNeeded()
+
+        // Where the library was last time. Asking iCloud where its container is takes a
+        // round trip to a daemon and cannot be done here; the answer does not change
+        // between launches, and the folder is either still there or it is not. Starting
+        // from it means the first read is of the real library rather than of an app
+        // group folder that was emptied into iCloud the first time it synced.
+        if let remembered = UserDefaults.standard.url(forKey: Self.cloudRootKey),
+           fm.fileExists(atPath: remembered.path) {
+            root = remembered
+            isCloud = true
+        }
+    }
+
+    /// Runs `work` on the store's own queue and hands back what it returns, without
+    /// holding whichever thread asked. Everything that scans or moves the library goes
+    /// through here rather than `queue.sync`: with the library in iCloud, a read can
+    /// wait on the network, and the main thread is the one place that must never happen.
+    private func onQueue<T>(_ work: @escaping () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: work()) }
+        }
+    }
+
+    // MARK: - What can be read right now
+
+    /// Whether a file in the store can be read without waiting on iCloud.
+    ///
+    /// A file that exists in the container is not necessarily on the device: iCloud
+    /// leaves what has not been asked for as a placeholder, and a plain read of one
+    /// blocks until the bytes have come down — for as long as that takes, which on a
+    /// poor connection is longer than the watchdog allows. So the question is asked
+    /// first. A placeholder is asked for, so that it stops being one, and reported as
+    /// not yet readable; the metadata query says when it has landed.
+    func isReadable(_ url: URL) -> Bool {
+        guard isCloud,
+              let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+                  .ubiquitousItemDownloadingStatus
+        else { return true }
+        guard status == .notDownloaded else { return true }
+        requestDownload(url)
+        return false
+    }
+
+    /// Files already asked for, and when. The question is asked wherever a file is
+    /// about to be read — which for a page can be every frame — and the daemon does
+    /// not need telling every frame.
+    private var requested: [String: Date] = [:]
+
+    private func requestDownload(_ url: URL) {
+        let now = Date.now
+        let due = foldersLock.withLock { () -> Bool in
+            if let last = requested[url.path], now.timeIntervalSince(last) < 10 { return false }
+            requested[url.path] = now
+            return true
+        }
+        guard due else { return }
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+    }
+
+    /// True when a file exists in the library but has not come down from iCloud yet.
+    func isDownloading(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path) && !isReadable(url)
     }
 
     // MARK: - iCloud
@@ -69,10 +148,12 @@ final class ArticleStore {
     /// Returns true when the library is in iCloud afterwards.
     @discardableResult
     func adoptCloud() async -> Bool {
-        guard !isCloud, let cloud = await CloudLibrary.documentsDirectory() else { return isCloud }
+        guard let cloud = await CloudLibrary.documentsDirectory() else { return isCloud }
+        // Already there, and it is still where it was.
+        if isCloud, cloud == root { return true }
         let fm = FileManager.default
         let local = localRoot
-        queue.sync {
+        await onQueue {
             if let entries = try? fm.contentsOfDirectory(at: local,
                                                          includingPropertiesForKeys: [.isDirectoryKey],
                                                          options: [.skipsHiddenFiles]) {
@@ -90,9 +171,10 @@ final class ArticleStore {
                     try? fm.setUbiquitous(true, itemAt: dir, destinationURL: destination)
                 }
             }
-            root = cloud
-            isCloud = true
-            folders.removeAll()
+            self.root = cloud
+            self.isCloud = true
+            self.foldersLock.withLock { self.folders.removeAll() }
+            UserDefaults.standard.set(cloud, forKey: Self.cloudRootKey)
         }
         return true
     }
@@ -101,18 +183,18 @@ final class ArticleStore {
     ///
     /// The extension has no iCloud entitlement — it writes where it can, and the app
     /// carries it the rest of the way on the next launch or foreground.
-    func drainInbox() {
+    func drainInbox() async {
         guard isCloud else { return }
         let fm = FileManager.default
         let inbox = localRoot
-        queue.sync {
+        await onQueue {
             guard let entries = try? fm.contentsOfDirectory(at: inbox,
                                                             includingPropertiesForKeys: [.isDirectoryKey],
                                                             options: [.skipsHiddenFiles]) else { return }
             for dir in entries {
                 let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
                 guard isDir else { continue }
-                let destination = root.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+                let destination = self.root.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
                 if dir.lastPathComponent == Self.sitesName {
                     Self.adoptChildren(of: dir, into: destination, droppingDuplicates: true)
                     continue
@@ -168,9 +250,9 @@ final class ArticleStore {
     private static let allowedSidecars: Set<String> = ["contents.json", "highlights.json"]
 
     func folder(for article: SavedArticle) -> URL {
-        if let known = queue.sync(execute: { folders[article.id] }) { return known }
+        if let known = knownFolder(article.id) { return known }
         let url = root.appendingPathComponent(Self.folderName(for: article), isDirectory: true)
-        queue.sync { folders[article.id] = url }
+        setFolder(url, for: article.id)
         return url
     }
 
@@ -227,26 +309,82 @@ final class ArticleStore {
 
     // MARK: - Index
 
-    func load() -> [SavedArticle] {
-        queue.sync {
-            let fm = FileManager.default
-            guard let entries = try? fm.contentsOfDirectory(at: root,
-                                                            includingPropertiesForKeys: [.isDirectoryKey],
-                                                            options: [.skipsHiddenFiles])
-            else { return [] }
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            var found: [SavedArticle] = []
-            for dir in entries {
-                let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                guard isDir else { continue }
-                let meta = dir.appendingPathComponent(Self.metadataName)
-                guard let data = try? Data(contentsOf: meta),
-                      let article = try? decoder.decode(SavedArticle.self, from: data) else { continue }
-                folders[article.id] = dir
-                found.append(article)
+    /// What a scan of the library found: the articles it could read, and the folders it
+    /// could not — ones iCloud has not brought down yet, which are asked for and left
+    /// for the next scan. A caller holding an article from an earlier scan should keep
+    /// it while its folder is on that list: the folder is there, only its bytes are not.
+    struct Snapshot {
+        var articles: [SavedArticle] = []
+        /// Folder names, as written on disk.
+        var held: [String] = []
+
+        /// Whether a folder for this article is among those still on their way down.
+        /// Matched on the id suffix a folder name carries rather than the whole name —
+        /// the title half can have been changed by another device.
+        func holds(_ article: SavedArticle) -> Bool {
+            let short = article.id.uuidString.prefix(8).lowercased()
+            return held.contains { name in
+                name == short || name.hasSuffix("--" + short)
             }
-            return found.sorted { $0.addedAt > $1.addedAt }
+        }
+    }
+
+    func load() -> [SavedArticle] { queue.sync { scan().articles } }
+
+    /// The same scan, off whichever thread asked for it.
+    func snapshot() async -> Snapshot { await onQueue { self.scan() } }
+
+    /// Reads every folder's metadata. Runs on the queue; `load()` and `snapshot()` are
+    /// the two ways in.
+    private func scan() -> Snapshot {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(at: root,
+                                                        includingPropertiesForKeys: [.isDirectoryKey],
+                                                        options: [.skipsHiddenFiles])
+        else { return Snapshot() }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var found = Snapshot()
+        for dir in entries {
+            let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            guard isDir else { continue }
+            let meta = dir.appendingPathComponent(Self.metadataName)
+            guard isReadable(meta) else {
+                found.held.append(dir.lastPathComponent)
+                continue
+            }
+            guard let data = try? Data(contentsOf: meta),
+                  let article = try? decoder.decode(SavedArticle.self, from: data) else { continue }
+            setFolder(dir, for: article.id)
+            found.articles.append(article)
+        }
+        found.articles.sort { $0.addedAt > $1.addedAt }
+        return found
+    }
+
+    // MARK: - Index cache
+
+    /// One file holding what the last scan found, kept in the app group where nothing
+    /// else has to be asked for it. It is what the shelf is drawn from on the first
+    /// frame: with the library in iCloud a scan can take a moment and can come back
+    /// short, and the opening is not the place to wait for it. Never the truth — the
+    /// folders are — only what the truth looked like last time.
+    private var indexCacheURL: URL { localRoot.appendingPathComponent("index-cache.json") }
+
+    func loadIndexCache() -> [SavedArticle]? {
+        guard let data = try? Data(contentsOf: indexCacheURL) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode([SavedArticle].self, from: data)
+    }
+
+    func writeIndexCache(_ articles: [SavedArticle]) {
+        let url = indexCacheURL
+        queue.async {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            guard let data = try? encoder.encode(articles) else { return }
+            try? data.write(to: url, options: .atomic)
         }
     }
 
@@ -257,15 +395,18 @@ final class ArticleStore {
     /// renamed to match, which is the whole point of naming folders after titles. The
     /// contents travel with it, and nothing refers to a folder by name — the asset URLs
     /// carry the article's id — so the move breaks no links.
+    ///
+    /// Queued rather than waited for. Nothing the caller does next depends on the bytes
+    /// being on disk, and the queue keeps its order — a read that follows sees the write.
     func save(_ article: SavedArticle) {
-        queue.sync {
+        queue.async {
             let fm = FileManager.default
-            let desired = root.appendingPathComponent(Self.folderName(for: article), isDirectory: true)
-            if let current = folders[article.id], current != desired,
+            let desired = self.root.appendingPathComponent(Self.folderName(for: article), isDirectory: true)
+            if let current = self.knownFolder(article.id), current != desired,
                fm.fileExists(atPath: current.path), !fm.fileExists(atPath: desired.path) {
                 try? fm.moveItem(at: current, to: desired)
             }
-            folders[article.id] = desired
+            self.setFolder(desired, for: article.id)
 
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
@@ -300,10 +441,8 @@ final class ArticleStore {
 
     func delete(_ article: SavedArticle) {
         let dir = folder(for: article)
-        queue.sync {
-            folders[article.id] = nil
-            try? FileManager.default.removeItem(at: dir)
-        }
+        setFolder(nil, for: article.id)
+        queue.async { try? FileManager.default.removeItem(at: dir) }
     }
 
     // MARK: - Body
@@ -322,7 +461,18 @@ final class ArticleStore {
     }
 
     func readBody(for article: SavedArticle) -> String? {
-        try? String(contentsOf: bodyURL(for: article), encoding: .utf8)
+        let url = bodyURL(for: article)
+        guard isReadable(url) else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    /// The saved text exists but is still on its way down from iCloud.
+    func isBodyDownloading(for article: SavedArticle) -> Bool {
+        isDownloading(bodyURL(for: article))
+    }
+
+    func isDocumentDownloading(for article: SavedArticle) -> Bool {
+        isDownloading(documentURL(for: article))
     }
 
     /// Writes the Markdown sidecar. Its absence is never an error worth surfacing: an
@@ -341,7 +491,9 @@ final class ArticleStore {
     }
 
     func readMarkdown(for article: SavedArticle) -> String? {
-        try? String(contentsOf: markdownURL(for: article), encoding: .utf8)
+        let url = markdownURL(for: article)
+        guard isReadable(url) else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
     }
 
     @discardableResult
@@ -395,7 +547,9 @@ final class ArticleStore {
 
     func readSidecar(named name: String, for article: SavedArticle) -> Data? {
         guard Self.allowedSidecars.contains(name) else { return nil }
-        return try? Data(contentsOf: folder(for: article).appendingPathComponent(name))
+        let url = folder(for: article).appendingPathComponent(name)
+        guard isReadable(url) else { return nil }
+        return try? Data(contentsOf: url)
     }
 
     // MARK: - Assets
@@ -428,15 +582,16 @@ final class ArticleStore {
               let host = url.host, let id = UUID(uuidString: host) else { return nil }
         let name = url.lastPathComponent
         guard !name.isEmpty, !name.contains("/"), name != ".", name != ".." else { return nil }
-        var dir = queue.sync { folders[id] }
+        var dir = knownFolder(id)
         if dir == nil {
             _ = load()                       // first request after launch
-            dir = queue.sync { folders[id] }
+            dir = knownFolder(id)
         }
         guard let dir else { return nil }
         let file = dir.appendingPathComponent(Self.assetsName, isDirectory: true)
             .appendingPathComponent(name)
-        return FileManager.default.fileExists(atPath: file.path) ? file : nil
+        guard FileManager.default.fileExists(atPath: file.path), isReadable(file) else { return nil }
+        return file
     }
 
     // MARK: - Migration
@@ -463,7 +618,7 @@ final class ArticleStore {
                 try? fm.moveItem(at: assetsFrom, to: dir.appendingPathComponent(Self.assetsName, isDirectory: true))
             }
             article.bodyFile = nil
-            folders[article.id] = dir
+            setFolder(dir, for: article.id)
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

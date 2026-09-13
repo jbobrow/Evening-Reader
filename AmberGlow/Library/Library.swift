@@ -41,7 +41,11 @@ final class Library {
 
     init(store: ArticleStore = .shared) {
         self.store = store
-        articles = store.load()
+        // What the shelf looked like last time, so the first frame has it. The folders
+        // are read properly — off this thread — as soon as the view is up; see
+        // `reload()`. Only a library that has never been cached is scanned here, and
+        // that one is still in the app group, where nothing waits on the network.
+        articles = store.loadIndexCache() ?? store.load()
         repairStoredDates()
     }
 
@@ -91,32 +95,100 @@ final class Library {
         store.documentURL(for: article)
     }
 
-    /// A book's cover, on disk, if it has one and got one.
+    /// The saved text, or the PDF, is in iCloud but not on this device yet. It has been
+    /// asked for; the list reloads when it lands, and the page with it.
+    func isDownloading(_ article: SavedArticle) -> Bool {
+        article.isPDF ? store.isDocumentDownloading(for: article) : store.isBodyDownloading(for: article)
+    }
+
+    /// A book's cover, on disk, if it has one and got one — and it is here to be read.
     func coverURL(for article: SavedArticle) -> URL? {
         guard let asset = article.coverAsset else { return nil }
-        return store.assetsDirectory(for: article).appendingPathComponent(asset)
+        let url = store.assetsDirectory(for: article).appendingPathComponent(asset)
+        return store.isReadable(url) ? url : nil
     }
 
     // MARK: - Mutation
 
-    /// Pull in anything the share extension queued while we were away, and finish
-    /// extracting whatever is still pending.
+    /// Read the folders again, without waiting: the work is queued and the list is
+    /// replaced when it comes back.
     func refreshFromDisk() {
-        let onDisk = store.load()
-        // Keep in-flight local edits (scroll positions) from being clobbered.
-        var merged = onDisk
+        Task { await reload() }
+    }
+
+    @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var reloadQueued = false
+    @ObservationIgnored private var debouncedReload: Task<Void, Never>?
+
+    /// Reads the folders again once things have settled. For the metadata query, which
+    /// reports in bursts — one file landing at a time, or our own writes coming back to
+    /// us — and every one of which would otherwise be a scan of the whole library.
+    func refreshFromDiskSoon() {
+        debouncedReload?.cancel()
+        debouncedReload = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.reload()
+        }
+    }
+
+    /// Reads the library off disk and folds it into what is held. Pulls in anything the
+    /// share extension queued while we were away, and finishes extracting whatever is
+    /// still pending.
+    ///
+    /// The scan runs on the store's queue; this thread waits without holding. Calls
+    /// that arrive while a scan is running are folded into one more scan after it,
+    /// since whatever they were told about happened after that scan began.
+    func reload() async {
+        reloadQueued = true
+        if let running = reloadTask {
+            await running.value
+            return
+        }
+        let task = Task { @MainActor [weak self] in
+            while let self, self.reloadQueued {
+                self.reloadQueued = false
+                let snapshot = await self.store.snapshot()
+                self.merge(snapshot)
+            }
+        }
+        reloadTask = task
+        await task.value
+        reloadTask = nil
+        // A request that arrived between the last pass ending and this line.
+        if reloadQueued { await reload() }
+    }
+
+    private func merge(_ snapshot: ArticleStore.Snapshot) {
+        var merged = snapshot.articles
+        let recent = Date.now.addingTimeInterval(-3)
+        edited = edited.filter { $0.value > recent }
+        removed = removed.filter { $0.value > recent }
+        // Removed here a moment ago: the folder may still have been there for the scan.
+        merged.removeAll { removed[$0.id] != nil }
         for local in articles {
             if let i = merged.firstIndex(where: { $0.id == local.id }) {
+                // Just changed here. A scan that began before the change was written
+                // reports the state before it; the write is queued behind that scan and
+                // the next one will agree with what is held.
+                if edited[local.id] != nil { merged[i] = local; continue }
+                // Keep in-flight local edits (scroll positions) from being clobbered.
                 if local.state == .ready, merged[i].state != .ready { merged[i] = local }
                 else if local.lastScroll > merged[i].lastScroll { merged[i].lastScroll = local.lastScroll }
                 if local.readAt != nil, merged[i].readAt == nil { merged[i].readAt = local.readAt }
                 if let opened = local.openedAt, opened > (merged[i].openedAt ?? .distantPast) {
                     merged[i].openedAt = opened
                 }
+            } else if snapshot.holds(local) || working.contains(local.id) {
+                // Its folder is there and its bytes are on their way, or it is being
+                // written this moment. What is held is the best there is until then.
+                merged.append(local)
             }
         }
+        merged.sort { $0.addedAt > $1.addedAt }
         articles = merged
         repairStoredDates()
+        store.writeIndexCache(articles)
         processPending()
     }
 
@@ -140,6 +212,7 @@ final class Library {
                                    state: .pending)
         article.title = title ?? normalized.host.map { $0.replacingOccurrences(of: "www.", with: "") } ?? normalized.absoluteString
         articles.insert(article, at: 0)
+        dirty.insert(article.id)
         persist()
         Task { await extract(article) }
         return article
@@ -252,6 +325,7 @@ final class Library {
             return existing
         }
         articles.insert(article, at: 0)
+        dirty.insert(article.id)
         persist()
         store.adoptDocument(from: fileURL, for: article)
         Task { await extract(article) }
@@ -311,6 +385,8 @@ final class Library {
         guard let i = articles.firstIndex(where: { $0.id == article.id }) else { return }
         guard abs(articles[i].lastScroll - fraction) > 0.01 else { return }
         articles[i].lastScroll = fraction
+        dirty.insert(articles[i].id)
+        edited[articles[i].id] = .now
         // Scroll updates arrive continuously; write them out lazily.
         schedulePersist()
     }
@@ -318,6 +394,8 @@ final class Library {
     func delete(_ article: SavedArticle) {
         store.delete(article)
         articles.removeAll { $0.id == article.id }
+        dirty.remove(article.id)
+        removed[article.id] = .now
         persist()
     }
 
@@ -348,13 +426,13 @@ final class Library {
         for attempt in 0..<7 {
             if await store.adoptCloud() {
                 syncState = .cloud
-                store.drainInbox()
-                refreshFromDisk()
+                await store.drainInbox()
+                await reload()
                 cloud.watch()
                 cloudObserver = NotificationCenter.default.addObserver(
                     forName: CloudLibrary.didChange, object: nil, queue: .main
                 ) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.refreshFromDisk() }
+                    MainActor.assumeIsolated { self?.refreshFromDiskSoon() }
                 }
                 return
             }
@@ -371,10 +449,10 @@ final class Library {
     /// Also worth another look for iCloud: the reader may have gone to Settings and
     /// turned it on, which is the likeliest thing to have happened while they were away.
     func pickUpInbox() {
-        store.drainInbox()
-        refreshFromDisk()
-        if syncState != .cloud {
-            Task { await startSync() }
+        Task {
+            await store.drainInbox()
+            await reload()
+            if syncState != .cloud { await startSync() }
         }
     }
 
@@ -392,8 +470,19 @@ final class Library {
     private func replace(_ article: SavedArticle) {
         guard let i = articles.firstIndex(where: { $0.id == article.id }) else { return }
         articles[i] = article
+        dirty.insert(article.id)
+        edited[article.id] = .now
         persist()
     }
+
+    /// When each article was last changed, or removed, on this device, for `merge`.
+    @ObservationIgnored private var edited: [UUID: Date] = [:]
+    @ObservationIgnored private var removed: [UUID: Date] = [:]
+
+    /// Articles changed since they were last written. Only these are written: every
+    /// `article.json` in the library rewritten for one change is that many files for
+    /// iCloud to carry up, and that many changes to be told about and to scan for.
+    @ObservationIgnored private var dirty: Set<UUID> = []
 
     @ObservationIgnored private var persistTask: Task<Void, Never>?
 
@@ -407,7 +496,10 @@ final class Library {
     }
 
     func persist() {
-        store.save(articles)
+        let changed = articles.filter { dirty.contains($0.id) }
+        dirty.removeAll()
+        store.save(changed)
+        store.writeIndexCache(articles)
     }
 
     /// Publication dates arrive in whatever format the publisher felt like.

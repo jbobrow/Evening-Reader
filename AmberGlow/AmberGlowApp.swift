@@ -211,13 +211,28 @@ struct RootView: View {
             if phase == .background { library.persist() }
         }
         .task {
-            // Read off disk first: the library behind the veil is then already the one
-            // the reader left, so lifting it is a cross-fade to the app rather than to an
-            // empty shelf that fills in a moment later.
-            library.refreshFromDisk()
-
+            let opened = ContinuousClock.now
             withAnimation(.easeIn(duration: 0.9)) { launchName = true }
-            try? await Task.sleep(nanoseconds: 1_300_000_000)
+
+            // The shelf is read while the name is coming up, so lifting the veil is a
+            // cross-fade to the library the reader left rather than to an empty one
+            // that fills in a moment later. The reading is off this thread and never
+            // waits on iCloud — see `ArticleStore.isReadable` — and the veil is not
+            // held for it past a point either: a second is the opening, and it is held
+            // for that whether or not the shelf is in; three is a problem the reader
+            // should be looking at the app for.
+            let shelf = Task {
+                await library.reload()
+                await sites.reload()
+            }
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await shelf.value }
+                group.addTask { try? await Task.sleep(for: .seconds(3)) }
+                await group.next()
+                group.cancelAll()
+            }
+            let elapsed = ContinuousClock.now - opened
+            if elapsed < .seconds(1) { try? await Task.sleep(for: .seconds(1) - elapsed) }
             withAnimation(.easeInOut(duration: 0.7)) { launching = false }
 
             // iCloud is asked for afterwards. It can take a minute to answer, and the

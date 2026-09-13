@@ -16,9 +16,18 @@ import Observation
 final class Highlights {
     private let store: ArticleStore
     private var cache: [UUID: [Highlight]] = [:]
+    @ObservationIgnored private var observer: NSObjectProtocol?
 
     init(store: ArticleStore = .shared) {
         self.store = store
+        // A sidecar not yet down from iCloud reads as no marks at all — see
+        // `ArticleStore.isReadable` — so what is held is dropped whenever the
+        // container reports a change, and the next ask reads what has landed.
+        observer = NotificationCenter.default.addObserver(
+            forName: CloudLibrary.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.forget() }
+        }
     }
 
     // MARK: - Reading
