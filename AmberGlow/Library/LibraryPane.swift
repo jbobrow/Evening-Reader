@@ -32,6 +32,7 @@ struct LibraryPane: View {
         }
         .coordinateSpace(name: "libraryPane")
         .overlay { rowMenuOverlay }
+        .onAppear { library.checkClipboard() }
     }
 
     // MARK: - Header

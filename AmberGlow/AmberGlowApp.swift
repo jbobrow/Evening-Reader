@@ -207,12 +207,14 @@ struct RootView: View {
                 library.pickUpInbox()
                 sites.refreshFromDisk()
                 highlights.forget()
+                library.checkClipboard()
             }
             if phase == .background { library.persist() }
         }
         .task {
             let opened = ContinuousClock.now
             withAnimation(.easeIn(duration: 0.9)) { launchName = true }
+            library.checkClipboard()
 
             // The shelf is read while the name is coming up, so lifting the veil is a
             // cross-fade to the library the reader left rather than to an empty one

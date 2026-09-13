@@ -220,7 +220,9 @@ struct AddLinkSheet: View {
                     // the system's own dialog.
                     AmberPasteControl(palette: settings.palette, fill: 0.82, fontSize: 15,
                                       cornerStyle: .medium) { pasted in
-                        text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+                        // The link out of whatever came with it; see `Library.link(in:)`.
+                        text = Library.link(in: pasted)?.absoluteString
+                            ?? pasted.trimmingCharacters(in: .whitespacesAndNewlines)
                     }
                     .frame(width: 88, height: 39)
                     .overlay {
@@ -251,7 +253,10 @@ struct AddLinkSheet: View {
             }
         }
         .padding(isCompact ? 22 : 26)
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            library.checkClipboard()
+        }
     }
 
     private func commit() {

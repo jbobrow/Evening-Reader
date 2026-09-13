@@ -420,9 +420,38 @@ final class Library {
 
     // MARK: - Clipboard
 
-    /// True when the clipboard *probably* holds a link — checked without reading the
+    /// True when the clipboard *probably* holds a link — found out without reading the
     /// contents, so iOS doesn't show a paste banner until the user asks for it.
-    var clipboardMayHoldLink: Bool { UIPasteboard.general.hasURLs }
+    ///
+    /// `hasURLs` alone is not the answer. It is true only for a link put on the
+    /// clipboard *as* a link — Safari's address bar — and false for the same address
+    /// copied out of a message, a note, or a mail, which is plain text and is how most
+    /// links travel. So plain text is looked at too, by the system's own pattern
+    /// detector, which says whether there is probably a web address in it without
+    /// handing the text over. It answers asynchronously, which is why this is held
+    /// rather than computed; see `checkClipboard()`.
+    private(set) var clipboardMayHoldLink = false
+    @ObservationIgnored private var clipboardChangeCount = -1
+
+    /// Look at the clipboard again. Cheap to call whenever the reader might have copied
+    /// something — coming back to the app, opening the list — and does nothing if the
+    /// clipboard has not changed since last time.
+    func checkClipboard() {
+        let board = UIPasteboard.general
+        guard board.changeCount != clipboardChangeCount else { return }
+        clipboardChangeCount = board.changeCount
+        if board.hasURLs { clipboardMayHoldLink = true; return }
+        guard board.hasStrings else { clipboardMayHoldLink = false; return }
+        let count = board.changeCount
+        board.detectPatterns(for: [\.probableWebURL]) { [weak self] result in
+            let found = ((try? result.get()) ?? []).contains(\.probableWebURL)
+            Task { @MainActor in
+                // Only if it is still the same clipboard that was asked about.
+                guard let self, self.clipboardChangeCount == count else { return }
+                self.clipboardMayHoldLink = found
+            }
+        }
+    }
 
     /// Move the library into iCloud if it is available, then keep up with it.
     ///
@@ -479,9 +508,30 @@ final class Library {
     /// (see `AmberPasteControl`) rather than from reading the pasteboard here — reading
     /// it is what makes the system ask first.
     func add(pasted text: String) {
-        if let url = BrowserModel.url(from: text) {
+        if let url = Self.link(in: text) {
             add(url: url)
         }
+    }
+
+    /// The link in a piece of pasted text.
+    ///
+    /// The text is rarely just the address. A link copied out of a message comes with
+    /// the message — "check this out https://… thanks" — and one copied from a note
+    /// comes with a newline on the end; asked to read either as a URL whole, nothing
+    /// is found and the paste does nothing at all, with the row above it still
+    /// promising a link. So the address is taken as one if it is one, and otherwise
+    /// the first web address in the text is what was meant.
+    static func link(in text: String) -> URL? {
+        if let url = BrowserModel.url(from: text) { return url }
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        else { return nil }
+        let range = NSRange(text.startIndex..., in: text)
+        for match in detector.matches(in: text, range: range) {
+            guard let url = match.url, let scheme = url.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https" else { continue }
+            return Self.normalize(url)
+        }
+        return nil
     }
 
     // MARK: - Storage
