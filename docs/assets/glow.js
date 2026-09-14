@@ -95,17 +95,18 @@
         if (!isNaN(kept)) { saved = clamp(kept); }
     } catch (e) {}
 
-    // The page comes on. It is laid out at the beige end of the ramp and warms to
+    // The front page comes on: laid out at the beige end of the ramp, it warms to
     // the reader's glow over three seconds — the panel lighting up — unless they
-    // have asked for less motion, in which case it is simply there.
+    // have asked for less motion, in which case it is simply there. The other
+    // pages are simply there either way: the opening happens once, at the door.
     var reduced = false;
     try { reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
-    apply(reduced ? saved : 0);
+    var opening = !reduced && /(^|\/)(index\.html)?$/.test(location.pathname);
+    apply(opening ? 0 : saved);
 
     function bind() {
-        // The slider is on the front page only; the other pages warm up all the same.
         var slider = document.getElementById("warmth");
-        var animating = !reduced;
+        var animating = opening;
 
         function show(w) {
             apply(w);
