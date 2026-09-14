@@ -14,6 +14,7 @@
     <link rel="icon" href="assets/icon.png">
     <link rel="apple-touch-icon" href="assets/icon.png">
     <link rel="stylesheet" href="assets/site.css">
+    <script src="assets/glow.js"></script>
 </head>
 <body>
     <nav>
@@ -30,7 +31,7 @@
         <h1>Evening Reader</h1>
         <p class="tagline">Soft on the eyes, warmth for the soul.</p>
         <p class="description">
-            A reading app drawn in one colour. Save articles, books and PDFs, and read them
+            A reading app drawn in one color. Save articles, books and PDFs, and read them
             on a single amber glow you set yourself — turned up toward orange, down toward
             beige, dimmed for a dark room, or flipped to night. Everything you save is kept
             on the device and in your own iCloud folders.
@@ -39,6 +40,16 @@
             <a class="download large" href="https://apps.apple.com/app/id0000000000">Download on the App Store</a>
             <span class="fine">iPhone and iPad · iOS 17 or later</span>
         </p>
+
+        <div class="glow" role="group" aria-label="The glow">
+            <p class="caption">The ramp</p>
+            <div class="ramp" aria-hidden="true"></div>
+            <div class="row">
+                <label class="name" for="warmth">Warmth</label>
+                <input type="range" id="warmth" min="0" max="100" value="87" aria-describedby="warmth-name">
+                <span class="value" id="warmth-name">Deep amber</span>
+            </div>
+        </div>
     </header>
 
     <section class="phones" aria-label="Evening Reader on iPhone">
