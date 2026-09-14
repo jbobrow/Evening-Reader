@@ -15,3 +15,7 @@ xcuserdata/
 .swiftpm/
 .build/
 Packages/
+
+# App Store screenshots: rendered output, tens of megabytes, remade with
+# AppStore/seed-library.py and a simulator whenever the app changes.
+AppStore/screenshots/
