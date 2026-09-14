@@ -285,6 +285,7 @@ struct LibraryPane: View {
 /// paper.
 private struct CoverThumbnail: View {
     @Environment(\.amber) private var amber
+    @Environment(DisplaySettings.self) private var settings
     let url: URL
     @State private var image: UIImage?
 
@@ -298,11 +299,13 @@ private struct CoverThumbnail: View {
     var body: some View {
         Group {
             if let image {
+                // Onto the ramp the way a PDF's page is: black to ink, white to paper.
+                // Multiplying by a dark level, as this once did, put every cover that
+                // was not mostly white into the same black rectangle.
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .grayscale(1)
-                    .colorMultiply(amber.color(0.30))
+                    .amberInk(isNight: settings.polarity == .night)
             } else {
                 amber.color(0.80)
             }
@@ -351,7 +354,49 @@ enum CoverThumbnails {
             kCGImageSourceThumbnailMaxPixelSize: maxPixel,
         ] as CFDictionary
         guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return nil }
-        return UIImage(cgImage: cg)
+        return UIImage(cgImage: levelled(cg) ?? cg)
+    }
+
+    /// The cover in grey, with its tones spread across the whole range.
+    ///
+    /// A cloth binding is dark all over, with the title a shade lighter; drawn as it is,
+    /// at the size of a row, it is a dark rectangle. What the row needs is the artwork,
+    /// not the exposure — so the darkest of it is taken to ink and the lightest to paper,
+    /// the way a good scan of the same cover would be printed. Cut at the 1st and 99th
+    /// percentiles, so a single white speck or a black border does not set the range.
+    private nonisolated static func levelled(_ image: CGImage) -> CGImage? {
+        let width = image.width, height = image.height
+        guard width > 0, height > 0,
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.none.rawValue),
+              let data = context.data
+        else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let pixels = data.bindMemory(to: UInt8.self, capacity: width * height)
+        let count = width * height
+
+        var histogram = [Int](repeating: 0, count: 256)
+        for i in 0..<count { histogram[Int(pixels[i])] += 1 }
+        func percentile(_ fraction: Double) -> Int {
+            let target = Int(Double(count) * fraction)
+            var seen = 0
+            for level in 0..<256 {
+                seen += histogram[level]
+                if seen >= target { return level }
+            }
+            return 255
+        }
+        let low = percentile(0.01), high = percentile(0.99)
+        guard high > low + 8 else { return nil }   // already flat, or a blank
+
+        let scale = 255.0 / Double(high - low)
+        var table = [UInt8](repeating: 0, count: 256)
+        for level in 0..<256 {
+            table[level] = UInt8(min(255, max(0, (Double(level - low) * scale).rounded())))
+        }
+        for i in 0..<count { pixels[i] = table[Int(pixels[i])] }
+        return context.makeImage()
     }
 }
 
