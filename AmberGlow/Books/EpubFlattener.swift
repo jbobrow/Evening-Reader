@@ -105,9 +105,18 @@ enum EpubFlattener {
         var chapters: [BookChapter] = []
         for doc in docs {
             let wantedHere = wanted[doc.path] ?? []
-            let rewritten = rewrite(doc.body, chapterID: doc.id, directory: doc.directory,
+            var rewritten = rewrite(doc.body, chapterID: doc.id, directory: doc.directory,
                                     pathToID: pathToID, wantedIDs: wantedHere,
                                     archive: archive, article: article, store: store)
+            // The cover is shown once, at the head of the book. Most books also put it
+            // on their first page — Gutenberg's do, and the standard cover page is
+            // nothing else — and it came through above as the same picture, under the
+            // same name, since an asset is named by its bytes. Taken out wherever it
+            // appears; a page that was only the cover is then not a page at all.
+            if let cover = coverAssetName {
+                rewritten = removingImage(named: cover, article: article, from: rewritten)
+                if isBlank(rewritten) { continue }
+            }
             wordCount += countWords(in: rewritten)
 
             // A chapter's contribution to the sheet: its own whole-chapter entry, if the
@@ -331,6 +340,33 @@ enum EpubFlattener {
         }
         let anchor = parts.count > 1 ? "\(targetChapter)-\(namespaced(parts[1]))" : targetChapter
         return OfflineAssets.replace("href", with: "#\(anchor)", in: t)
+    }
+
+    /// Every `<img>` whose source is this asset of this article, removed.
+    private static func removingImage(named name: String, article: SavedArticle, from html: String) -> String {
+        let src = "\(OfflineAssets.scheme)://\(article.id.uuidString)/\(name)"
+        var out = ""
+        var rest = Substring(html)
+        while let start = rest.range(of: "<img", options: .caseInsensitive) {
+            out += rest[..<start.lowerBound]
+            guard let tagEnd = OfflineAssets.endOfTag(in: rest, from: start.upperBound) else {
+                out += rest[start.lowerBound...]
+                return out
+            }
+            let tag = String(rest[start.lowerBound..<tagEnd])
+            if OfflineAssets.value(of: "src", in: tag) != src { out += tag }
+            rest = rest[tagEnd...]
+        }
+        out += rest
+        return out
+    }
+
+    /// True when there is nothing to see: no text, and no picture.
+    private static func isBlank(_ html: String) -> Bool {
+        if html.range(of: "<img", options: .caseInsensitive) != nil { return false }
+        let text = html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private static func rewriteImage(tag: String, directory: String, archive: ZipArchive,
