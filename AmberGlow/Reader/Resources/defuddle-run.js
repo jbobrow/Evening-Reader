@@ -29,6 +29,17 @@
 
   if (typeof Defuddle !== "function") { return bail("defuddle-missing"); }
 
+  // Screen-reader-only text — "(opens a new tab)" after a link — taken off the page
+  // before it is read, the same as the app's own pass does. `data-ag-unseen` is that
+  // pass's mark for text the page renders invisible without one of the usual class
+  // names; it runs first, so the marks are there to use.
+  var UNSEEN = ".sr-only,.visually-hidden,.visuallyhidden,.screen-reader-text," +
+    ".screen-reader-only,.a11y-hidden,.u-visually-hidden,.sr-only-focusable,[data-ag-unseen]";
+  var unseen = document.querySelectorAll(UNSEEN);
+  for (var u = unseen.length - 1; u >= 0; u--) {
+    if (unseen[u].parentNode) { unseen[u].parentNode.removeChild(unseen[u]); }
+  }
+
   var parsed;
   try {
     parsed = new Defuddle(document, {

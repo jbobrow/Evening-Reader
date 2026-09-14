@@ -16,7 +16,11 @@
   var STRIP = "script,style,noscript,template,link,meta,svg,canvas,iframe,object,embed," +
     "form,input,textarea,select,button,label,nav,footer,aside,dialog,ins," +
     "[aria-hidden='true'],[hidden],[role='navigation'],[role='banner']," +
-    "[role='complementary'],[role='search'],[role='dialog'],[role='alert']";
+    "[role='complementary'],[role='search'],[role='dialog'],[role='alert']," +
+    // Text for screen readers only — "(opens a new tab)" after a link, "Image:"
+    // before a figure. Meant to be heard and not seen, and in a reader it is seen.
+    ".sr-only,.visually-hidden,.visuallyhidden,.screen-reader-text,.screen-reader-only," +
+    ".a11y-hidden,.u-visually-hidden,.sr-only-focusable,[data-ag-unseen]";
 
   var KEEP = {
     P: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, UL: 1, OL: 1, LI: 1,
@@ -63,6 +67,23 @@
   }
 
   /* ---------- 1. working copy ---------- */
+
+  // The same screen-reader-only text, wherever a site did it without one of the usual
+  // class names. It can only be told apart on the live page, where it has a computed
+  // style: clipped to nothing, a pixel square, or set in no size at all. Marked here,
+  // on the page itself, so the copy about to be taken carries the mark and the strip
+  // below can take it out with the rest.
+  var candidates = document.body ? document.body.querySelectorAll("span,small,a,em,i,b,strong,div,p,li") : [];
+  for (var c = 0; c < candidates.length; c++) {
+    var cand = candidates[c];
+    if (!cand.textContent || !cand.textContent.trim()) continue;
+    var cs = window.getComputedStyle(cand);
+    var clipped = cs.position === "absolute" && (
+      /rect\(\s*0(px)?[\s,]+0(px)?[\s,]+0(px)?[\s,]+0(px)?\s*\)/.test(cs.clip || "") ||
+      /inset\(\s*(50%|100%)/.test(cs.clipPath || "") ||
+      ((parseFloat(cs.width) <= 1 || parseFloat(cs.height) <= 1) && cs.overflow === "hidden"));
+    if (clipped || cs.fontSize === "0px") cand.setAttribute("data-ag-unseen", "1");
+  }
 
   var doc = document.cloneNode(true);
   var body = doc.body;
