@@ -220,8 +220,13 @@ final class Library {
     @discardableResult
     func add(url rawURL: URL, title: String? = nil) -> SavedArticle {
         let normalized = Self.normalize(rawURL)
-        if let existing = articles.first(where: { $0.url == normalized }) {
-            if existing.isArchived { setArchived(existing, false) }
+        if var existing = articles.first(where: { $0.url == normalized }) {
+            // Saved again is saved now: back to the top of the shelf, and out of the
+            // archive — the same as the share extension does with a link it already
+            // has. Silently keeping it where it was looks like nothing happened.
+            existing.addedAt = .now
+            existing.isArchived = false
+            replace(existing)
             if existing.state == .failed { retry(existing) }
             return existing
         }
@@ -432,6 +437,9 @@ final class Library {
     /// rather than computed; see `checkClipboard()`.
     private(set) var clipboardMayHoldLink = false
     @ObservationIgnored private var clipboardChangeCount = -1
+    /// The clipboard that was last saved from, so the offer is not made twice for the
+    /// same copy. The count is the system's and outlives the app, so it is kept.
+    private static let takenClipboardKey = "library.takenClipboard"
 
     /// Look at the clipboard again. Cheap to call whenever the reader might have copied
     /// something — coming back to the app, opening the list — and does nothing if the
@@ -440,6 +448,10 @@ final class Library {
         let board = UIPasteboard.general
         guard board.changeCount != clipboardChangeCount else { return }
         clipboardChangeCount = board.changeCount
+        // Already saved, this exact copy. The offer was taken; it is not made again
+        // until there is something new to make it about.
+        guard board.changeCount != UserDefaults.standard.integer(forKey: Self.takenClipboardKey)
+        else { clipboardMayHoldLink = false; return }
         if board.hasURLs { clipboardMayHoldLink = true; return }
         guard board.hasStrings else { clipboardMayHoldLink = false; return }
         let count = board.changeCount
@@ -508,9 +520,11 @@ final class Library {
     /// (see `AmberPasteControl`) rather than from reading the pasteboard here — reading
     /// it is what makes the system ask first.
     func add(pasted text: String) {
-        if let url = Self.link(in: text) {
-            add(url: url)
-        }
+        guard let url = Self.link(in: text) else { return }
+        add(url: url)
+        // Taken. The bar goes down until the clipboard holds something else.
+        UserDefaults.standard.set(UIPasteboard.general.changeCount, forKey: Self.takenClipboardKey)
+        clipboardMayHoldLink = false
     }
 
     /// The link in a piece of pasted text.
