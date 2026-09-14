@@ -131,6 +131,9 @@ struct ReaderRenderer {
         }
         /* One that carries a note says so, in the only way left: an edge under it. */
         mark.ag-hl-note { box-shadow: 0 0 0 1px var(--mark), inset 0 -2px 0 var(--mark-edge); }
+        /* A page's own <mark>, in an article saved before the extractor turned them into
+           emphasis: read as emphasis here, and never in the browser's yellow. */
+        mark:not(.ag-hl) { background: transparent; color: inherit; font-weight: 650; }
 
         .wrap {
           max-width: var(--measure);

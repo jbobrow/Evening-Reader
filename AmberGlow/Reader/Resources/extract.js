@@ -260,6 +260,12 @@
 
     stripAttributes(node);
 
+    // A site's own highlighter — <mark> — is the author's emphasis, and it arrives
+    // in the site's colour: the browser paints a bare <mark> yellow, and yellow is
+    // the one thing that cannot be on the panel. The reader's own marks are <mark>
+    // too, and are told apart by a class; a page's are made into emphasis instead.
+    if (tag === "MARK") { rename(node, "strong"); return; }
+
     // Drop wrappers and leftovers that carry nothing.
     var emptyish = !txt(node) && !node.querySelector("img");
     if (emptyish && tag !== "BR" && tag !== "HR" && tag !== "IMG") {

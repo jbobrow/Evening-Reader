@@ -70,6 +70,16 @@
     if (doomed[i].parentNode) { doomed[i].parentNode.removeChild(doomed[i]); }
   }
 
+  // A site's own <mark> is the author's emphasis in the site's colour — yellow, by
+  // default, which has no place on the panel. Made into emphasis, as the app's own
+  // pass does; the reader's marks are <mark> with a class, and are not these.
+  var marks = root.getElementsByTagName("mark");
+  for (var m = marks.length - 1; m >= 0; m--) {
+    var mark = marks[m], strong = doc.createElement("strong");
+    while (mark.firstChild) { strong.appendChild(mark.firstChild); }
+    if (mark.parentNode) { mark.parentNode.replaceChild(strong, mark); }
+  }
+
   function absolutize(value) {
     if (!value) { return ""; }
     try { return new URL(value, document.baseURI).href; } catch (e) { return value; }
