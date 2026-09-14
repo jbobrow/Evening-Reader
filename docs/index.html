@@ -30,6 +30,19 @@
         <img class="icon" src="assets/icon.png" alt="" width="96" height="96">
         <h1>Evening Reader</h1>
         <p class="tagline">Soft on the eyes, warmth for the soul.</p>
+
+        <div class="glow" role="group" aria-label="The glow">
+            <div class="ramp" aria-hidden="true"><span class="end ink">ink</span><span class="end glow-end">glow</span></div>
+            <div class="row">
+                <label class="name" for="warmth">Warmth</label>
+                <span class="value" id="warmth-name">Deep amber</span>
+            </div>
+            <div class="row">
+                <svg class="symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                <input type="range" id="warmth" min="0" max="100" value="87" aria-describedby="warmth-name">
+                <svg class="symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+            </div>
+        </div>
         <p class="description">
             A reading app drawn in one color. Save articles, books and PDFs, and read them
             on a single amber glow you set yourself — turned up toward orange, down toward
@@ -40,16 +53,6 @@
             <a class="download large" href="https://apps.apple.com/app/id0000000000">Download on the App Store</a>
             <span class="fine">iPhone and iPad · iOS 17 or later</span>
         </p>
-
-        <div class="glow" role="group" aria-label="The glow">
-            <p class="caption">The ramp</p>
-            <div class="ramp" aria-hidden="true"></div>
-            <div class="row">
-                <label class="name" for="warmth">Warmth</label>
-                <input type="range" id="warmth" min="0" max="100" value="87" aria-describedby="warmth-name">
-                <span class="value" id="warmth-name">Deep amber</span>
-            </div>
-        </div>
     </header>
 
     <section class="phones" aria-label="Evening Reader on iPhone">

@@ -66,9 +66,21 @@
         style.setProperty("--bloom-rgb", rgb(1.0, warmth).join(", "));
         style.setProperty("--ink-rgb", rgb(0.045, warmth).join(", "));
 
+        // Thirteen steps, hard-edged: each colour holds for a twelfth of the width.
         var stops = [];
-        for (var i = 0; i <= 12; i++) { stops.push(hex(rgb(i / 12, warmth))); }
+        for (var i = 0; i <= 12; i++) {
+            var colour = hex(rgb(i / 12, warmth));
+            var from = (i / 13 * 100).toFixed(2) + "%", to = ((i + 1) / 13 * 100).toFixed(2) + "%";
+            stops.push(colour + " " + from + " " + to);
+        }
         style.setProperty("--ramp", "linear-gradient(90deg, " + stops.join(", ") + ")");
+        style.setProperty("--ramp-ink-label", hex(rgb(0.85, warmth)));
+        style.setProperty("--ramp-glow-label", hex(rgb(0.08, warmth)));
+
+        // The warmth track shows the choice itself: the page, across the whole range.
+        var track = [];
+        for (var t = 0; t <= 10; t++) { track.push(hex(rgb(0.86, t / 10))); }
+        style.setProperty("--warmth-track", "linear-gradient(90deg, " + track.join(", ") + ")");
 
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) { meta.setAttribute("content", hex(rgb(0.88, warmth))); }
@@ -82,18 +94,48 @@
         var kept = parseFloat(localStorage.getItem("evening-reader.warmth"));
         if (!isNaN(kept)) { saved = clamp(kept); }
     } catch (e) {}
-    apply(saved);
+
+    // The page comes on. It is laid out at the beige end of the ramp and warms to
+    // the reader's glow over three seconds — the panel lighting up — unless they
+    // have asked for less motion, in which case it is simply there.
+    var reduced = false;
+    try { reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+    apply(reduced ? saved : 0);
 
     function bind() {
+        // The slider is on the front page only; the other pages warm up all the same.
         var slider = document.getElementById("warmth");
-        if (!slider) { return; }
-        slider.value = Math.round(saved * 100);
-        apply(saved);
-        slider.addEventListener("input", function () {
-            var w = clamp(slider.value / 100);
+        var animating = !reduced;
+
+        function show(w) {
             apply(w);
-            try { localStorage.setItem("evening-reader.warmth", String(w)); } catch (e) {}
-        });
+            if (slider) { slider.value = Math.round(w * 100); }
+        }
+
+        if (slider) {
+            slider.addEventListener("input", function (event) {
+                // A hand on the slider, not a script's: only a real gesture is kept.
+                if (event.isTrusted === false) { return; }
+                animating = false;
+                var w = clamp(slider.value / 100);
+                apply(w);
+                try { localStorage.setItem("evening-reader.warmth", String(w)); } catch (e) {}
+            });
+        }
+
+        if (!animating) { show(saved); return; }
+
+        var duration = 3000, start = null;
+        function easeInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+        function frame(now) {
+            if (!animating) { return; }
+            if (start === null) { start = now; }
+            var t = Math.min(1, (now - start) / duration);
+            show(saved * easeInOut(t));
+            if (t < 1) { requestAnimationFrame(frame); } else { animating = false; }
+        }
+        show(0);
+        requestAnimationFrame(frame);
     }
 
     if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", bind); }
