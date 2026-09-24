@@ -199,7 +199,10 @@ struct RootView: View {
             drawerTracking = false
         }
         // The sites live beside the library, and move into iCloud with it.
-        .onChange(of: library.syncState) { _, _ in sites.refreshFromDisk() }
+        .onChange(of: library.syncState) { _, _ in
+            sites.refreshFromDisk()
+            reclaimSettings()
+        }
         .onChange(of: scenePhase) { _, phase in
             // What came down from iCloud arrived as whole folders, so what is held about
             // any of them is stale. The library re-reads itself; the marks are told to.
@@ -208,6 +211,7 @@ struct RootView: View {
                 sites.refreshFromDisk()
                 highlights.forget()
                 library.checkClipboard()
+                reclaimSettings()
             }
             if phase == .background { library.persist() }
         }
@@ -241,6 +245,17 @@ struct RootView: View {
             // opening is not the place to wait for it — what it brings arrives in the
             // list, which is where it can be seen arriving.
             await library.startSync()
+        }
+    }
+
+    /// Gives the settings back what an earlier build lost to iCloud. Asked on each
+    /// return as well as once the library is in iCloud: the file may still have been on
+    /// its way down the first time, and after it has been taken there is nothing to find.
+    private func reclaimSettings() {
+        Task {
+            if let stray = await library.reclaimStrayPreferences() {
+                settings.recover(from: stray)
+            }
         }
     }
 

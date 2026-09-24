@@ -157,9 +157,7 @@ final class ArticleStore {
             if let entries = try? fm.contentsOfDirectory(at: local,
                                                          includingPropertiesForKeys: [.isDirectoryKey],
                                                          options: [.skipsHiddenFiles]) {
-                for dir in entries {
-                    let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                    guard isDir else { continue }
+                for dir in entries where Self.isLibraryFolder(dir) {
                     let destination = cloud.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
                     // The sites folder is one folder of folders, and is carried across
                     // one site at a time so what is already there keeps its own.
@@ -191,9 +189,7 @@ final class ArticleStore {
             guard let entries = try? fm.contentsOfDirectory(at: inbox,
                                                             includingPropertiesForKeys: [.isDirectoryKey],
                                                             options: [.skipsHiddenFiles]) else { return }
-            for dir in entries {
-                let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                guard isDir else { continue }
+            for dir in entries where Self.isLibraryFolder(dir) {
                 let destination = self.root.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
                 if dir.lastPathComponent == Self.sitesName {
                     Self.adoptChildren(of: dir, into: destination, droppingDuplicates: true)
@@ -206,6 +202,76 @@ final class ArticleStore {
                 }
             }
         }
+    }
+
+    /// Whether a folder in the local root is the library's own — an article, or the sites
+    /// — and so something to carry into iCloud.
+    ///
+    /// Asked rather than assumed because the local root is not the library's alone. In
+    /// the app group it is the group container's `Library` directory, and the system
+    /// keeps things there too: `Library/Preferences` holds the group's `UserDefaults` —
+    /// the glow, the type, and every saved preset — and `Library/Caches` is the system's
+    /// as well. Taking every folder carried the preferences off into iCloud on the first
+    /// sync, and deleted them outright on every foreground after that, once iCloud had a
+    /// `Preferences` of its own for them to be a "duplicate" of. `cfprefsd` went on
+    /// serving what it held in memory, so nothing looked wrong until it let go, and then
+    /// the presets were simply gone.
+    ///
+    /// So a folder is taken only when it has the shape of something the store wrote: the
+    /// sites folder, or a folder with an `article.json` in it. One the share extension is
+    /// still writing has no metadata yet, and waits for the next pass rather than being
+    /// carried across half made.
+    private static func isLibraryFolder(_ dir: URL) -> Bool {
+        let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+        guard isDir else { return false }
+        if dir.lastPathComponent == sitesName { return true }
+        return FileManager.default.fileExists(atPath: dir.appendingPathComponent(metadataName).path)
+    }
+
+    /// The system's own folders, as an earlier build left them in iCloud.
+    private static let strayFolderNames = ["Preferences", "Caches"]
+
+    /// Takes back the preferences an earlier build carried into iCloud (see
+    /// `isLibraryFolder`), and clears away what else it carried with them.
+    ///
+    /// Hands back the stray preferences file, as it was written, for the settings to
+    /// take what they have lost from it. Nothing is removed until that file has been
+    /// read: one still on its way down from iCloud is asked for and left, and the next
+    /// call finds it. Nil when there is nothing to recover, which after the first
+    /// successful call is always.
+    func reclaimStrayPreferences() async -> Data? {
+        guard isCloud else { return nil }
+        let fm = FileManager.default
+        return await onQueue {
+            let root = self.root
+            let preferences = root.appendingPathComponent("Preferences", isDirectory: true)
+            var recovered: Data?
+            if fm.fileExists(atPath: preferences.path) {
+                let plist = preferences.appendingPathComponent(Self.appGroupID + ".plist")
+                if fm.fileExists(atPath: plist.path) {
+                    guard self.isReadable(plist),
+                          let data = try? Data(contentsOf: plist) else { return nil }
+                    recovered = data
+                } else if self.hasPlaceholder(for: plist) {
+                    try? fm.startDownloadingUbiquitousItem(at: plist)
+                    return nil
+                }
+            }
+            for name in Self.strayFolderNames {
+                let dir = root.appendingPathComponent(name, isDirectory: true)
+                guard fm.fileExists(atPath: dir.path), !Self.isLibraryFolder(dir) else { continue }
+                try? fm.removeItem(at: dir)
+            }
+            return recovered
+        }
+    }
+
+    /// Whether iCloud holds a file here that has not come down yet — which it shows as a
+    /// hidden `.name.icloud` stand-in rather than as the file itself.
+    private func hasPlaceholder(for url: URL) -> Bool {
+        let stub = url.deletingLastPathComponent()
+            .appendingPathComponent("." + url.lastPathComponent + ".icloud")
+        return FileManager.default.fileExists(atPath: stub.path)
     }
 
     /// Moves each folder inside `source` into iCloud under `destination`, one at a time.
