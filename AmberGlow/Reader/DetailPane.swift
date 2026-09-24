@@ -19,6 +19,8 @@ struct DetailPane: View {
     var onGlow: () -> Void
 
     @State private var selection: WebSelection?
+    /// An end of the selection is being dragged — see `SelectionGrips`.
+    @State private var gripping = false
     @State private var bridge = ReaderBridge()
     @State private var page = 1
     @State private var pageCount = 1
@@ -89,7 +91,7 @@ struct DetailPane: View {
                 splash
             }
         }
-        .preference(key: PageHasSelection.self, value: selection != nil)
+        .preference(key: PageHasSelection.self, value: selection != nil || gripping)
         // A novel's text is not kept around once nothing is reading it.
         .onChange(of: article?.id) { _, id in if id == nil { loadedBody = nil } }
         .overlay { markCard }
@@ -610,6 +612,8 @@ struct DetailPane: View {
             // one is presented in its own window and cannot be given a colour.
             .overlay {
                 GeometryReader { geo in
+                    // Under the callout, which keeps its room clear of them.
+                    SelectionGrips(selection: selection, web: bridge, isGripping: $gripping)
                     if let selection {
                         AmberEditMenuOverlay(
                             selection: selection,

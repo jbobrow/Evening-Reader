@@ -7,6 +7,11 @@ struct WebSelection: Equatable {
     /// In the web view's own coordinate space (viewport points).
     var rect: CGRect
     var isEditable: Bool
+    /// The caret at each end of the selection — a line tall, next to no width — in the
+    /// same space as `rect`. What `SelectionGrips` puts its grab zones around. Nil for a
+    /// run selected inside a text control, which has handles of its own to offer.
+    var start: CGRect? = nil
+    var end: CGRect? = nil
 
     /// The selection with the document's own line breaks and indentation collapsed —
     /// what to put on the clipboard, or in front of a question about it.
@@ -217,6 +222,99 @@ struct AmberEditMenuOverlay: View {
     }
 }
 
+/// Grab zones for the two ends of a selection, well larger than WebKit's own.
+///
+/// WebKit's handles are a thin bar with a small dot, and only take a touch from close
+/// around the dot — too small a target to find with a thumb over text, and nothing on
+/// `WKWebView` makes it bigger. So the app lays a zone of its own over each end and
+/// moves the selection itself (see `__agSel` in `SelectionReporter`); WebKit's handles
+/// follow the selection as it changes, so what the reader sees is unchanged.
+///
+/// Each zone runs from the middle of its line out past the dot — up above the start,
+/// down below the end — so on a one-line selection the two cannot fight over a touch.
+struct SelectionGrips: View {
+    let selection: WebSelection?
+    let web: WKWebViewLike
+    /// True while an end is being dragged. The selection is reported as gone for as long
+    /// as that lasts, and whatever stands aside for it must go on standing aside.
+    @Binding var isGripping: Bool
+
+    enum Grip: String { case start, end }
+
+    /// A drag in progress: which end, where the zones were when it began, and how far
+    /// the touch landed from the caret — kept, so the caret follows the thumb without
+    /// jumping under it.
+    private struct Hold {
+        var grip: Grip
+        var start: CGRect
+        var end: CGRect
+        var offset: CGSize
+    }
+
+    @State private var hold: Hold?
+
+    private static let space = "SelectionGrips"
+    private let width: CGFloat = 48
+    /// How far a zone reaches past its line — the dot's side. Matches the room the
+    /// callout leaves, so the two meet rather than overlap.
+    private let reach: CGFloat = 28
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if let ends {
+                let (start, end) = ends
+                zone(.start, frame: CGRect(x: start.minX - width / 2, y: start.minY - reach,
+                                           width: width, height: start.height / 2 + reach),
+                     start: start, end: end)
+                zone(.end, frame: CGRect(x: end.minX - width / 2, y: end.midY,
+                                         width: width, height: end.height / 2 + reach),
+                     start: start, end: end)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .coordinateSpace(.named(Self.space))
+    }
+
+    /// Mid-drag the zones stay where the drag began: the page stops reporting the
+    /// selection until it is let go, and a zone that moved would lose the touch.
+    private var ends: (CGRect, CGRect)? {
+        if let hold { return (hold.start, hold.end) }
+        guard let start = selection?.start, let end = selection?.end else { return nil }
+        return (start, end)
+    }
+
+    private func zone(_ grip: Grip, frame: CGRect, start: CGRect, end: CGRect) -> some View {
+        Color.clear
+            .frame(width: frame.width, height: frame.height)
+            .contentShape(Rectangle())
+            .position(x: frame.midX, y: frame.midY)
+            // A zero-distance drag, which is what wins a touch over WebKit's own
+            // recognisers — see the page scrubber.
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
+                    .onChanged { value in
+                        if hold == nil {
+                            let caret = grip == .start ? start : end
+                            hold = Hold(grip: grip, start: start, end: end,
+                                        offset: CGSize(width: caret.minX - value.startLocation.x,
+                                                       height: caret.midY - value.startLocation.y))
+                            isGripping = true
+                            web.runJavaScript("window.__agSel && window.__agSel.begin('\(grip.rawValue)');")
+                        }
+                        guard let hold, value.translation != .zero else { return }
+                        let x = value.location.x + hold.offset.width
+                        let y = value.location.y + hold.offset.height
+                        web.runJavaScript(String(format: "window.__agSel && window.__agSel.move(%.1f, %.1f);", x, y))
+                    }
+                    .onEnded { _ in
+                        web.runJavaScript("window.__agSel && window.__agSel.end();")
+                        hold = nil
+                        isGripping = false
+                    }
+            )
+    }
+}
+
 /// The page-side half: reports what is selected, and where, so the app can put its own
 /// callout there. Shared by the reader and the browser so both behave identically.
 enum SelectionReporter {
@@ -241,7 +339,39 @@ enum SelectionReporter {
             post(payload);
           };
 
+          // While a grip is being dragged, the fixed end of the selection — see `__agSel`.
+          var grip = null;
+
+          // The caret at one end of a range, as tall as the selection is painted. A
+          // range's boxes only cover the glyphs, but WebKit paints a selected line from
+          // the foot of its glyphs up through all the leading above them, and draws the
+          // start handle's dot at the top of that — under a generous line height, well
+          // clear of the glyphs themselves.
+          // A collapsed range usually has a box of its own; where it has none, the edge
+          // of the first or last box stands in.
+          var caret = function (range, atEnd) {
+            var c = range.cloneRange();
+            c.collapse(!atEnd);
+            var rs = c.getClientRects(), box;
+            if (rs.length) {
+              box = { x: rs[0].left, y: rs[0].top, h: rs[0].height };
+            } else {
+              var all = range.getClientRects();
+              if (!all.length) return null;
+              var q = atEnd ? all[all.length - 1] : all[0];
+              box = { x: atEnd ? q.right : q.left, y: q.top, h: q.height };
+            }
+            var node = atEnd ? range.endContainer : range.startContainer;
+            var el = node.nodeType === 1 ? node : node.parentElement;
+            var line = el ? parseFloat(getComputedStyle(el).lineHeight) : NaN;
+            if (line > box.h) { box.y -= line - box.h; box.h = line; }
+            return box;
+          };
+
           var report = function () {
+            // Mid-drag the callout stays down; the selection is reported where it
+            // comes to rest, when the grip lets go.
+            if (grip) return;
             var el = document.activeElement;
             // A run selected inside a text control is not part of the document's
             // selection: getSelection() has nothing to say about it, and a range over
@@ -260,11 +390,21 @@ enum SelectionReporter {
             if (!sel || sel.isCollapsed || sel.rangeCount === 0) { send({ name: "selection", text: "" }); return; }
             var text = String(sel);
             if (!text.trim()) { send({ name: "selection", text: "" }); return; }
-            var r = sel.getRangeAt(0).getBoundingClientRect();
+            var range = sel.getRangeAt(0);
+            var r = range.getBoundingClientRect();
             var editable = !!(el && (el.isContentEditable ||
                                      /^(input|textarea)$/i.test(el.tagName || "")));
-            send({ name: "selection", text: text, editable: editable,
-                   x: r.left, y: r.top, w: r.width, h: r.height });
+            var payload = { name: "selection", text: text, editable: editable,
+                            x: r.left, y: r.top, w: r.width, h: r.height };
+            var s = caret(range, false), f = caret(range, true);
+            if (s && f) {
+              payload.sx = s.x; payload.sy = s.y; payload.sh = s.h;
+              payload.ex = f.x; payload.ey = f.y; payload.eh = f.h;
+              // The callout keeps its distance from the lines, not just the glyphs.
+              var top = Math.min(r.top, s.y), bottom = Math.max(r.bottom, f.y + f.h);
+              payload.y = top; payload.h = bottom - top;
+            }
+            send(payload);
           };
 
           var pending;
@@ -280,6 +420,37 @@ enum SelectionReporter {
           // Keep the callout pinned to the words as the page moves under it.
           window.addEventListener("scroll", function () { schedule(0); }, { passive: true });
           window.addEventListener("resize", function () { schedule(0); }, { passive: true });
+
+          // Moves one end of the selection to a point, for the app's grab zones. The
+          // other end is held where it was when the grip was taken, so dragging an end
+          // past the other one turns the selection around rather than losing it.
+          window.__agSel = {
+            begin: function (which) {
+              var sel = window.getSelection();
+              if (!sel || sel.rangeCount === 0) { grip = null; return; }
+              var r = sel.getRangeAt(0);
+              grip = which === "start"
+                ? { node: r.endContainer, offset: r.endOffset }
+                : { node: r.startContainer, offset: r.startOffset };
+              clearTimeout(pending);
+            },
+            move: function (x, y) {
+              if (!grip) return;
+              // Held near the top or bottom of the glass, the page runs on under it.
+              var edge = 44, h = window.innerHeight;
+              if (y < edge) window.scrollBy(0, -Math.ceil((edge - y) / 3));
+              else if (y > h - edge) window.scrollBy(0, Math.ceil((y - h + edge) / 3));
+              x = Math.min(Math.max(x, 1), window.innerWidth - 1);
+              y = Math.min(Math.max(y, 1), h - 1);
+              var p = document.caretRangeFromPoint && document.caretRangeFromPoint(x, y);
+              if (!p) return;
+              // Never down to nothing: a collapsed selection has no handles to hold.
+              if (p.startContainer === grip.node && p.startOffset === grip.offset) return;
+              window.getSelection().setBaseAndExtent(grip.node, grip.offset,
+                                                     p.startContainer, p.startOffset);
+            },
+            end: function () { grip = null; schedule(0); }
+          };
         })();
         """
     }
