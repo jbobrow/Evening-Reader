@@ -10,8 +10,37 @@ struct WebSelection: Equatable {
     /// The caret at each end of the selection — a line tall, next to no width — in the
     /// same space as `rect`. What `SelectionGrips` puts its grab zones around. Nil for a
     /// run selected inside a text control, which has handles of its own to offer.
-    var start: CGRect? = nil
-    var end: CGRect? = nil
+    var start: CGRect?
+    var end: CGRect?
+
+    init(text: String, rect: CGRect, isEditable: Bool,
+         start: CGRect? = nil, end: CGRect? = nil) {
+        self.text = text
+        self.rect = rect
+        self.isEditable = isEditable
+        self.start = start
+        self.end = end
+    }
+
+    /// A selection as `SelectionReporter` sends it, or nil when the report is that there
+    /// is none.
+    init?(report dict: [String: Any]) {
+        let text = dict["text"] as? String ?? ""
+        guard !text.isEmpty else { return nil }
+        self.text = text
+        rect = CGRect(x: dict["x"] as? Double ?? 0, y: dict["y"] as? Double ?? 0,
+                      width: dict["w"] as? Double ?? 0, height: dict["h"] as? Double ?? 0)
+        isEditable = dict["editable"] as? Bool ?? false
+        start = Self.caret(dict, "s")
+        end = Self.caret(dict, "e")
+    }
+
+    /// One end of a reported selection: `sx`, `sy`, `sh` for the start, and so on.
+    private static func caret(_ dict: [String: Any], _ prefix: String) -> CGRect? {
+        guard let x = dict[prefix + "x"] as? Double, let y = dict[prefix + "y"] as? Double,
+              let h = dict[prefix + "h"] as? Double, h > 0 else { return nil }
+        return CGRect(x: x, y: y, width: 0, height: h)
+    }
 
     /// The selection with the document's own line breaks and indentation collapsed —
     /// what to put on the clipboard, or in front of a question about it.

@@ -161,6 +161,10 @@ struct BrowseScreen: View {
                     // presented in its own window and cannot be given a colour.
                     .overlay {
                         GeometryReader { geo in
+                            // Under the callout, which keeps its room clear of them. Nothing
+                            // in the browser has to stand aside while one is held.
+                            SelectionGrips(selection: model.selection, web: model,
+                                           isGripping: .constant(false))
                             if let selection = model.selection {
                                 AmberEditMenuOverlay(
                                     selection: selection,

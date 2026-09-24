@@ -290,25 +290,10 @@ struct ReaderWebView: UIViewRepresentable {
                 }
             case "selection":
                 if let web { WebKeyboardBridge.removeEditMenu(from: web) }
-                let text = dict["text"] as? String ?? ""
-                guard !text.isEmpty else { parent.onSelection(nil); return }
-                parent.onSelection(WebSelection(
-                    text: text,
-                    rect: CGRect(x: dict["x"] as? Double ?? 0, y: dict["y"] as? Double ?? 0,
-                                 width: dict["w"] as? Double ?? 0, height: dict["h"] as? Double ?? 0),
-                    isEditable: dict["editable"] as? Bool ?? false,
-                    start: Self.caret(dict, "s"),
-                    end: Self.caret(dict, "e")))
+                parent.onSelection(WebSelection(report: dict))
             default:
                 break
             }
-        }
-
-        /// One end of a reported selection: `sx`, `sy`, `sh` for the start, and so on.
-        private static func caret(_ dict: [String: Any], _ prefix: String) -> CGRect? {
-            guard let x = dict[prefix + "x"] as? Double, let y = dict[prefix + "y"] as? Double,
-                  let h = dict[prefix + "h"] as? Double, h > 0 else { return nil }
-            return CGRect(x: x, y: y, width: 0, height: h)
         }
 
         func webView(_ webView: WKWebView,

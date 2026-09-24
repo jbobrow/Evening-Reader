@@ -366,14 +366,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         }
         guard name == "selection" else { return }
         WebKeyboardBridge.removeEditMenu(from: web)
-        let text = dict["text"] as? String ?? ""
-        guard !text.isEmpty else { selection = nil; return }
-        selection = WebSelection(
-            text: text,
-            rect: CGRect(x: dict["x"] as? Double ?? 0, y: dict["y"] as? Double ?? 0,
-                         width: dict["w"] as? Double ?? 0, height: dict["h"] as? Double ?? 0),
-            isEditable: dict["editable"] as? Bool ?? false
-        )
+        selection = WebSelection(report: dict)
     }
 
     /// Lets the page go when the browser is closed.
