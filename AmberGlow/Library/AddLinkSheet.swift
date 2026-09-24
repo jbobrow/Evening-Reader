@@ -157,6 +157,7 @@ struct AddLinkSheet: View {
     @State private var text = ""
     @State private var problem: String?
     @State private var focused = false
+    @State private var showGuide = false
 
     private var isCompact: Bool { sizeClass == .compact }
 
@@ -245,6 +246,9 @@ struct AddLinkSheet: View {
                     .font(.system(size: 13))
                     .lineSpacing(3)
                     .foregroundStyle(amber.inkMuted)
+                Button("Show me how") { showGuide = true }
+                    .buttonStyle(AmberButtonStyle(kind: .outline, size: 13))
+                    .padding(.top, 2)
                 if !library.usesAppGroup {
                     Text("Note: the shared app group isn't available in this build, so the share extension can't hand items over yet.")
                         .font(.system(size: 12))
@@ -253,6 +257,9 @@ struct AddLinkSheet: View {
             }
         }
         .padding(isCompact ? 22 : 26)
+        .modifier(AmberFullScreenPresentation(isPresented: $showGuide) {
+            OnboardingSheet()
+        })
         .onAppear {
             focused = true
             library.checkClipboard()

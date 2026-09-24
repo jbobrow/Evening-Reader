@@ -43,6 +43,8 @@ struct RootView: View {
     @State private var search = ""
     @State private var showAdd = false
     @State private var showHighlights = false
+    /// The first-run guide to saving from the share sheet.
+    @State private var showOnboarding = false
     /// A marked passage the reader picked out of the highlights list, on its way to the
     /// page it came off. Cleared by the reader once it has been reached.
     @State private var revealHighlight: UUID?
@@ -179,6 +181,9 @@ struct RootView: View {
                 revealHighlight = mark.id
             }
         })
+        .modifier(AmberFullScreenPresentation(isPresented: $showOnboarding) {
+            OnboardingSheet()
+        })
         .fullScreenCover(item: $browseTarget) { target in
             BrowseScreen(initialURL: target.url) { saved in
                 open(saved)
@@ -243,6 +248,17 @@ struct RootView: View {
             let elapsed = ContinuousClock.now - opened
             if elapsed < .seconds(1) { try? await Task.sleep(for: .seconds(1) - elapsed) }
             withAnimation(.easeInOut(duration: 0.7)) { launching = false }
+
+            // A first launch, with nothing on the shelf, is shown how things get onto
+            // it. Someone updating with a library already has their answer.
+            if !OnboardingSheet.hasBeenSeen {
+                if library.articles.isEmpty {
+                    try? await Task.sleep(for: .seconds(0.5))
+                    showOnboarding = true
+                } else {
+                    OnboardingSheet.hasBeenSeen = true
+                }
+            }
 
             // iCloud is asked for afterwards. It can take a minute to answer, and the
             // opening is not the place to wait for it — what it brings arrives in the
