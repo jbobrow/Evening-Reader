@@ -504,6 +504,12 @@ final class Library {
         syncState = .local
     }
 
+    /// The preferences an earlier build carried into iCloud with the library, if they
+    /// are still there to be taken back. See `ArticleStore.reclaimStrayPreferences`.
+    func reclaimStrayPreferences() async -> Data? {
+        await store.reclaimStrayPreferences()
+    }
+
     /// On returning to the app, take anything the share extension queued while away.
     ///
     /// Also worth another look for iCloud: the reader may have gone to Settings and

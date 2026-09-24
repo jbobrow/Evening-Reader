@@ -11,6 +11,14 @@ struct GlowPreset: Codable, Identifiable, Equatable {
     var glow: Double
     var contrast: Double
     var polarity: AmberPalette.Polarity
+
+    /// The same light, whatever either is called.
+    func hasSameGlow(as other: GlowPreset) -> Bool {
+        abs(other.warmth - warmth) < 0.005
+            && abs(other.glow - glow) < 0.005
+            && abs(other.contrast - contrast) < 0.005
+            && other.polarity == polarity
+    }
 }
 
 /// Everything the user can dial about the panel and the type, persisted immediately.
@@ -132,8 +140,18 @@ final class DisplaySettings {
         progressStyle = ProgressStyle(
             rawValue: defaults.string(forKey: Self.prefix + "progressStyle") ?? ""
         ) ?? .percent
-        presets = (defaults.data(forKey: Self.prefix + "presets"))
-            .flatMap { try? JSONDecoder().decode([GlowPreset].self, from: $0) } ?? []
+        presets = defaults.data(forKey: Self.prefix + "presets").map(Self.decodePresets) ?? []
+    }
+
+    /// The saved glows, one at a time. Decoded as a whole, one entry this build cannot
+    /// read — a polarity added later, say — would lose every other preset with it, and
+    /// the next save would write that loss back to disk.
+    private static func decodePresets(_ data: Data) -> [GlowPreset] {
+        struct Lossy: Decodable {
+            let preset: GlowPreset?
+            init(from decoder: Decoder) throws { preset = try? GlowPreset(from: decoder) }
+        }
+        return (try? JSONDecoder().decode([Lossy].self, from: data))?.compactMap(\.preset) ?? []
     }
 
     private func writePresets() {
@@ -143,6 +161,42 @@ final class DisplaySettings {
 
     private func write(_ value: Any, _ key: String) {
         defaults.set(value, forKey: Self.prefix + key)
+    }
+
+    /// Takes back what an earlier build lost: the preferences file that was carried off
+    /// into iCloud with the library (see `ArticleStore.reclaimStrayPreferences`).
+    ///
+    /// Every preset kept there comes back, after the ones saved since. Everything else
+    /// comes back only where nothing has been chosen since — a setting with no value of
+    /// its own here is one still sitting on its default, and one that has a value is a
+    /// choice the reader made after the loss, which the old file has no business undoing.
+    func recover(from stray: Data) {
+        guard let old = (try? PropertyListSerialization.propertyList(from: stray, format: nil))
+                as? [String: Any] else { return }
+
+        for (key, value) in old
+        where key.hasPrefix(Self.prefix) && key != Self.prefix + "presets"
+            && defaults.object(forKey: key) == nil {
+            defaults.set(value, forKey: key)
+        }
+        let restored = DisplaySettings(defaults: defaults)
+        warmth = restored.warmth
+        glow = restored.glow
+        contrast = restored.contrast
+        polarity = restored.polarity
+        textScale = restored.textScale
+        lineHeight = restored.lineHeight
+        measure = restored.measure
+        typeface = restored.typeface
+        showTexture = restored.showTexture
+        showBloom = restored.showBloom
+        progressStyle = restored.progressStyle
+
+        let lost = (old[Self.prefix + "presets"] as? Data).map(Self.decodePresets) ?? []
+        let missing = lost.filter { preset in
+            !presets.contains { $0.id == preset.id || $0.hasSameGlow(as: preset) }
+        }
+        if !missing.isEmpty { presets += missing }
     }
 
     var palette: AmberPalette {

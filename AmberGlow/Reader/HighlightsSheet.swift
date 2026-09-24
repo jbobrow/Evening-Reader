@@ -56,7 +56,9 @@ struct HighlightsSheet: View {
                 var marks = highlights.list(for: article)
                 if !query.isEmpty {
                     marks = marks.filter {
-                        $0.passage.lowercased().contains(query)
+                        // Run together, so a search can find words either side of
+                        // a paragraph break.
+                        $0.paragraphs.joined(separator: " ").lowercased().contains(query)
                             || ($0.note ?? "").lowercased().contains(query)
                     }
                 }

@@ -89,6 +89,7 @@ struct DetailPane: View {
                 splash
             }
         }
+        .preference(key: PageHasSelection.self, value: selection != nil)
         // A novel's text is not kept around once nothing is reading it.
         .onChange(of: article?.id) { _, id in if id == nil { loadedBody = nil } }
         .overlay { markCard }
@@ -580,6 +581,7 @@ struct DetailPane: View {
                     guard let mark = highlights.highlight(id, in: article) else { return }
                     withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
                 },
+                onHighlightBreaks: { found in highlights.setBreaks(found, in: article) },
                 bridge: bridge
             )
             .id(article.id)

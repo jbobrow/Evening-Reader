@@ -62,6 +62,8 @@ struct RootView: View {
     @State private var drawerDrag: CGFloat = 0
     /// True once a touch has committed to moving the drawer rather than scrolling.
     @State private var drawerTracking = false
+    /// Whether the page has text selected, while the edge strip stands aside for it.
+    @State private var pageHasSelection = false
     /// Article awaiting a delete confirmation.
     @State private var confirmDelete: SavedArticle?
     /// The opening. `launching` is the black itself; `launchName` is the name on it.
@@ -111,6 +113,7 @@ struct RootView: View {
                     onDismissArticle: { selection = nil },
                     onGlow: { toggleGlow(.reader) }
                 )
+                .onPreferenceChange(PageHasSelection.self) { pageHasSelection = $0 }
 
                 edgeAffordance(width: drawerWidth, progress: progress)
 
@@ -199,7 +202,10 @@ struct RootView: View {
             drawerTracking = false
         }
         // The sites live beside the library, and move into iCloud with it.
-        .onChange(of: library.syncState) { _, _ in sites.refreshFromDisk() }
+        .onChange(of: library.syncState) { _, _ in
+            sites.refreshFromDisk()
+            reclaimSettings()
+        }
         .onChange(of: scenePhase) { _, phase in
             // What came down from iCloud arrived as whole folders, so what is held about
             // any of them is stale. The library re-reads itself; the marks are told to.
@@ -208,6 +214,7 @@ struct RootView: View {
                 sites.refreshFromDisk()
                 highlights.forget()
                 library.checkClipboard()
+                reclaimSettings()
             }
             if phase == .background { library.persist() }
         }
@@ -241,6 +248,17 @@ struct RootView: View {
             // opening is not the place to wait for it — what it brings arrives in the
             // list, which is where it can be seen arriving.
             await library.startSync()
+        }
+    }
+
+    /// Gives the settings back what an earlier build lost to iCloud. Asked on each
+    /// return as well as once the library is in iCloud: the file may still have been on
+    /// its way down the first time, and after it has been taken there is nothing to find.
+    private func reclaimSettings() {
+        Task {
+            if let stray = await library.reclaimStrayPreferences() {
+                settings.recover(from: stray)
+            }
         }
     }
 
@@ -309,7 +327,11 @@ struct RootView: View {
         .contentShape(Rectangle())
         .gesture(drawerDragGesture(width: width))
         .onTapGesture { withAnimation(.drawer) { showLibrary = true } }
-        .allowsHitTesting(!showLibrary)
+        // On a phone the strip lies over the page's left margin, which is exactly where
+        // a selection that starts a line has its start handle. While there is a
+        // selection the strip lets the page have its touches, or that handle could not
+        // be taken hold of at all.
+        .allowsHitTesting(!showLibrary && !pageHasSelection)
         .zIndex(1)
     }
 

@@ -72,6 +72,19 @@ final class Highlights {
         commit(all, for: article)
     }
 
+    /// Keeps the paragraph breaks the page worked out for passages marked before they
+    /// were recorded. Written once, all together, and only for marks still without them.
+    func setBreaks(_ found: [UUID: [Int]], in article: SavedArticle) {
+        var all = list(for: article)
+        var changed = false
+        for i in all.indices where all[i].breaks == nil {
+            guard let breaks = found[all[i].id] else { continue }
+            all[i].breaks = breaks
+            changed = true
+        }
+        if changed { commit(all, for: article) }
+    }
+
     func remove(_ id: UUID, from article: SavedArticle) {
         let all = list(for: article).filter { $0.id != id }
         commit(all, for: article)
