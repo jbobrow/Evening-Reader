@@ -62,6 +62,8 @@ struct RootView: View {
     @State private var drawerDrag: CGFloat = 0
     /// True once a touch has committed to moving the drawer rather than scrolling.
     @State private var drawerTracking = false
+    /// Whether the page has text selected, while the edge strip stands aside for it.
+    @State private var pageHasSelection = false
     /// Article awaiting a delete confirmation.
     @State private var confirmDelete: SavedArticle?
     /// The opening. `launching` is the black itself; `launchName` is the name on it.
@@ -111,6 +113,7 @@ struct RootView: View {
                     onDismissArticle: { selection = nil },
                     onGlow: { toggleGlow(.reader) }
                 )
+                .onPreferenceChange(PageHasSelection.self) { pageHasSelection = $0 }
 
                 edgeAffordance(width: drawerWidth, progress: progress)
 
@@ -324,7 +327,11 @@ struct RootView: View {
         .contentShape(Rectangle())
         .gesture(drawerDragGesture(width: width))
         .onTapGesture { withAnimation(.drawer) { showLibrary = true } }
-        .allowsHitTesting(!showLibrary)
+        // On a phone the strip lies over the page's left margin, which is exactly where
+        // a selection that starts a line has its start handle. While there is a
+        // selection the strip lets the page have its touches, or that handle could not
+        // be taken hold of at all.
+        .allowsHitTesting(!showLibrary && !pageHasSelection)
         .zIndex(1)
     }
 

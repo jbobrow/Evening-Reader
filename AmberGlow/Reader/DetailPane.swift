@@ -89,6 +89,7 @@ struct DetailPane: View {
                 splash
             }
         }
+        .preference(key: PageHasSelection.self, value: selection != nil)
         // A novel's text is not kept around once nothing is reading it.
         .onChange(of: article?.id) { _, id in if id == nil { loadedBody = nil } }
         .overlay { markCard }

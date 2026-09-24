@@ -27,6 +27,16 @@ struct WebSelection: Equatable {
     }
 }
 
+/// Whether a page has text selected. Reported upward so that what is drawn over the
+/// page can keep clear of the selection's handles while there are handles to reach for
+/// — see the drawer's edge strip, which sits over the page's left margin.
+struct PageHasSelection: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
+}
+
 enum EditAction: Hashable {
     case cut, copy, paste, search, define, highlight, askAI
 
@@ -170,13 +180,20 @@ struct AmberEditMenuOverlay: View {
 
     private let margin: CGFloat = 8
 
+    /// Room left between the callout and the words for the selection's handles.
+    ///
+    /// WebKit draws a grab dot above the start of a selection and below its end, and
+    /// takes a touch from well around each. The callout is drawn over the page, so
+    /// wherever it overlaps that zone it takes the touch instead — and a callout 10pt
+    /// off the words sat squarely on the start handle, which then could not be moved.
+    private let handleClearance: CGFloat = 28
+
     var body: some View {
         let height = EditAction.height
         let available = max(140, container.width - margin * 2)
         let width = min(EditAction.width(of: actions), available)
-        let gap: CGFloat = 10
-        let above = selection.rect.minY - height - gap
-        let below = selection.rect.maxY + gap
+        let above = selection.rect.minY - height - handleClearance
+        let below = selection.rect.maxY + handleClearance
         let y = above > margin ? above : min(below, container.height - height - margin)
         let x = min(max(selection.rect.midX - width / 2, margin),
                     max(margin, container.width - width - margin))
@@ -213,6 +230,17 @@ enum SelectionReporter {
             try { window.webkit.messageHandlers.\(handler).postMessage(payload); } catch (e) {}
           };
 
+          // Whether the callout is up. While it is, a change to the selection is the
+          // reader dragging one of its handles: the callout is taken down at once, the
+          // way the system's own steps aside, and put back where the selection comes to
+          // rest. Left up, it would be redrawn over the words mid-drag, in the way of
+          // the very handles being reached for.
+          var showing = false;
+          var send = function (payload) {
+            showing = !!payload.text;
+            post(payload);
+          };
+
           var report = function () {
             var el = document.activeElement;
             // A run selected inside a text control is not part of the document's
@@ -222,20 +250,20 @@ enum SelectionReporter {
             if (el && /^(input|textarea)$/i.test(el.tagName || "") &&
                 typeof el.selectionStart === "number" && el.selectionEnd > el.selectionStart) {
               var run = String(el.value || "").substring(el.selectionStart, el.selectionEnd);
-              if (!run.trim()) { post({ name: "selection", text: "" }); return; }
+              if (!run.trim()) { send({ name: "selection", text: "" }); return; }
               var b = el.getBoundingClientRect();
-              post({ name: "selection", text: run, editable: !el.readOnly && !el.disabled,
+              send({ name: "selection", text: run, editable: !el.readOnly && !el.disabled,
                      x: b.left, y: b.top, w: b.width, h: b.height });
               return;
             }
             var sel = window.getSelection();
-            if (!sel || sel.isCollapsed || sel.rangeCount === 0) { post({ name: "selection", text: "" }); return; }
+            if (!sel || sel.isCollapsed || sel.rangeCount === 0) { send({ name: "selection", text: "" }); return; }
             var text = String(sel);
-            if (!text.trim()) { post({ name: "selection", text: "" }); return; }
+            if (!text.trim()) { send({ name: "selection", text: "" }); return; }
             var r = sel.getRangeAt(0).getBoundingClientRect();
             var editable = !!(el && (el.isContentEditable ||
                                      /^(input|textarea)$/i.test(el.tagName || "")));
-            post({ name: "selection", text: text, editable: editable,
+            send({ name: "selection", text: text, editable: editable,
                    x: r.left, y: r.top, w: r.width, h: r.height });
           };
 
@@ -245,7 +273,10 @@ enum SelectionReporter {
             pending = setTimeout(report, delay);
           };
 
-          document.addEventListener("selectionchange", function () { schedule(140); }, { passive: true });
+          document.addEventListener("selectionchange", function () {
+            if (showing) send({ name: "selection", text: "" });
+            schedule(140);
+          }, { passive: true });
           // Keep the callout pinned to the words as the page moves under it.
           window.addEventListener("scroll", function () { schedule(0); }, { passive: true });
           window.addEventListener("resize", function () { schedule(0); }, { passive: true });
