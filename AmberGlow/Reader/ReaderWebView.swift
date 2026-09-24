@@ -72,6 +72,9 @@ struct ReaderWebView: UIViewRepresentable {
     var onHighlight: (Highlight) -> Void = { _ in }
     /// A tap on a mark already on the page.
     var onMarkTap: (UUID) -> Void = { _ in }
+    /// Where passages marked before their breaks were kept cross from one paragraph into
+    /// the next, worked out by the page as it draws them. See `Highlight.breaks`.
+    var onHighlightBreaks: ([UUID: [Int]]) -> Void = { _ in }
     let bridge: ReaderBridge
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -164,7 +167,8 @@ struct ReaderWebView: UIViewRepresentable {
             let payload = parent.highlights.compactMap { mark -> [String: Any]? in
                 guard let offset = mark.offset else { return nil }
                 return ["id": mark.id.uuidString, "text": mark.text,
-                        "offset": offset, "note": mark.hasNote]
+                        "offset": offset, "note": mark.hasNote,
+                        "hasBreaks": mark.breaks != nil]
             }
             guard let data = try? JSONSerialization.data(withJSONObject: payload),
                   let json = String(data: data, encoding: .utf8) else { return }
@@ -270,8 +274,16 @@ struct ReaderWebView: UIViewRepresentable {
                 let chapter = (dict["chapter"] as? String).flatMap { $0.isEmpty ? nil : $0 }
                 parent.onHighlight(Highlight(text: text,
                                              offset: dict["offset"] as? Int,
+                                             breaks: dict["breaks"] as? [Int],
                                              progress: dict["progress"] as? Double ?? 0,
                                              chapterTitle: chapter))
+            case "highlightBreaks":
+                guard let owed = dict["value"] as? [String: [Int]] else { return }
+                var found: [UUID: [Int]] = [:]
+                for (raw, breaks) in owed {
+                    if let id = UUID(uuidString: raw) { found[id] = breaks }
+                }
+                if !found.isEmpty { parent.onHighlightBreaks(found) }
             case "markTap":
                 if let raw = dict["value"] as? String, let id = UUID(uuidString: raw) {
                     parent.onMarkTap(id)

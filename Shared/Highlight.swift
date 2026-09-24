@@ -33,6 +33,18 @@ struct Highlight: Codable, Identifiable, Hashable {
     /// for `text` and takes the occurrence nearest here rather than trusting it.
     var offset: Int?
 
+    /// Where the passage crosses from one block of the document into the next — one
+    /// paragraph into another, a paragraph into a heading — as positions in `text`,
+    /// counted in UTF-16 units the way the page counts them.
+    ///
+    /// Needed because `text` cannot say it. It holds only what the document's text
+    /// nodes spell, and a paragraph's break is not a character but the edge of an
+    /// element: two paragraphs saved with nothing between their tags come out as
+    /// "…the end.The next…", with neither a space nor a return to be found. Nil for a
+    /// passage marked before these were kept, until the page it came off is next opened
+    /// and works them out; and for a PDF, whose lines carry their own breaks.
+    var breaks: [Int]?
+
     /// A PDF's anchor instead: the page it falls on, and the line boxes to paint, in that
     /// page's own coordinates. A PDF has no text of ours to count through.
     var pageIndex: Int?
@@ -65,11 +77,28 @@ struct Highlight: Codable, Identifiable, Hashable {
         !(note ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// The passage as it should be read: the document's own line breaks and indentation
-    /// collapsed back into the single spaces they stood for.
+    /// The passage as it should be read: a paragraph apart wherever it crossed into a new
+    /// block, and within each, the document's own line breaks and indentation collapsed
+    /// back into the single spaces they stood for.
     var passage: String {
-        text.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
-            .joined(separator: " ")
+        paragraphs.joined(separator: "\n\n")
+    }
+
+    /// The passage, cut at its `breaks`, each piece tidied and any left empty dropped.
+    var paragraphs: [String] {
+        let length = text.utf16.count
+        var pieces: [Substring] = []
+        var from = text.startIndex
+        for cut in Set(breaks ?? []).sorted() where cut > 0 && cut < length {
+            let at = text.utf16.index(text.startIndex, offsetBy: cut)
+            guard at > from else { continue }
+            pieces.append(text[from..<at])
+            from = at
+        }
+        pieces.append(text[from...])
+        return pieces
+            .map { $0.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: " ") }
+            .filter { !$0.isEmpty }
     }
 }
 

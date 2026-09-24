@@ -580,6 +580,7 @@ struct DetailPane: View {
                     guard let mark = highlights.highlight(id, in: article) else { return }
                     withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
                 },
+                onHighlightBreaks: { found in highlights.setBreaks(found, in: article) },
                 bridge: bridge
             )
             .id(article.id)

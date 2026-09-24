@@ -141,6 +141,36 @@ enum HighlightMarker {
             return -1;
           };
 
+          // The block a text node reads as part of — its paragraph, heading or list item:
+          // the nearest ancestor that is laid out as a block rather than run inline.
+          var blockOf = function (node) {
+            var el = node.parentNode;
+            while (el && el !== document.body) {
+              var display = window.getComputedStyle(el).display;
+              if (display && display.indexOf("inline") !== 0 && display !== "contents") return el;
+              el = el.parentNode;
+            }
+            return document.body;
+          };
+
+          // Where [start, end) passes from one block into the next, counted from
+          // `start`. The text alone cannot say: two paragraphs saved with nothing
+          // between their tags spell "the end.The next", and it is only the elements
+          // that know a break stood there. Whitespace-only nodes — the indentation
+          // between tags — belong to no paragraph a reader sees, and are passed over.
+          var breaksIn = function (idx, start, end) {
+            var out = [], last = null;
+            for (var i = 0; i < idx.nodes.length; i++) {
+              var entry = idx.nodes[i];
+              if (entry.end <= start || entry.start >= end) continue;
+              if (!entry.node.nodeValue.trim()) continue;
+              var block = blockOf(entry.node);
+              if (last && block !== last) out.push(Math.max(entry.start, start) - start);
+              last = block;
+            }
+            return out;
+          };
+
           // Which chapter the passage came out of, for a book. Nothing else has one.
           var chapterAt = function (node) {
             var el = node.nodeType === 1 ? node : node.parentNode;
@@ -156,15 +186,29 @@ enum HighlightMarker {
 
           return {
             /// Draw the whole set, replacing whatever is drawn now.
+            ///
+            /// A passage marked before its breaks were kept has them worked out here,
+            /// while it is found, and handed back for the app to keep — so the quote
+            /// reads properly from then on. Found first and wrapped
+            /// after: wrapping splits the nodes the breaks are read from.
             apply: function (list) {
               strip();
-              var text = index().text;
+              var idx = index(), found = [], owed = {}, owes = false;
               for (var i = 0; i < list.length; i++) {
                 var item = list[i];
-                var start = locate(text, item.text, item.offset);
+                var start = locate(idx.text, item.text, item.offset);
                 if (start < 0) continue;
-                wrap(start, start + item.text.length, item.id, !!item.note);
+                found.push({ item: item, start: start });
+                if (!item.hasBreaks) {
+                  owed[item.id] = breaksIn(idx, start, start + item.text.length);
+                  owes = true;
+                }
               }
+              for (var j = 0; j < found.length; j++) {
+                var hit = found[j];
+                wrap(hit.start, hit.start + hit.item.text.length, hit.item.id, !!hit.item.note);
+              }
+              if (owes) post({ name: "highlightBreaks", value: owed });
             },
 
             /// Hand back what is selected right now, anchored, for the app to save.
@@ -187,6 +231,7 @@ enum HighlightMarker {
                 name: "highlight",
                 text: passage,
                 offset: start,
+                breaks: breaksIn(idx, start, end),
                 progress: window.__ag ? window.__ag.progress() : 0,
                 chapter: chapterAt(range.startContainer)
               });
