@@ -102,14 +102,19 @@ a.download {
 a.download:hover { background: var(--ink); }
 
 a.download.large {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+    display: inline-block;
     font-size: 17px;
     padding: 13px 24px;
 }
 
-a.download.large svg { flex: none; margin-top: -3px; }
+/* The apple is cropped to its own outline and set on the baseline like a letter:
+   a little taller than the capitals, its leaf above them, a space's width from the D. */
+a.download.large svg {
+    width: 0.75em;
+    height: 0.92em;
+    vertical-align: -0.02em;
+    margin-right: 0.38em;
+}
 
 /* Hero */
 
