@@ -2,8 +2,8 @@
  *
  * Every colour on the site is produced by the same function the app draws with:
  * a grey level (0 ink … 1 brightest) mapped through warmth, glow and contrast into
- * one amber. The glow and contrast are the app's defaults; the warmth is the reader's
- * to set, and is kept between visits. The pictures are greyscale and drawn with a
+ * one amber. The glow is the app's at full brightness and the contrast is its default;
+ * the warmth is the reader's to set, and is kept between visits. The pictures are greyscale and drawn with a
  * multiply blend, so they take the page's colour too — the way the app puts a
  * picture on its panel.
  *
@@ -12,7 +12,7 @@
 (function () {
     "use strict";
 
-    var GLOW = 0.80, CONTRAST = 0.30;
+    var GLOW = 1.0, CONTRAST = 0.30;
     var TOKENS = {
         "page": 0.88, "page-dim": 0.80, "page-raised": 0.955, "bloom": 1.0,
         "ink": 0.045, "ink-strong": 0.0, "ink-muted": 0.34, "ink-faint": 0.52,
@@ -36,10 +36,13 @@
         }
     }
 
-    // AmberPalette.rgb(_:), paper polarity.
+    // AmberPalette.rgb(_:), paper polarity — with the warmth bowed toward amber, so the
+    // middle of the slider is already amber rather than sand. The ends are unchanged.
     function rgb(level, warmth) {
-        var hue = lerp(39 / 360, 25.5 / 360, warmth);
-        var saturation = lerp(0.24, 0.97, warmth);
+        var w = clamp(warmth);
+        w += 0.6 * w * (1 - w);
+        var hue = lerp(39 / 360, 25.5 / 360, w);
+        var saturation = lerp(0.24, 0.97, w);
         var c = lerp(0.55, 1.55, CONTRAST);
         var l = clamp(0.5 + (clamp(level) - 0.5) * c);
         l = Math.pow(l, 1.06) * lerp(0.46, 1.0, GLOW);

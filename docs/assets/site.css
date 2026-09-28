@@ -1,25 +1,26 @@
-/* Evening Reader — the site is drawn from the app's own ramp: the default glow
-   (warmth 0.87, glow 0.80, contrast 0.30) mapped through AmberPalette. */
+/* Evening Reader — the site is drawn from the app's own ramp: the default warmth and
+   contrast at full brightness (warmth 0.87, glow 1.0, contrast 0.30) mapped through
+   AmberPalette, with the warmth bowed toward amber as glow.js does. */
 
 :root {
-    --page: #b96d2e;
-    --page-dim: #a96126;
-    --page-raised: #c87936;
-    --bloom: #d1803c;
-    --ink: #170c03;
-    --ink-strong: #0f0802;
-    --ink-muted: #4e290b;
-    --ink-faint: #713d12;
-    --rule: #91511c;
-    --fill: #a15c22;
-    --fill-active: #2f1906;
-    --page-rgb: 185, 109, 46;
-    --bloom-rgb: 209, 128, 60;
-    --ink-rgb: 23, 12, 3;
-    --ramp: linear-gradient(90deg, #0f0802, #4e290b, #713d12, #91511c, #a15c22, #b96d2e, #c87936, #d1803c);
-    --warmth-track: linear-gradient(90deg, #b9a37f, #b96d2e);
-    --ramp-ink-label: #b96d2e;
-    --ramp-glow-label: #170c03;
+    --page: #cf7733;
+    --page-dim: #bd6a28;
+    --page-raised: #e0863f;
+    --bloom: #eb8f47;
+    --ink: #190c02;
+    --ink-strong: #100801;
+    --ink-muted: #572b08;
+    --ink-faint: #7f4110;
+    --rule: #a2571b;
+    --fill: #b46323;
+    --fill-active: #351a04;
+    --page-rgb: 207, 119, 51;
+    --bloom-rgb: 235, 143, 71;
+    --ink-rgb: 25, 12, 2;
+    --ramp: linear-gradient(90deg, #100801, #572b08, #7f4110, #a2571b, #b46323, #cf7733, #e0863f, #eb8f47);
+    --warmth-track: linear-gradient(90deg, #cbbda3, #cb7430);
+    --ramp-ink-label: #c9722e;
+    --ramp-glow-label: #201003;
     --serif: ui-serif, "New York", "Iowan Old Style", Georgia, "Times New Roman", serif;
     --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
