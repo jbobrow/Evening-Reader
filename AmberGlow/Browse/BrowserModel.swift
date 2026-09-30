@@ -40,6 +40,16 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// A site's page that is not an article. The moment one turns out to be — a pinned
     /// paper's story, say — the full bar is back, so Save and Read are reachable.
     var appMode: Bool { isAppSite && !isSaveable }
+    /// Whether the bar stays where it is, whatever the page does: on anything that is
+    /// not an article — a web app, a feed, a player — outside one of the reader's own
+    /// sites, which have their strip instead.
+    ///
+    /// The bar sits above the page rather than over it, so every time it comes or goes
+    /// the page is resized, and a page built as an app lays itself out again at each new
+    /// size. Kindle's reader rebuilds every page it holds, and takes a tap on the page
+    /// — which is how it turns one — so each page turned was a page rebuilt. An article
+    /// is a document that simply reflows, and there the room is worth having back.
+    var chromeStays: Bool { !isSaveable && !isAppSite }
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
@@ -245,7 +255,8 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// after each move lets the page settle at its new size before scrolling is listened
     /// to again.
     private func followScroll(show: Bool) {
-        guard chromeHidden == show, Date().timeIntervalSince(chromeMovedAt) > 1 else { return }
+        guard !chromeStays, chromeHidden == show,
+              Date().timeIntervalSince(chromeMovedAt) > 1 else { return }
         chromeMovedAt = Date()
         chromeHidden = !show
     }
@@ -263,6 +274,9 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
                 // buttons for keeping it are there to be seen.
                 if saveable, !self.isSaveable, self.isAppSite { self.chromeHidden = false }
                 self.isSaveable = saveable
+                // A page that turned out not to be an article — one that changed its
+                // address without loading, say — has the bar back and keeps it.
+                if self.chromeStays, self.chromeHidden { self.chromeHidden = false }
             }
         }
     }
@@ -401,6 +415,8 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             // page's own controls are left out by the script that reports it, so what
             // arrives here is a tap on nothing in particular — which on a page that
             // moves its content without scrolling is the only way to put the bar away.
+            // Not where the bar stays put: there a tap on the page is the page's own.
+            if chromeStays { return }
             chromeMovedAt = Date()
             chromeHidden.toggle()
             return
