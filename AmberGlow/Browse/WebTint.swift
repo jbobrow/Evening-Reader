@@ -12,7 +12,7 @@ import Foundation
 /// rendered web view instead (see `BrowseScreen`), which page content cannot escape.
 ///
 /// What is left for the DOM is the part that has to happen in page coordinates: the
-/// white base a duotone expects, and the pixel grid.
+/// pixel grid, and the pictures that have to opt out of night's flip.
 struct WebTint {
 
     static func script(showGrid: Bool, isNight: Bool) -> String {
@@ -37,8 +37,12 @@ struct WebTint {
 
         return """
         (function () {
-          // A page that never declares its own background should sit on white, so the
-          // native ramp maps it to the top of the glow rather than to transparent black.
+          // No background is set on the page. One that declares none already sits on
+          // white — the web view is opaque and white behind it (see `BrowserModel`) — and
+          // setting one on <html> was worse than redundant: it stops the body's own
+          // background standing in for the canvas, so the body paints as an ordinary
+          // box over anything a page puts at a negative z-index. Kindle's reader keeps
+          // its pages there, and read as a blank white sheet.
           var styleID = 'ag-page-style';
           var style = document.getElementById(styleID);
           if (!style) {
@@ -47,7 +51,6 @@ struct WebTint {
             (document.head || document.documentElement).appendChild(style);
           }
           style.textContent = [
-            'html { background: #ffffff !important; }',
             // WebKit's own control bar reaches fullscreen through an internal path, not
             // through the JS methods overridden below, so it cannot be redirected into
             // the in-page version — and what it opens is a window the filter cannot
