@@ -12,6 +12,9 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
 
     /// What the page currently has selected, if anything.
     var selection: WebSelection?
+    /// An empty field the page has just had tapped into, where Paste should be offered —
+    /// its box, in the web view's own coordinates.
+    var pasteOffer: CGRect?
     /// The page measured in screenfuls.
     var page = 1
     var pageCount = 1
@@ -180,6 +183,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// A new page: the old page's frames are gone with it.
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         frames.removeAll()
+        pasteOffer = nil
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -350,6 +354,18 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         }
         if name == "field" {
             WebKeyboardBridge.shared.focusedField(isLogin: dict["login"] as? Bool ?? false)
+            return
+        }
+        if name == "pasteOffer" {
+            // Only the top document's fields: a frame's box is in the frame's own
+            // coordinates, and the callout would land somewhere else entirely.
+            guard message.frameInfo.isMainFrame else { return }
+            if let x = dict["x"] as? Double, let y = dict["y"] as? Double,
+               let w = dict["w"] as? Double, let h = dict["h"] as? Double {
+                pasteOffer = CGRect(x: x, y: y, width: w, height: h)
+            } else {
+                pasteOffer = nil
+            }
             return
         }
         if name == "frame" {

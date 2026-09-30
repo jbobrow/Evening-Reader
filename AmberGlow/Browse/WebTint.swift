@@ -147,6 +147,56 @@ struct WebTint {
             document.addEventListener("focusin", function (e) { report(e.target); }, { capture: true, passive: true });
             var active = document.activeElement;
             if (active && /^(input|textarea)$/i.test(active.tagName || "")) report(active);
+
+            // Paste, offered over an empty field as it is taken up or tapped — the small
+            // callout the system shows there, which the app draws itself since the
+            // system's is suppressed. Only the field's box is sent; whether there is
+            // anything to paste is the app's to know, and the offer is withdrawn by the
+            // first edit or by the field letting go.
+            var textTypes = /^(text|search|url|email|tel|password|number)$/;
+            var empty = function (el) {
+              if (!el || el.disabled || el.readOnly) return false;
+              var tag = (el.tagName || "").toLowerCase();
+              if (tag === "textarea") return !el.value;
+              if (tag === "input") return textTypes.test(String(el.type || "text").toLowerCase()) && !el.value;
+              return !!el.isContentEditable && !(el.textContent || "").trim();
+            };
+            var offered = null;
+            var say = function (payload) {
+              payload.name = "pasteOffer";
+              try { window.webkit.messageHandlers.browse.postMessage(payload); } catch (e) {}
+            };
+            var offer = function (el) {
+              if (!empty(el)) { withdraw(); return; }
+              offered = el;
+              // Over the caret, which in an empty field sits just inside its leading
+              // edge — not over the middle of a field that may run the width of the page.
+              var b = el.getBoundingClientRect(), cs = getComputedStyle(el);
+              var rtl = cs.direction === "rtl";
+              var inset = (parseFloat(rtl ? cs.paddingRight : cs.paddingLeft) || 0)
+                + (parseFloat(rtl ? cs.borderRightWidth : cs.borderLeftWidth) || 0);
+              say({ x: rtl ? b.right - inset : b.left + inset, y: b.top, w: 0, h: b.height });
+            };
+            var withdraw = function () {
+              if (!offered) return;
+              offered = null;
+              say({});
+            };
+            // After a beat, so the page has scrolled the field into view for the keyboard.
+            document.addEventListener("focusin", function (e) {
+              var el = e.target;
+              setTimeout(function () { if (document.activeElement === el) offer(el); }, 250);
+            }, { capture: true, passive: true });
+            document.addEventListener("click", function (e) {
+              var el = document.activeElement;
+              if (el && el === e.target) offer(el);
+            }, { capture: true, passive: true });
+            document.addEventListener("input", withdraw, { capture: true, passive: true });
+            document.addEventListener("focusout", withdraw, { capture: true, passive: true });
+            // The callout is drawn in the page's coordinates, so it follows the field.
+            var follow = function () { if (offered) offer(offered); };
+            window.addEventListener("scroll", follow, { capture: true, passive: true });
+            window.addEventListener("resize", follow, { passive: true });
           })();
 
           // Each frame says hello once, so a change of polarity can be sent to it

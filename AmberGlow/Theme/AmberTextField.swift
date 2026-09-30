@@ -49,6 +49,7 @@ struct AmberTextField: UIViewRepresentable {
                         for: .editingChanged)
         context.coordinator.field = field
         context.coordinator.installKeyboard(self, on: field)
+        context.coordinator.watchTaps(on: field)
         Self.removeEditMenu(from: field)
         return field
     }
@@ -90,7 +91,7 @@ struct AmberTextField: UIViewRepresentable {
         )
     }
 
-    final class Coordinator: NSObject, UITextFieldDelegate {
+    final class Coordinator: NSObject, UITextFieldDelegate, UIGestureRecognizerDelegate {
         var parent: AmberTextField
         weak var field: UITextField?
         private let board = AmberKeyboardInstaller()
@@ -164,17 +165,40 @@ struct AmberTextField: UIViewRepresentable {
             callout.hide()
         }
 
+        /// A tap into the field — the one that takes it up, or one on it while it already
+        /// has the caret — is what asks for Paste over an empty field. Heard alongside the
+        /// field's own recognisers rather than instead of them.
+        func watchTaps(on field: UITextField) {
+            let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
+            tap.cancelsTouchesInView = false
+            tap.delegate = self
+            field.addGestureRecognizer(tap)
+        }
+
+        @objc private func tapped(_ tap: UITapGestureRecognizer) {
+            guard let field, field.isFirstResponder else { return }
+            callout.offersPaste = true
+            showCallout(for: field)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
+        }
+
         private func showCallout(for field: UITextField) {
             callout.update(for: field, palette: parent.palette,
                            perform: { [weak self] in self?.performFromCallout($0) },
                            onPaste: { [weak self] text in
                                self?.field?.insertText(text)
+                               self?.callout.offersPaste = false
                                self?.callout.hide()
                            })
         }
 
         @objc func editingChanged(_ field: UITextField) {
             parent.text = field.text ?? ""
+            callout.offersPaste = false
             callout.hide()
         }
 
@@ -184,10 +208,19 @@ struct AmberTextField: UIViewRepresentable {
 
         func textFieldDidBeginEditing(_ textField: UITextField) {
             if !parent.isFocused { parent.isFocused = true }
+            // Taken up empty, with something to paste: offer it, the way the system's
+            // own callout does on a tap into a blank field. After a beat, so the caret
+            // has been placed and the keyboard has started up.
+            callout.offersPaste = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak textField] in
+                guard let self, let textField, textField.isFirstResponder else { return }
+                self.showCallout(for: textField)
+            }
         }
 
         func textFieldDidEndEditing(_ textField: UITextField) {
             if parent.isFocused { parent.isFocused = false }
+            callout.offersPaste = false
             callout.hide()
         }
 

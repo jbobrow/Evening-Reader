@@ -56,6 +56,7 @@ struct AmberTextView: UIViewRepresentable {
         view.alwaysBounceVertical = false
         context.coordinator.view = view
         context.coordinator.installKeyboard(self, on: view)
+        context.coordinator.watchTaps(on: view)
         Self.removeEditMenu(from: view)
         return view
     }
@@ -91,7 +92,7 @@ struct AmberTextView: UIViewRepresentable {
                                                       font: .systemFont(ofSize: fontSize))
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: AmberTextView
         weak var view: UITextView?
         private let board = AmberKeyboardInstaller()
@@ -151,27 +152,58 @@ struct AmberTextView: UIViewRepresentable {
             callout.hide()
         }
 
-        func textViewDidChangeSelection(_ textView: UITextView) {
+        /// A tap into the view asks for Paste over an empty one — see `AmberTextField`.
+        func watchTaps(on view: UITextView) {
+            let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
+            tap.cancelsTouchesInView = false
+            tap.delegate = self
+            view.addGestureRecognizer(tap)
+        }
+
+        @objc private func tapped(_ tap: UITapGestureRecognizer) {
+            guard let view, view.isFirstResponder else { return }
+            callout.offersPaste = true
+            showCallout(for: view)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
+        }
+
+        private func showCallout(for textView: UITextView) {
             callout.update(for: textView, palette: parent.palette,
                            perform: { [weak self] in self?.performFromCallout($0) },
                            onPaste: { [weak self] text in
                                self?.view?.insertText(text)
+                               self?.callout.offersPaste = false
                                self?.callout.hide()
                            })
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            showCallout(for: textView)
         }
 
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text ?? ""
             (textView as? AmberInputTextView)?.refreshPlaceholder()
+            callout.offersPaste = false
             callout.hide()
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
             if !parent.isFocused { parent.isFocused = true }
+            callout.offersPaste = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak textView] in
+                guard let self, let textView, textView.isFirstResponder else { return }
+                self.showCallout(for: textView)
+            }
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
             if parent.isFocused { parent.isFocused = false }
+            callout.offersPaste = false
             callout.hide()
         }
     }

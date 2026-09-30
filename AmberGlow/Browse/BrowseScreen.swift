@@ -180,6 +180,19 @@ struct BrowseScreen: View {
                                         model.selection = nil
                                     }
                                 )
+                            } else if let field = model.pasteOffer, UIPasteboard.general.hasStrings {
+                                // Tapped into an empty field with something to paste:
+                                // Paste alone, over the field, as the system would offer.
+                                AmberEditMenuOverlay(
+                                    selection: WebSelection(text: "", rect: field, isEditable: true),
+                                    container: geo.size,
+                                    actions: [.paste],
+                                    perform: { _ in },
+                                    onPaste: { text in
+                                        WebEditor.paste(text, on: model)
+                                        model.pasteOffer = nil
+                                    }
+                                )
                             }
                         }
                     }

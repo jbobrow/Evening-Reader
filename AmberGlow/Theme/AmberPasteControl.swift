@@ -161,20 +161,36 @@ final class FieldCallout {
     private var host: UIHostingController<AnyView>?
     private var palette = AmberPalette()
 
+    /// Whether an empty field should be offering Paste at its caret — the little callout
+    /// the system puts up when you tap into a blank field with something on the
+    /// clipboard. Set by a tap into the field (or the field being taken up), and spent
+    /// by the first edit: a field emptied again by deleting is not asking for it.
+    var offersPaste = false
+
     /// Show, move or hide the callout to match the field's current selection.
     func update(for input: UIView & UITextInput, palette: AmberPalette,
                 perform: @escaping (EditAction) -> Void,
                 onPaste: @escaping (String) -> Void) {
         self.palette = palette
-        guard let window = input.window,
-              let range = input.selectedTextRange, !range.isEmpty else { hide(); return }
-        let rects = input.selectionRects(for: range).map(\.rect).filter { !$0.isEmpty }
-        guard let first = rects.first else { hide(); return }
-        let union = rects.dropFirst().reduce(first) { $0.union($1) }
-        let anchor = input.convert(union, to: window)
+        guard let window = input.window, let range = input.selectedTextRange else { hide(); return }
 
-        var actions: [EditAction] = [.cut, .copy]
-        if UIPasteboard.general.hasStrings { actions.append(.paste) }
+        let anchor: CGRect
+        var actions: [EditAction]
+        if range.isEmpty {
+            // Nothing selected: the only callout there is is Paste, over an empty field.
+            // `hasStrings` only asks whether there is text, which the system does not
+            // count as reading it — no prompt until the control is actually tapped.
+            guard offersPaste, !input.hasText, UIPasteboard.general.hasStrings else { hide(); return }
+            anchor = input.convert(input.caretRect(for: range.start), to: window)
+            actions = [.paste]
+        } else {
+            let rects = input.selectionRects(for: range).map(\.rect).filter { !$0.isEmpty }
+            guard let first = rects.first else { hide(); return }
+            let union = rects.dropFirst().reduce(first) { $0.union($1) }
+            anchor = input.convert(union, to: window)
+            actions = [.cut, .copy]
+            if UIPasteboard.general.hasStrings { actions.append(.paste) }
+        }
 
         let margin: CGFloat = 8, gap: CGFloat = 10
         let height = EditAction.height
