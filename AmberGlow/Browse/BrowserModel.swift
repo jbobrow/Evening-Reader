@@ -213,17 +213,41 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
 
     /// The bar follows the reading: a page going up under the finger puts it away, a
     /// page coming back down brings it out, and the top of a page always has it.
+    ///
+    /// Only the reader's own scrolling counts — a finger on the page, or the glide after
+    /// one. A page that moves itself is left to it: see `followScroll(show:)`.
     private func trackScroll() {
         let y = web.scrollView.contentOffset.y
         let delta = y - lastOffset
         lastOffset = y
+        let scroll = web.scrollView
+        guard scroll.isTracking || scroll.isDragging || scroll.isDecelerating else { return }
         if y <= 8 {
-            if chromeHidden, !appMode { chromeHidden = false }
-        } else if delta > 8, y > 80, !chromeHidden {
-            chromeHidden = true
-        } else if delta < -8, chromeHidden, !appMode {
-            chromeHidden = false
+            if !appMode { followScroll(show: true) }
+        } else if delta > 8, y > 80 {
+            followScroll(show: false)
+        } else if delta < -8, !appMode {
+            followScroll(show: true)
         }
+    }
+
+    /// When the bar last came or went, by scrolling or by a tap.
+    @ObservationIgnored private var chromeMovedAt = Date.distantPast
+
+    /// Puts the bar away or brings it out in answer to scrolling — unless it has only
+    /// just moved.
+    ///
+    /// The bar sits above the page rather than over it, so its coming and going resizes
+    /// the web view, and a page that lays itself out to the window does it again at the
+    /// new size — moving its own scroll position as it goes. Taken as scrolling, that
+    /// moved the bar back, which resized the page again: Kindle's reader rebuilt its
+    /// pages on every turn of that loop and was blank for most of it. A moment's grace
+    /// after each move lets the page settle at its new size before scrolling is listened
+    /// to again.
+    private func followScroll(show: Bool) {
+        guard chromeHidden == show, Date().timeIntervalSince(chromeMovedAt) > 1 else { return }
+        chromeMovedAt = Date()
+        chromeHidden = !show
     }
 
     private func probeSaveable() {
@@ -349,7 +373,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             // is the tap that brings it out.
             let show = dict["show"] as? Bool ?? true
             if show, appMode { return }
-            if chromeHidden == show { chromeHidden = !show }
+            followScroll(show: show)
             return
         }
         if name == "field" {
@@ -377,6 +401,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             // page's own controls are left out by the script that reports it, so what
             // arrives here is a tap on nothing in particular — which on a page that
             // moves its content without scrolling is the only way to put the bar away.
+            chromeMovedAt = Date()
             chromeHidden.toggle()
             return
         }

@@ -218,13 +218,24 @@ struct WebTint {
             if (window.__agTapReporter) return;
             window.__agTapReporter = true;
             var x0 = 0, y0 = 0, t0 = 0;
+            // When a finger was last on the page, for the scroll listener below.
+            var touching = false, lastTouch = 0;
             var controls = 'a,button,input,textarea,select,label,video,audio,summary,'
               + 'iframe,[role=button],[role=link],[onclick],[contenteditable]';
             document.addEventListener('touchstart', function (e) {
+              touching = true;
+              lastTouch = Date.now();
               if (e.touches.length !== 1) { t0 = 0; return; }
               x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
             }, { passive: true, capture: true });
+            var lift = function (e) {
+              touching = e.touches.length > 0;
+              lastTouch = Date.now();
+            };
+            document.addEventListener('touchmove', function () { lastTouch = Date.now(); }, { passive: true, capture: true });
+            document.addEventListener('touchcancel', lift, { passive: true, capture: true });
             document.addEventListener('touchend', function (e) {
+              lift(e);
               if (!t0) return;
               var t = e.changedTouches[0], held = Date.now() - t0;
               t0 = 0;
@@ -240,6 +251,10 @@ struct WebTint {
             // and the document never moves, so the web view's own scroll view would
             // never know. Listening in the capture phase hears every box. Only a change
             // of direction, past a little travel, is reported — never every frame.
+            //
+            // And only scrolling the reader did: under a finger, or in the glide after
+            // one. A page that scrolls itself — as a reader app does when it lays its
+            // pages out again for a new window size — is not asking for the bar.
             var tops = new WeakMap(), run = 0, shown = true;
             var say = function (show) {
               if (show === shown) return;
@@ -252,6 +267,7 @@ struct WebTint {
               var top = el.scrollTop, prev = tops.get(el);
               tops.set(el, top);
               if (prev === undefined) return;
+              if (!touching && Date.now() - lastTouch > 1200) { run = 0; return; }
               var d = top - prev;
               if (Math.abs(d) < 1) return;
               run = ((d > 0) === (run > 0)) ? run + d : d;
