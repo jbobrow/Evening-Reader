@@ -34,27 +34,25 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// back up, a tap on the page, or a new page brings it back.
     var chromeHidden: Bool = false
     /// Whether the page belongs to one of the reader's own sites — a door kept on the
-    /// front page. Such a site carries its own navigation, so the bar keeps out of the
-    /// way: put away as each page arrives, and a tap shows only a strip.
+    /// front page. Such a site carries its own navigation, so it gets a bar of its own
+    /// kept to a single row (see `BrowseScreen.appBar`).
     var isAppSite: Bool = false
-    /// A site's page that is not an article. The moment one turns out to be — a pinned
-    /// paper's story, say — the full bar is back, so Save and Read are reachable.
-    var appMode: Bool { isAppSite && !isSaveable }
+    /// Whether the page gets the site's own bar. Every page of one of the reader's own
+    /// sites does, articles included — a pinned paper's story gets Save and Read in
+    /// that bar rather than a different bar. Which bar is showing is then never down to
+    /// the guess at whether a page is an article, and a guess that goes wrong costs two
+    /// buttons rather than the bar changing under the reader.
+    var appMode: Bool { isAppSite }
     /// Whether the bar stays where it is, whatever the page does: on anything that is
-    /// not an article — a web app, a feed, a player — outside one of the reader's own
-    /// sites, which have their strip instead.
+    /// not an article — a web app, a feed, a player — and on every page of one of the
+    /// reader's own sites, which are apps however their pages read.
     ///
     /// The bar sits above the page rather than over it, so every time it comes or goes
     /// the page is resized, and a page built as an app lays itself out again at each new
     /// size. Kindle's reader rebuilds every page it holds, and takes a tap on the page
     /// — which is how it turns one — so each page turned was a page rebuilt. An article
     /// is a document that simply reflows, and there the room is worth having back.
-    var chromeStays: Bool { !isSaveable && !isAppSite }
-    /// Whether this page has been looked at yet to see if it is an article. Until it has,
-    /// `isSaveable` is only a default, and the bar that suits an app is not yet chosen
-    /// over the one that suits a page — so a story does not open in the one and jump to
-    /// the other a moment later.
-    var hasLooked = false
+    var chromeStays: Bool { !isSaveable || isAppSite }
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
@@ -210,6 +208,10 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// Is there an article here? Counted rather than judged: a couple of hundred words
     /// of paragraph text inside the page's main region is prose worth keeping, and a
     /// player, a feed or a login form never has that many.
+    ///
+    /// Only paragraphs that run to a sentence count. A shelf sets each title and author
+    /// in a paragraph of its own — Kindle's library does — and a few dozen of those add
+    /// up to two hundred words without a line of prose among them.
     private static let saveableProbe = """
     (function () {
       var root = document.querySelector('article')
@@ -219,7 +221,9 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
       var words = 0, ps = root.querySelectorAll('p');
       for (var i = 0; i < ps.length; i++) {
         var t = ps[i].innerText || '';
-        words += t.split(/\\s+/).filter(function (w) { return w.length > 0; }).length;
+        var n = t.split(/\\s+/).filter(function (w) { return w.length > 0; }).length;
+        if (n < 12) { continue; }
+        words += n;
         if (words >= 200) { return true; }
       }
       return false;
@@ -238,10 +242,10 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         let scroll = web.scrollView
         guard scroll.isTracking || scroll.isDragging || scroll.isDecelerating else { return }
         if y <= 8 {
-            if !appMode { followScroll(show: true) }
+            followScroll(show: true)
         } else if delta > 8, y > 80 {
             followScroll(show: false)
-        } else if delta < -8, !appMode {
+        } else if delta < -8 {
             followScroll(show: true)
         }
     }
@@ -269,7 +273,6 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     private func probeSaveable() {
         if showingPDF {
             isSaveable = true
-            hasLooked = true
             return
         }
         web.evaluateJavaScript(Self.saveableProbe) { [weak self] result, _ in
@@ -278,9 +281,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
                 let saveable = (result as? Bool) ?? false
                 // An article on a site kept as an app gets its bar back, so the
                 // buttons for keeping it are there to be seen.
-                if saveable, !self.isSaveable, self.isAppSite { self.chromeHidden = false }
                 self.isSaveable = saveable
-                self.hasLooked = true
                 // A page that turned out not to be an article — one that changed its
                 // address without loading, say — has the bar back and keeps it.
                 if self.chromeStays, self.chromeHidden { self.chromeHidden = false }
@@ -306,8 +307,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             showingPDF = navigationResponse.response.mimeType == "application/pdf"
             // A new document, not yet read: nothing to save until it has been looked at.
             isSaveable = showingPDF
-            hasLooked = false
-            chromeHidden = isAppSite
+            chromeHidden = false
             lastOffset = 0
             // The new document has not said where it is yet, and the last one's numbers
             // are not its own. The scrubber goes away until something reports again.
@@ -391,11 +391,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             return
         }
         if name == "chrome" {
-            // On a site kept as an app, scrolling only ever puts the strip away; it
-            // is the tap that brings it out.
-            let show = dict["show"] as? Bool ?? true
-            if show, appMode { return }
-            followScroll(show: show)
+            followScroll(show: dict["show"] as? Bool ?? true)
             return
         }
         if name == "field" {

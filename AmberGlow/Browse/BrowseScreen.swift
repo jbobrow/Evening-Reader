@@ -31,89 +31,73 @@ struct BrowseScreen: View {
     @State private var scrubberHeight: CGFloat = 0
 
     var body: some View {
-        // The page keeps the safe area it always had. Only the strip and its ground
-        // reach into the band above it, and they are the one thing here that ignores
-        // the inset.
-        ZStack(alignment: .top) {
-            pane
-            if model.appMode, !model.chromeHidden {
-                StripGround(height: Self.groundHeight)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .ignoresSafeArea(.container, edges: .top)
-                    .transition(.opacity)
-                appStrip
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .ignoresSafeArea(.container, edges: .top)
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: 0.22), value: model.chromeHidden)
-        .animation(.easeOut(duration: 0.22), value: model.appMode)
-        .background(GlowSurface(level: 0.88))
-        .overlay {
-            // The reader outside the condition, so it is the panel itself that comes
-            // and goes — and the panel's own transition, up from the bottom on a phone,
-            // is the one that plays. Conditional on the reader, the reader was what
-            // appeared, and it only knows how to fade.
-            GeometryReader { geo in
-                if glowOpen {
-                    GlowPanelOverlay(isCompact: isCompact, alignment: .topTrailing,
-                                     top: 54, size: geo.size) {
-                        withAnimation(.drawer) { glowOpen = false }
+        pane
+            .animation(.easeOut(duration: 0.22), value: model.chromeHidden)
+            .animation(.easeOut(duration: 0.22), value: model.appMode)
+            .background(GlowSurface(level: 0.88))
+            .overlay {
+                // The reader outside the condition, so it is the panel itself that comes
+                // and goes — and the panel's own transition, up from the bottom on a phone,
+                // is the one that plays. Conditional on the reader, the reader was what
+                // appeared, and it only knows how to fade.
+                GeometryReader { geo in
+                    if glowOpen {
+                        GlowPanelOverlay(isCompact: isCompact, alignment: .topTrailing,
+                                         top: 54, size: geo.size) {
+                            withAnimation(.drawer) { glowOpen = false }
+                        }
                     }
                 }
+                .allowsHitTesting(glowOpen)
             }
-            .allowsHitTesting(glowOpen)
-        }
-        .statusBarHidden(true)
-        .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
-            NewSiteSheet(draft: draft)
-        })
-        .onAppear {
-            model.applyTint(showGrid: settings.showTexture, isNight: isNight)
-            if let initialURL {
-                address = initialURL.absoluteString
-                model.isAppSite = site(for: initialURL) != nil
-                model.chromeHidden = model.isAppSite
-                model.load(initialURL)
-            } else {
-                addressFocused = true
+            .statusBarHidden(true)
+            .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
+                NewSiteSheet(draft: draft)
+            })
+            .onAppear {
+                model.applyTint(showGrid: settings.showTexture, isNight: isNight)
+                if let initialURL {
+                    address = initialURL.absoluteString
+                    model.isAppSite = site(for: initialURL) != nil
+                    model.load(initialURL)
+                } else {
+                    addressFocused = true
+                }
             }
-        }
-        // The page goes with the browser: stopped, and let go of. Left to the view's
-        // own release it would never have gone — see `BrowserModel.retire`.
-        .onDisappear { model.retire() }
-        .onChange(of: settings.showTexture) { _, grid in
-            model.applyTint(showGrid: grid, isNight: isNight)
-            WebKeyboardBridge.shared.refresh(palette: settings.palette, showsTexture: grid)
-        }
-        .onChange(of: settings.polarity) { _, polarity in
-            model.applyTint(showGrid: settings.showTexture, isNight: polarity == .night)
-        }
-        .onChange(of: settings.palette) { _, palette in
-            WebKeyboardBridge.shared.refresh(palette: palette, showsTexture: settings.showTexture)
-        }
-        .onChange(of: addressFocused) { _, focused in
-            if !focused { editingAddress = false }
-        }
-        .onChange(of: model.currentURL) { _, url in
-            model.isAppSite = url.flatMap(site(for:)) != nil
-            guard !addressFocused, let url else { return }
-            address = url.absoluteString
-        }
-        // Pinning the site you are on makes it one of the apps from here on.
-        .onChange(of: pinnedSite?.id) { _, id in
-            model.isAppSite = id != nil
-        }
+            // The page goes with the browser: stopped, and let go of. Left to the view's
+            // own release it would never have gone — see `BrowserModel.retire`.
+            .onDisappear { model.retire() }
+            .onChange(of: settings.showTexture) { _, grid in
+                model.applyTint(showGrid: grid, isNight: isNight)
+                WebKeyboardBridge.shared.refresh(palette: settings.palette, showsTexture: grid)
+            }
+            .onChange(of: settings.polarity) { _, polarity in
+                model.applyTint(showGrid: settings.showTexture, isNight: polarity == .night)
+            }
+            .onChange(of: settings.palette) { _, palette in
+                WebKeyboardBridge.shared.refresh(palette: palette, showsTexture: settings.showTexture)
+            }
+            .onChange(of: addressFocused) { _, focused in
+                if !focused { editingAddress = false }
+            }
+            .onChange(of: model.currentURL) { _, url in
+                model.isAppSite = url.flatMap(site(for:)) != nil
+                guard !addressFocused, let url else { return }
+                address = url.absoluteString
+            }
+            // Pinning the site you are on makes it one of the apps from here on.
+            .onChange(of: pinnedSite?.id) { _, id in
+                model.isAppSite = id != nil
+            }
     }
 
     /// The bar, the page and the scrubber: everything below the band.
     private var pane: some View {
         VStack(spacing: 0) {
-            // The bar goes away as the page is read down and comes back as it is read
-            // up, or on a tap — the same room the reader gives a page. On one of the
-            // reader's own sites it is not the bar that comes back but the strip.
-            if !model.chromeHidden, !model.appMode {
+            // On an article the bar goes away as the page is read down and comes back as
+            // it is read up, or on a tap — the same room the reader gives a page.
+            // Anywhere else it stays (see `BrowserModel.chromeStays`).
+            if !model.chromeHidden {
                 VStack(spacing: 0) {
                     bar
                     if model.isLoading {
@@ -225,44 +209,6 @@ struct BrowseScreen: View {
         }
     }
 
-    /// What a site kept as an app gets on a tap: a way out, a way back when there is
-    /// one, and the lamp — in the band above the page, so the page is never covered.
-    ///
-    /// Set beside the cutout, on the page itself, with the page's own surface solid
-    /// behind the buttons and fading out beneath them, so they present on the content
-    /// rather than cut into it — the same treatment the scrubber gets at the other
-    /// corner.
-    private var appStrip: some View {
-        HStack(spacing: 4) {
-            closeButton
-            if model.canGoBack {
-                AmberIconButton(symbol: "chevron.left") { model.web.goBack() }
-            }
-            Spacer()
-            glowButton
-        }
-        // Well in from the corners, whose radius comes a long way down the glass.
-        .padding(.horizontal, 18)
-        .padding(.top, Self.stripTop)
-    }
-
-    /// Where the strip's buttons start. Level with the cutout's lower half on a phone,
-    /// so they sit in the solid part of the ground with the fade running out below
-    /// them; a little in from the edge on a glass with no cutout at all.
-    private static var stripTop: CGFloat { max(topInset - 24, 14) }
-
-    /// How far the ground reaches: solid behind the buttons, fading out beneath them.
-    private static var groundHeight: CGFloat { max(topInset, 24) + 92 }
-
-    /// How much of the top the cutout keeps clear, from the window itself. Read there
-    /// rather than from the layout: what SwiftUI reports inside a presented cover has
-    /// come back as zero on the way in, and the window always knows.
-    private static var topInset: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-            .first?.safeAreaInsets.top ?? 0
-    }
-
     /// The site a page belongs to, if it is one of the reader's own.
     private func site(for url: URL) -> Site? {
         guard let host = url.host else { return nil }
@@ -342,18 +288,19 @@ struct BrowseScreen: View {
         }
     }
 
-    /// Whether the page gets the bar an app gets rather than the one a page gets. Only
-    /// once the page has been looked at: until then it is not known which it is.
+    /// Whether the page gets the bar one of the reader's own sites gets.
     private var showsAppBar: Bool {
-        model.chromeStays && model.hasLooked && !editingAddress
+        model.appMode && !editingAddress
     }
 
-    /// The bar for a web app — something to use rather than to read, like Kindle's
-    /// reader. It stays put (see `BrowserModel.chromeStays`), so it is kept to a single
-    /// row: an app's page is its own furniture, and wants the room. The address gives
-    /// way to the site's name, since an app's addresses are its own business and say
-    /// little; a tap on the name brings the address back for going somewhere else. And
-    /// the way out is the drawer — an app is somewhere you went from the front page,
+    /// The bar for one of the reader's own sites — a web app kept on the front page,
+    /// like Kindle's reader. It stays put (see `BrowserModel.chromeStays`), so it is
+    /// kept to a single row: an app's page is its own furniture, and wants the room.
+    /// The address gives way to the name on the site's tile, since an app's addresses
+    /// are its own business and say little; a tap on the name brings the address back
+    /// for going somewhere else. There is no pin, the site being pinned already; Save
+    /// and Read join the row when the page is an article worth keeping. And
+    /// the way out is the drawer — the app is somewhere you went from the front page,
     /// not a page you are done with.
     private var appBar: some View {
         HStack(spacing: 4) {
@@ -386,15 +333,20 @@ struct BrowseScreen: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            siteMark
+            if model.isSaveable {
+                saveButton
+                readButton
+                    .padding(.trailing, 2)
+            }
             glowButton
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
+        .animation(.easeOut(duration: 0.22), value: model.isSaveable)
     }
 
-    /// What the app is called: its tile's name if it has one on the front page, and
-    /// otherwise what the page calls itself.
+    /// What the app is called: its tile's name, or what the page calls itself if the
+    /// tile cannot be found.
     private var appName: String {
         if let site = pinnedSite { return site.name }
         guard let host = model.currentURL?.host else { return model.pageTitle }
@@ -575,24 +527,3 @@ struct BrowseScreen: View {
     }
 }
 
-/// The ground under the app strip: the panel's own surface, fading out below the
-/// buttons so they sit on the page the way the scrubber sits on it — presented gently
-/// on top of the content, rather than a bar cut across it.
-private struct StripGround: View {
-    /// How far down the fade reaches, from the very top of the glass.
-    var height: CGFloat
-
-    var body: some View {
-        GlowSurface()
-            .compositingGroup()
-            .mask(alignment: .top) {
-                LinearGradient(stops: [
-                    .init(color: .white, location: 0),
-                    .init(color: .white, location: 0.5),
-                    .init(color: .clear, location: 1)
-                ], startPoint: .top, endPoint: .bottom)
-                .frame(height: height)
-            }
-            .allowsHitTesting(false)
-    }
-}
