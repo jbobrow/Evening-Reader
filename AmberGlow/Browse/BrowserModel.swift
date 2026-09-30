@@ -50,6 +50,11 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// — which is how it turns one — so each page turned was a page rebuilt. An article
     /// is a document that simply reflows, and there the room is worth having back.
     var chromeStays: Bool { !isSaveable && !isAppSite }
+    /// Whether this page has been looked at yet to see if it is an article. Until it has,
+    /// `isSaveable` is only a default, and the bar that suits an app is not yet chosen
+    /// over the one that suits a page — so a story does not open in the one and jump to
+    /// the other a moment later.
+    var hasLooked = false
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
@@ -264,6 +269,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     private func probeSaveable() {
         if showingPDF {
             isSaveable = true
+            hasLooked = true
             return
         }
         web.evaluateJavaScript(Self.saveableProbe) { [weak self] result, _ in
@@ -274,6 +280,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
                 // buttons for keeping it are there to be seen.
                 if saveable, !self.isSaveable, self.isAppSite { self.chromeHidden = false }
                 self.isSaveable = saveable
+                self.hasLooked = true
                 // A page that turned out not to be an article — one that changed its
                 // address without loading, say — has the bar back and keeps it.
                 if self.chromeStays, self.chromeHidden { self.chromeHidden = false }
@@ -299,6 +306,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
             showingPDF = navigationResponse.response.mimeType == "application/pdf"
             // A new document, not yet read: nothing to save until it has been looked at.
             isSaveable = showingPDF
+            hasLooked = false
             chromeHidden = isAppSite
             lastOffset = 0
             // The new document has not said where it is yet, and the last one's numbers

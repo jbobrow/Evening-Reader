@@ -185,9 +185,9 @@ struct RootView: View {
             OnboardingSheet()
         })
         .fullScreenCover(item: $browseTarget) { target in
-            BrowseScreen(initialURL: target.url) { saved in
-                open(saved)
-            }
+            BrowseScreen(initialURL: target.url,
+                         onShowDrawer: { withAnimation(.drawer) { showLibrary = true } },
+                         onSaved: { saved in open(saved) })
             .environment(highlights)
             // Full-screen covers are hosted through a separate presentation path on Mac
             // (running the iPad build) and don't reliably inherit the window's environment

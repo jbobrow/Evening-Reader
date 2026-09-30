@@ -11,12 +11,16 @@ struct BrowseScreen: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     let initialURL: URL?
+    /// Leaving for the drawer: the browser goes, and the front page is what is left.
+    var onShowDrawer: () -> Void = {}
     var onSaved: (SavedArticle) -> Void
 
     @State private var model = BrowserModel()
     @State private var address = ""
     @State private var savedFlash = false
     @State private var addressFocused = false
+    /// The address, called up in place of the page's name on an app's bar.
+    @State private var editingAddress = false
     /// This site, on its way to the front page.
     @State private var siteDraft: SiteDraft?
     /// The display settings, over the page.
@@ -88,6 +92,9 @@ struct BrowseScreen: View {
         }
         .onChange(of: settings.palette) { _, palette in
             WebKeyboardBridge.shared.refresh(palette: palette, showsTexture: settings.showTexture)
+        }
+        .onChange(of: addressFocused) { _, focused in
+            if !focused { editingAddress = false }
         }
         .onChange(of: model.currentURL) { _, url in
             model.isAppSite = url.flatMap(site(for:)) != nil
@@ -295,7 +302,9 @@ struct BrowseScreen: View {
     /// save nothing is a button that says the app has not looked.
     @ViewBuilder
     private var bar: some View {
-        if isCompact {
+        if showsAppBar {
+            appBar
+        } else if isCompact {
             VStack(spacing: 8) {
                 HStack(spacing: 4) {
                     closeButton
@@ -333,6 +342,70 @@ struct BrowseScreen: View {
         }
     }
 
+    /// Whether the page gets the bar an app gets rather than the one a page gets. Only
+    /// once the page has been looked at: until then it is not known which it is.
+    private var showsAppBar: Bool {
+        model.chromeStays && model.hasLooked && !editingAddress
+    }
+
+    /// The bar for a web app — something to use rather than to read, like Kindle's
+    /// reader. It stays put (see `BrowserModel.chromeStays`), so it is kept to a single
+    /// row: an app's page is its own furniture, and wants the room. The address gives
+    /// way to the site's name, since an app's addresses are its own business and say
+    /// little; a tap on the name brings the address back for going somewhere else. And
+    /// the way out is the drawer — an app is somewhere you went from the front page,
+    /// not a page you are done with.
+    private var appBar: some View {
+        HStack(spacing: 4) {
+            AmberIconButton(symbol: "sidebar.left") {
+                addressFocused = false
+                AmberKeyboardInstaller.putAway()
+                onShowDrawer()
+                dismiss()
+            }
+            backButton
+            forwardButton
+            Button {
+                address = model.currentURL?.absoluteString ?? address
+                editingAddress = true
+                addressFocused = true
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(appName)
+                        .font(.system(size: 13, weight: .semibold, design: .serif))
+                        .foregroundStyle(amber.ink)
+                    if let host = bareHost, host != appName {
+                        Text(host)
+                            .font(.system(size: 11))
+                            .foregroundStyle(amber.inkFaint)
+                    }
+                }
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            siteMark
+            glowButton
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
+    /// What the app is called: its tile's name if it has one on the front page, and
+    /// otherwise what the page calls itself.
+    private var appName: String {
+        if let site = pinnedSite { return site.name }
+        guard let host = model.currentURL?.host else { return model.pageTitle }
+        return Self.siteName(from: model.pageTitle, host: host)
+    }
+
+    private var bareHost: String? {
+        guard let host = model.currentURL?.host else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
     /// Back and forward as chips, in the row the chips live in.
     private func travelChip(symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -357,6 +430,12 @@ struct BrowseScreen: View {
             // rather than found still standing over whatever is underneath.
             addressFocused = false
             AmberKeyboardInstaller.putAway()
+            // An address called up from an app's bar is put back, not the browser: the
+            // bar it came from is still there to go back to.
+            if editingAddress {
+                address = model.currentURL?.absoluteString ?? address
+                return
+            }
             dismiss()
         }
     }
