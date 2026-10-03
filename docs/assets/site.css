@@ -378,6 +378,11 @@ footer .links { margin-top: 10px; }
 footer .links a { color: var(--ink-muted); text-decoration: none; }
 footer .links a:hover { text-decoration: underline; }
 
+/* "App by Jon Bobrow", the same signature as in the app */
+.by-jon { display: inline-block; margin-top: 18px; color: var(--ink-muted); transition: color 0.15s; }
+.by-jon:hover { color: var(--ink); }
+.by-jon svg { display: block; width: 150px; height: auto; }
+
 /* Small screens */
 
 @media (max-width: 760px) {
