@@ -44,6 +44,7 @@ struct RootView: View {
     @State private var search = ""
     @State private var showAdd = false
     @State private var showHighlights = false
+    @State private var showAbout = false
     /// The first-run guide to saving from the share sheet.
     @State private var showOnboarding = false
     /// A marked passage the reader picked out of the highlights list, on its way to the
@@ -184,6 +185,9 @@ struct RootView: View {
         })
         .modifier(AmberFullScreenPresentation(isPresented: $showOnboarding) {
             OnboardingSheet()
+        })
+        .modifier(AmberFullScreenPresentation(isPresented: $showAbout) {
+            AboutPage()
         })
         .fullScreenCover(item: $browseTarget) { target in
             BrowseScreen(initialURL: target.url,
@@ -373,7 +377,8 @@ struct RootView: View {
             },
             onBrowse: { browseTarget = BrowseTarget(url: $0) },
             onAddSite: { siteDraft = SiteDraft() },
-            onEditSite: { siteDraft = SiteDraft(editing: $0) }
+            onEditSite: { siteDraft = SiteDraft(editing: $0) },
+            onAbout: { showAbout = true }
         )
         .background(GlowSurface(level: 0.83, bloomStrength: 0.25))
         .overlay(alignment: .trailing) { amber.rule.frame(width: 1) }
