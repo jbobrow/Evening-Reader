@@ -45,8 +45,10 @@ struct RootView: View {
     @State private var showAdd = false
     @State private var showHighlights = false
     @State private var showAbout = false
-    /// The first-run guide to saving from the share sheet.
+    /// The first-run tour: saving from the share sheet, the glow, highlights.
     @State private var showOnboarding = false
+    /// This version's news, for a reader who updated to it.
+    @State private var whatsNew: WhatsNew?
     /// A marked passage the reader picked out of the highlights list, on its way to the
     /// page it came off. Cleared by the reader once it has been reached.
     @State private var revealHighlight: UUID?
@@ -186,6 +188,11 @@ struct RootView: View {
         .modifier(AmberFullScreenPresentation(isPresented: $showOnboarding) {
             OnboardingSheet()
         })
+        .modifier(AmberFullScreenPresentation(isPresented: Binding(
+            get: { whatsNew != nil },
+            set: { if !$0 { whatsNew = nil } })) {
+            if let whatsNew { WhatsNewSheet(release: whatsNew) }
+        })
         .modifier(AmberFullScreenPresentation(isPresented: $showAbout) {
             AboutPage()
         })
@@ -258,11 +265,22 @@ struct RootView: View {
             // it. Someone updating with a library already has their answer.
             if !OnboardingSheet.hasBeenSeen {
                 if library.articles.isEmpty {
+                    // The tour covers whatever this version brought, so its news is
+                    // not news to someone just starting.
+                    WhatsNew.markSeen()
                     try? await Task.sleep(for: .seconds(0.5))
                     showOnboarding = true
                 } else {
                     OnboardingSheet.hasBeenSeen = true
                 }
+            }
+
+            // Someone who updated is told what changed, once. Marked as seen as it goes
+            // up, so it never comes back however it is closed.
+            if !showOnboarding, let unseen = WhatsNew.unseen {
+                WhatsNew.markSeen()
+                try? await Task.sleep(for: .seconds(0.5))
+                whatsNew = unseen
             }
 
             // iCloud is asked for afterwards. It can take a minute to answer, and the

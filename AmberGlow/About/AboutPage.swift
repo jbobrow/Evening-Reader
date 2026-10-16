@@ -8,6 +8,10 @@ struct AboutPage: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
 
+    /// The tour, or a version's news, opened over this page.
+    @State private var showTour = false
+    @State private var whatsNew: WhatsNew?
+
     private var isCompact: Bool { sizeClass == .compact }
     private let measure: CGFloat = 560
 
@@ -15,7 +19,16 @@ struct AboutPage: View {
         VStack(spacing: 0) {
             header
             Hairline()
-            AboutView(app: .eveningReader) {}
+            AboutView(app: .eveningReader) {
+                AboutRow(title: "How it works", systemImage: "questionmark.circle") {
+                    showTour = true
+                }
+                if let latest = WhatsNew.latest {
+                    AboutRow(title: "What's new in \(latest.version)", systemImage: "sparkles") {
+                        whatsNew = latest
+                    }
+                }
+            }
                 .frame(maxWidth: measure)
                 .frame(maxWidth: .infinity)
                 .environment(\.aboutStyle, AboutStyle(
@@ -29,6 +42,14 @@ struct AboutPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(GlowSurface(level: 0.9))
         .statusBarHidden(true)
+        .modifier(AmberFullScreenPresentation(isPresented: $showTour) {
+            OnboardingSheet()
+        })
+        .modifier(AmberFullScreenPresentation(isPresented: Binding(
+            get: { whatsNew != nil },
+            set: { if !$0 { whatsNew = nil } })) {
+            if let whatsNew { WhatsNewSheet(release: whatsNew) }
+        })
     }
 
     private var header: some View {

@@ -1,20 +1,25 @@
 import SwiftUI
 
 /// The first thing a new reader is shown once the name has faded: how an article gets
-/// here from somewhere else.
+/// here from somewhere else, then the two things to do with it once it is here — set
+/// the glow, and keep a passage.
 ///
 /// Evening Reader is mostly filled from outside itself — a page found in Safari, a link in
 /// Mail — and the way in is the share sheet, which the app has no say over and which
 /// iOS does not always put the extension in plain sight. Left to find that alone, a new
 /// reader opens an empty library and sees nothing to do. So it is shown once, on a first
-/// launch with nothing in the library, and can be asked for again from the add panel.
+/// launch with nothing in the library, and can be asked for again from About — or, just
+/// the saving part of it, from the add panel.
 struct OnboardingSheet: View {
     @Environment(DisplaySettings.self) private var settings
+
+    /// Only how to save, for the add panel, where the question was how to get a page in.
+    var savingOnly = false
 
     var body: some View {
         // The palette is set once at the root, and a presentation hosted apart from the
         // window (on Mac, running the iPad build) does not reliably inherit it.
-        OnboardingPages()
+        OnboardingPages(savingOnly: savingOnly)
             .environment(\.amber, settings.palette)
     }
 
@@ -33,29 +38,53 @@ private struct OnboardingPages: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
 
+    var savingOnly: Bool
+
     @State private var page = 0
 
+    private enum Art { case litPage, shareButton, shareSheet, library, glow, highlight }
+
     private struct Step {
+        let art: Art
         let caption: String
         let title: String
         let body: String
         var note: String?
     }
 
-    private let steps: [Step] = [
-        Step(caption: "Welcome",
+    private var steps: [Step] {
+        savingOnly ? Self.saving : Self.saving + Self.reading
+    }
+
+    private static let saving: [Step] = [
+        Step(art: .litPage,
+             caption: "Welcome",
              title: "Save it now, read it tonight",
              body: "Evening Reader keeps the articles you come across during the day, stripped down to the words and lit warm for reading after dark."),
-        Step(caption: "Step one",
+        Step(art: .shareButton,
+             caption: "Step one",
              title: "Tap Share",
              body: "In Safari — or any app with a link in it — tap the Share button on the page you want to keep."),
-        Step(caption: "Step two",
+        Step(art: .shareSheet,
+             caption: "Step two",
              title: "Choose Save to Evening Reader",
              body: "Pick Evening Reader from the row of apps in the share sheet.",
              note: "Not there? Scroll the row of apps to the end and tap More, then Edit, and add Evening Reader to your favorites so it stays up front."),
-        Step(caption: "Step three",
+        Step(art: .library,
+             caption: "Step three",
              title: "It's waiting here",
              body: "The article lands in your library, ready to read — and it's kept on this device, so it's there even with no connection."),
+    ]
+
+    private static let reading: [Step] = [
+        Step(art: .glow,
+             caption: "The glow",
+             title: "Set it the way you like it",
+             body: "Tap the sun to make the glow warmer or cooler, brighter or dimmer, or to turn the page to night. Keep a glow you like and switch back to it in a tap."),
+        Step(art: .highlight,
+             caption: "Highlights",
+             title: "Keep a passage",
+             body: "Select a few words to highlight them, add a note, or look one up. Every highlight is gathered on one page, and each one takes you back to where it was."),
     ]
 
     private var isLast: Bool { page == steps.count - 1 }
@@ -92,7 +121,7 @@ private struct OnboardingPages: View {
     private func stepView(_ step: Step, index: Int) -> some View {
         ScrollView {
             VStack(spacing: isCompact ? 28 : 36) {
-                illustration(for: index)
+                illustration(step.art)
                     .frame(height: 200)
                     .frame(maxWidth: .infinity)
 
@@ -127,12 +156,14 @@ private struct OnboardingPages: View {
     }
 
     @ViewBuilder
-    private func illustration(for index: Int) -> some View {
-        switch index {
-        case 0: LitPageIllustration()
-        case 1: ShareButtonIllustration()
-        case 2: ShareSheetIllustration()
-        default: LibraryIllustration()
+    private func illustration(_ art: Art) -> some View {
+        switch art {
+        case .litPage: LitPageIllustration()
+        case .shareButton: ShareButtonIllustration()
+        case .shareSheet: ShareSheetIllustration()
+        case .library: LibraryIllustration()
+        case .glow: GlowIllustration()
+        case .highlight: HighlightIllustration()
         }
     }
 
@@ -371,5 +402,132 @@ private struct LibraryIllustration: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
+    }
+}
+
+/// The display panel the sun opens: warmth, brightness and contrast, and paper or night.
+private struct GlowIllustration: View {
+    @Environment(\.amber) private var amber
+
+    private let track: CGFloat = 160
+
+    var body: some View {
+        Plate(width: 260) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Capsule().fill(amber.color(0.3)).frame(width: 90, height: 8)
+                    Spacer()
+                    Image(systemName: "sun.max")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(amber.color(0.94))
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(amber.fillActive))
+                        .overlay(Circle().strokeBorder(amber.inkStrong, lineWidth: 2).padding(-4))
+                }
+                slider(0.78, from: "lightbulb", to: "flame")
+                slider(0.5, from: "sun.min", to: "sun.max")
+                slider(0.32, from: "circle.righthalf.filled", to: "circle.hexagongrid")
+                HStack(spacing: 0) {
+                    segment(.paper, selected: true)
+                    segment(.night, selected: false)
+                }
+                .background(Capsule().fill(amber.fill))
+            }
+            .padding(18)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func slider(_ value: CGFloat, from: String, to: String) -> some View {
+        HStack(spacing: 10) {
+            symbol(from)
+            ZStack(alignment: .leading) {
+                Capsule().fill(amber.fill).frame(width: track, height: 5)
+                Capsule().fill(amber.ink).frame(width: track * value, height: 5)
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(amber.inkStrong)
+                    .frame(width: 10, height: 16)
+                    .offset(x: track * value - 5)
+            }
+            .frame(width: track, height: 16, alignment: .leading)
+            symbol(to)
+        }
+    }
+
+    private func symbol(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(amber.inkFaint)
+            .frame(width: 16)
+    }
+
+    private func segment(_ polarity: AmberPalette.Polarity, selected: Bool) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: polarity.symbol)
+            Text(polarity.label)
+        }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(selected ? amber.color(0.94) : amber.inkMuted)
+        .frame(maxWidth: .infinity, minHeight: 24)
+        .background(Capsule().fill(selected ? amber.fillActive : .clear).padding(2))
+    }
+}
+
+/// A few words of a paragraph selected and marked, with the menu that marks them.
+private struct HighlightIllustration: View {
+    @Environment(\.amber) private var amber
+
+    var body: some View {
+        Plate(width: 270) {
+            VStack(alignment: .leading, spacing: 7) {
+                TextLines(widths: [226, 212], level: 0.36)
+                menu
+                    .padding(.leading, 34)
+                    .padding(.vertical, 5)
+                HStack(spacing: 6) {
+                    Capsule().fill(amber.color(0.36)).frame(width: 54, height: 5)
+                    Capsule().fill(amber.inkStrong).frame(width: 128, height: 5)
+                        .padding(.horizontal, 4)
+                        .frame(height: 15)
+                        .background(RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(amber.color(0.7)))
+                    Capsule().fill(amber.color(0.36)).frame(width: 24, height: 5)
+                }
+                TextLines(widths: [218, 222, 140], level: 0.36)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// The selection's callout, with Highlight picked out the way the share sheet
+    /// illustration picks out the app.
+    private var menu: some View {
+        HStack(spacing: 0) {
+            item(EditAction.copy.label)
+            divider
+            item(EditAction.define.label)
+            divider
+            item(EditAction.highlight.label, chosen: true)
+        }
+        .background(Capsule().fill(amber.color(0.12)))
+    }
+
+    private func item(_ label: String, chosen: Bool = false) -> some View {
+        Text(label)
+            .font(.system(size: 11, weight: chosen ? .semibold : .medium))
+            .foregroundStyle(amber.color(0.94))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .overlay {
+                if chosen {
+                    Capsule().strokeBorder(amber.inkStrong, lineWidth: 2).padding(-4)
+                }
+            }
+    }
+
+    private var divider: some View {
+        amber.color(0.4).frame(width: 1, height: 14)
     }
 }

@@ -258,7 +258,7 @@ struct AddLinkSheet: View {
         }
         .padding(isCompact ? 22 : 26)
         .modifier(AmberFullScreenPresentation(isPresented: $showGuide) {
-            OnboardingSheet()
+            OnboardingSheet(savingOnly: true)
         })
         .onAppear {
             focused = true
