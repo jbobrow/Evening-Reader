@@ -52,8 +52,11 @@ private struct PanelMetrics {
     /// ordinary UIKit rule and has not moved: 16 in a phone-width card, 20 in a wider one.
     let margin: CGFloat
 
-    static var current: PanelMetrics {
-        let margin: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 20 : 16
+    /// For a card of the width a phone gives it, or the wider one a sheet does. Asked of
+    /// the card rather than of the device: an iPhone Duo is a phone either way, and gives
+    /// the wide card when it is open.
+    static func current(wide: Bool) -> PanelMetrics {
+        let margin: CGFloat = wide ? 20 : 16
         // Measured on 26.5: the same bar on both idioms, where 17 had two.
         if #available(iOS 26.0, *) {
             return PanelMetrics(chrome: 94, margin: margin)
@@ -172,7 +175,9 @@ struct DefinitionCard: View {
     /// How much the last line softens over, when there is one to soften.
     private let fade: CGFloat = 6
 
-    private let metrics = PanelMetrics.current
+    /// The card is the wide one exactly when it is set into a sheet; over the page, it is
+    /// as wide as a phone.
+    private var metrics: PanelMetrics { .current(wide: !drawsOwnFace) }
 
     /// What the panel's own margin is short of the card's, which is what the entry has to
     /// be padded by to sit on the header's left.

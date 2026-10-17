@@ -100,11 +100,18 @@ struct RootView: View {
             // the page down the right edge — too narrow to read and too wide to ignore,
             // and the reader behind it is a different article from the one you are
             // choosing. Full width makes it a push instead of a peek.
-            let drawerWidth = isCompact ? geo.size.width : min(380, geo.size.width * 0.86)
-            // -drawerWidth is fully closed, 0 is fully open; the drag rides in between.
-            let offset = min(0, max(-drawerWidth,
-                                    (showLibrary ? 0 : -drawerWidth) + drawerDrag))
-            let progress = 1 + offset / drawerWidth
+            let fold = geo.fold
+            let drawerWidth = isCompact ? geo.size.width
+                : spineWidth(fold, in: geo.size) ?? min(380, geo.size.width * 0.86)
+            // How far the drawer goes to be out of sight. A full-width drawer's paper runs
+            // on into the band past the safe area on its right — where the iPhone Duo's
+            // outer camera sits, closed, or a landscape iPhone's Dynamic Island — so it
+            // has that much further to go before none of it is left on the glass.
+            let drawerTravel = drawerWidth + (isCompact ? geo.safeAreaInsets.trailing : 0)
+            // -drawerTravel is fully closed, 0 is fully open; the drag rides in between.
+            let offset = min(0, max(-drawerTravel,
+                                    (showLibrary ? 0 : -drawerTravel) + drawerDrag))
+            let progress = 1 + offset / drawerTravel
 
             ZStack(alignment: .topLeading) {
                 GlowSurface()
@@ -121,7 +128,7 @@ struct RootView: View {
                 )
                 .onPreferenceChange(PageHasSelection.self) { pageHasSelection = $0 }
 
-                edgeAffordance(width: drawerWidth, progress: progress)
+                edgeAffordance(width: drawerTravel, progress: progress)
 
                 // Dimming the page behind the drawer, in step with how far it is out.
                 //
@@ -138,24 +145,33 @@ struct RootView: View {
                     .onTapGesture { withAnimation(.drawer) { showLibrary = false } }
                     // Pushing the page left puts the drawer away too, so the drawer
                     // can be dismissed from the side you are already reading on.
-                    .gesture(drawerDragGesture(width: drawerWidth))
+                    .gesture(drawerDragGesture(width: drawerTravel))
                     .allowsHitTesting(progress > 0.001)
                     .zIndex(1)
 
                 libraryPane()
                     .frame(width: drawerWidth)
                     .frame(maxHeight: .infinity)
+                    // The drawer's paper runs on into the safe-area bands, as the page's
+                    // does; stopped at them, a wide panel shows a strip of dimmed page
+                    // under the drawer, along the home indicator. Its edge is drawn on
+                    // the paper, so it is wherever the paper ends.
+                    .background {
+                        GlowSurface(level: 0.83, bloomStrength: 0.25)
+                            .overlay(alignment: .trailing) { amber.rule.frame(width: 1) }
+                            .ignoresSafeArea()
+                    }
                     .offset(x: offset)
-                    .simultaneousGesture(drawerDragGesture(width: drawerWidth))
+                    .simultaneousGesture(drawerDragGesture(width: drawerTravel))
                     .zIndex(2)
 
                 glowOverlay(in: geo.size)
                     .zIndex(3)
 
-                confirmDeleteOverlay
+                confirmDeleteOverlay(fold: fold)
                     .zIndex(4)
 
-                bookImportProblemOverlay
+                bookImportProblemOverlay(fold: fold)
                     .zIndex(4)
 
                 if launching {
@@ -321,6 +337,18 @@ struct RootView: View {
 
     // MARK: - Drawer
 
+    /// The drawer's width on an iPhone Duo held open like a book: the left-hand page,
+    /// ending at the spine, with the article on the right-hand one. At its usual 380 the
+    /// drawer's edge would stand a hand's width off the crease, and the page beside it
+    /// would be bent across it. Nil in any other pose, and for a spine too far off centre
+    /// to leave either page a useful width.
+    private func spineWidth(_ fold: Fold?, in size: CGSize) -> CGFloat? {
+        guard let fold, fold.isVertical else { return nil }
+        let spine = fold.frame.midX
+        guard spine >= 320, size.width - spine >= 320 else { return nil }
+        return spine
+    }
+
     private func drawerDragGesture(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
@@ -398,13 +426,11 @@ struct RootView: View {
             onEditSite: { siteDraft = SiteDraft(editing: $0) },
             onAbout: { showAbout = true }
         )
-        .background(GlowSurface(level: 0.83, bloomStrength: 0.25))
-        .overlay(alignment: .trailing) { amber.rule.frame(width: 1) }
     }
 
     /// Destructive confirmation, drawn by the app — `UIAlertController` cannot be themed.
     @ViewBuilder
-    private var confirmDeleteOverlay: some View {
+    private func confirmDeleteOverlay(fold: Fold?) -> some View {
         if let article = confirmDelete {
             ZStack {
                 AmberScrim { dismissConfirm() }
@@ -420,6 +446,7 @@ struct RootView: View {
                     cancel: dismissConfirm
                 )
                 .padding(.horizontal, 20)
+                .centeredAboveFold(fold)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -429,7 +456,7 @@ struct RootView: View {
     /// A book opened from outside the app turned out to be one Evening Reader can't read.
     /// An acknowledgement, not a choice — there is nothing to confirm or cancel.
     @ViewBuilder
-    private var bookImportProblemOverlay: some View {
+    private func bookImportProblemOverlay(fold: Fold?) -> some View {
         if let problem = bookImportProblem {
             ZStack {
                 AmberScrim { bookImportProblem = nil }
@@ -441,6 +468,7 @@ struct RootView: View {
                     confirm: { bookImportProblem = nil }
                 )
                 .padding(.horizontal, 20)
+                .centeredAboveFold(fold)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

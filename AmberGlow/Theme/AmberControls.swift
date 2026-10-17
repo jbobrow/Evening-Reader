@@ -30,6 +30,10 @@ struct Hairline: View {
         amber.rule
             .frame(height: 1)
             .padding(.horizontal, inset)
+            // A rule across a whole bar runs on to the glass's edges, the way the bar's
+            // paper does, rather than stopping short at a band beside the content — the
+            // iPhone Duo's outer camera, or a landscape iPhone's Dynamic Island.
+            .ignoresSafeArea(edges: inset == 0 ? .horizontal : [])
     }
 }
 
