@@ -3,7 +3,7 @@ import SwiftUI
 /// The front page. What the drawer opens on: the reading you were in the middle of, the
 /// thing you last saved, the library, your sites, and one field for anything else.
 ///
-/// Five quiet things rather than a list. The library is one tap away, pushed in over
+/// Five quiet things rather than a list, signed at the foot. The library is one tap away, pushed in over
 /// this pane; the sites and the field are the two ways out of it.
 struct HomePane: View {
     @Environment(Library.self) private var library
@@ -29,6 +29,7 @@ struct HomePane: View {
     var onBrowse: (URL) -> Void
     var onAddSite: () -> Void
     var onEditSite: (Site) -> Void
+    var onAbout: () -> Void
 
     /// The library list, pushed in over the front page.
     @State private var showingList = false
@@ -88,14 +89,34 @@ struct HomePane: View {
                 Hairline()
                 results
             } else {
-                ScrollView {
-                    page
+                GeometryReader { proxy in
+                    ScrollView {
+                        // At least the pane's height, so the signature can rest at its
+                        // foot when the page is short, and follow the page when it's long.
+                        VStack(spacing: 0) {
+                            page
+                            Spacer(minLength: 24)
+                            signature
+                            if signatureCentered { Spacer(minLength: 24) }
+                        }
+                        .frame(minHeight: proxy.size.height)
+                    }
+                    .scrollIndicators(.hidden)
                 }
-                .scrollIndicators(.hidden)
             }
         }
         .coordinateSpace(name: "homePane")
         .overlay { tileMenuOverlay }
+    }
+
+    private let signatureCentered = false
+
+    /// Jon's signature, quieter than anything on the page above it. Opens About.
+    private var signature: some View {
+        SignatureButton(width: 152, mark: nil, action: onAbout)
+            .foregroundStyle(amber.inkMuted)   // the signature takes its gray from this
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, signatureCentered ? 0 : 12)
     }
 
     private var header: some View {
