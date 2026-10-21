@@ -19,6 +19,7 @@ struct AmberGlowApp: App {
                 .preferredColorScheme(.light)   // we paint every surface ourselves
                 .statusBarHidden(true)          // no clock, no wifi, no battery — just the panel
                 .persistentSystemOverlays(.hidden)
+                .tracksReviewEligibility()
         }
     }
 }

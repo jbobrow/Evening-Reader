@@ -56,6 +56,8 @@ struct DetailPane: View {
     @State private var canAskAI = false
     /// The open article's text, read once — see `articleContent`.
     @State private var loadedBody: Library.LoadedBody?
+    /// This sitting with the open article, for `ReviewPrompter` — see `putDown`.
+    @State private var sitting = ReadingSitting()
 
     /// What the reader asked of a selection that the page cannot answer itself.
     enum ReaderPanel: Identifiable {
@@ -93,7 +95,15 @@ struct DetailPane: View {
         }
         .preference(key: PageHasSelection.self, value: selection != nil || gripping)
         // A novel's text is not kept around once nothing is reading it.
-        .onChange(of: article?.id) { _, id in if id == nil { loadedBody = nil } }
+        //
+        // Closing the page, or the library coming over it, is the pause after a reading.
+        // Another article taking its place is a new one starting, not a pause.
+        .onChange(of: article?.id) { _, id in
+            if id == nil { loadedBody = nil; putDown() } else { sitting = ReadingSitting() }
+        }
+        .onChange(of: showLibrary) { _, open in
+            if open { putDown() } else { ReviewPrompter.shared.cancelPendingRequest() }
+        }
         .overlay { markCard }
         .modifier(AmberFullScreenPresentation(isPresented: $showHighlights) {
             if let article {
@@ -323,6 +333,54 @@ struct DetailPane: View {
         withAnimation(.easeOut(duration: 0.2)) { chromeVisible.toggle() }
     }
 
+    // MARK: - A good evening's reading
+
+    private func noteProgress(_ p: Double, in article: SavedArticle) {
+        liveProgress = p
+        beginSitting(with: article)
+        library.setScroll(p, for: article)
+        // Read to the end tonight: not opened already there, and not scrubbed there in
+        // the first moments either.
+        if p >= 0.98, !sitting.reachedEnd, sitting.openedAt < 0.9,
+           Date.now.timeIntervalSince(sitting.began) >= 45 {
+            sitting.reachedEnd = true
+            countGoodMoment()
+        }
+    }
+
+    private func noteChapter(_ anchor: String, in article: SavedArticle) {
+        currentChapterAnchor = anchor
+        beginSitting(with: article)
+        // Moving on from a chapter that was read — a few minutes in it, and further on
+        // than it started — rather than skimmed past or jumped out of from the contents.
+        if sitting.chapter != nil,
+           Date.now.timeIntervalSince(sitting.chapterSince) >= 180,
+           liveProgress > sitting.chapterFrom {
+            countGoodMoment()
+        }
+        sitting.chapter = anchor
+        sitting.chapterSince = .now
+        sitting.chapterFrom = liveProgress
+    }
+
+    private func beginSitting(with article: SavedArticle) {
+        guard sitting.article != article.id else { return }
+        sitting = ReadingSitting(article: article.id, openedAt: article.lastScroll)
+    }
+
+    private func countGoodMoment() {
+        ReviewPrompter.shared.recordSignificantEvent()
+        sitting.counted = true
+    }
+
+    /// The page has been put down. If the sitting finished something, this is the calm
+    /// moment to let the system ask for a rating — never while the page is being read.
+    private func putDown() {
+        let finishedSomething = sitting.counted
+        sitting = ReadingSitting()
+        if finishedSomething { ReviewPrompter.shared.requestReviewIfAppropriate() }
+    }
+
     // MARK: - Chrome
 
     /// What brings the drawer out. On a phone the drawer is the whole screen and the
@@ -415,10 +473,7 @@ struct DetailPane: View {
                 ZStack(alignment: .bottomTrailing) {
                     PDFReaderView(fileURL: library.documentURL(for: article),
                                   initialProgress: article.lastScroll,
-                                  onProgress: { p in
-                                      liveProgress = p
-                                      library.setScroll(p, for: article)
-                                  },
+                                  onProgress: { p in noteProgress(p, in: article) },
                                   onPages: { page, total, percent, length in
                                       self.page = page
                                       self.pageCount = total
@@ -562,10 +617,7 @@ struct DetailPane: View {
                 body: body,
                 palette: settings.palette,
                 settings: settings,
-                onProgress: { p in
-                    liveProgress = p
-                    library.setScroll(p, for: article)
-                },
+                onProgress: { p in noteProgress(p, in: article) },
                 onOpenLink: onOpenLink,
                 onTap: toggleChrome,
                 onSelection: noteSelection,
@@ -574,7 +626,7 @@ struct DetailPane: View {
                     self.pageCount = total
                     self.percent = percent
                 },
-                onChapter: { anchor in currentChapterAnchor = anchor },
+                onChapter: { anchor in noteChapter(anchor, in: article) },
                 highlights: highlights.list(for: article),
                 revealHighlight: revealHighlight,
                 onRevealed: reachedPassage,
@@ -708,6 +760,22 @@ struct DetailPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
+
+/// One sitting with one article, from opening it to putting it down.
+private struct ReadingSitting {
+    var article: SavedArticle.ID?
+    /// Where the page was when it opened — an article opened already at its end has not
+    /// been read to it tonight.
+    var openedAt: Double = 0
+    var began = Date.now
+    var reachedEnd = false
+    /// The book chapter on screen, when it came on, and how far through the book it was.
+    var chapter: String?
+    var chapterSince = Date.now
+    var chapterFrom: Double = 0
+    /// Something was finished in this sitting.
+    var counted = false
 }
 
 /// A spinner made of ticks on the amber ramp — no system accent color anywhere near it.
