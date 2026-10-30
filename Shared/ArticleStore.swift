@@ -26,6 +26,10 @@ final class ArticleStore {
     private(set) var root: URL
     /// The app group folder. Always writable, and where the share extension puts things.
     let localRoot: URL
+    /// The app's own Documents folder, which the Files app shows under On My iPhone:
+    /// where the library lives in the app when it is not in iCloud. Nil in the share
+    /// extension, which cannot reach it and goes on writing to the app group.
+    let deviceRoot: URL?
     let usesAppGroup: Bool
     private(set) var isCloud = false
 
@@ -67,6 +71,8 @@ final class ArticleStore {
             localRoot = base.appendingPathComponent("AmberGlow", isDirectory: true)
             usesAppGroup = false
         }
+        deviceRoot = Bundle.main.bundleURL.pathExtension == "appex" ? nil
+            : fm.urls(for: .documentDirectory, in: .userDomainMask).first
         root = localRoot
         legacyIndexURL = localRoot.appendingPathComponent("index.json")
         legacyBodiesDir = localRoot.appendingPathComponent("Bodies", isDirectory: true)
@@ -83,6 +89,16 @@ final class ArticleStore {
            fm.fileExists(atPath: remembered.path) {
             root = remembered
             isCloud = true
+        }
+
+        // Otherwise the library is on this device, in Documents where the reader can see
+        // it. What is in the app group — a library an earlier build kept there, or what
+        // the share extension has left since — comes across first, so the first read is
+        // of all of it. Moves within the device, so this is renames, not copies.
+        if !isCloud, let deviceRoot {
+            Self.carry(contentsOf: localRoot, into: deviceRoot, ubiquitous: false,
+                       droppingDuplicates: false)
+            root = deviceRoot
         }
     }
 
@@ -151,23 +167,13 @@ final class ArticleStore {
         guard let cloud = await CloudLibrary.documentsDirectory() else { return isCloud }
         // Already there, and it is still where it was.
         if isCloud, cloud == root { return true }
-        let fm = FileManager.default
-        let local = localRoot
+        // Documents, where the library has been on this device, and the app group, for
+        // anything the share extension left since.
+        let sources = [deviceRoot, localRoot].compactMap { $0 }
         await onQueue {
-            if let entries = try? fm.contentsOfDirectory(at: local,
-                                                         includingPropertiesForKeys: [.isDirectoryKey],
-                                                         options: [.skipsHiddenFiles]) {
-                for dir in entries where Self.isLibraryFolder(dir) {
-                    let destination = cloud.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
-                    // The sites folder is one folder of folders, and is carried across
-                    // one site at a time so what is already there keeps its own.
-                    if dir.lastPathComponent == Self.sitesName {
-                        Self.adoptChildren(of: dir, into: destination, droppingDuplicates: false)
-                        continue
-                    }
-                    guard !fm.fileExists(atPath: destination.path) else { continue }
-                    try? fm.setUbiquitous(true, itemAt: dir, destinationURL: destination)
-                }
+            for source in sources {
+                Self.carry(contentsOf: source, into: cloud, ubiquitous: true,
+                           droppingDuplicates: false)
             }
             self.root = cloud
             self.isCloud = true
@@ -179,28 +185,48 @@ final class ArticleStore {
 
     /// Takes anything the share extension left in the app group.
     ///
-    /// The extension has no iCloud entitlement — it writes where it can, and the app
-    /// carries it the rest of the way on the next launch or foreground.
+    /// The extension has no iCloud entitlement and cannot reach the app's Documents — it
+    /// writes where it can, and the app carries it the rest of the way, into iCloud or
+    /// onto the device, on the next launch or foreground.
     func drainInbox() async {
-        guard isCloud else { return }
-        let fm = FileManager.default
         let inbox = localRoot
         await onQueue {
-            guard let entries = try? fm.contentsOfDirectory(at: inbox,
-                                                            includingPropertiesForKeys: [.isDirectoryKey],
-                                                            options: [.skipsHiddenFiles]) else { return }
-            for dir in entries where Self.isLibraryFolder(dir) {
-                let destination = self.root.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
-                if dir.lastPathComponent == Self.sitesName {
-                    Self.adoptChildren(of: dir, into: destination, droppingDuplicates: true)
-                    continue
-                }
-                if fm.fileExists(atPath: destination.path) {
-                    try? fm.removeItem(at: dir)          // already have it
-                } else {
-                    try? fm.setUbiquitous(true, itemAt: dir, destinationURL: destination)
-                }
+            guard self.root != inbox else { return }
+            Self.carry(contentsOf: inbox, into: self.root, ubiquitous: self.isCloud,
+                       droppingDuplicates: true)
+        }
+    }
+
+    /// Moves the library's own folders in `source` into `destination` — into iCloud when
+    /// `ubiquitous`, otherwise across the device. A folder already at the destination
+    /// wins; the one being moved is dropped only where asked, and otherwise left alone.
+    private static func carry(contentsOf source: URL, into destination: URL,
+                              ubiquitous: Bool, droppingDuplicates: Bool) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(at: source,
+                                                        includingPropertiesForKeys: [.isDirectoryKey],
+                                                        options: [.skipsHiddenFiles]) else { return }
+        for dir in entries where isLibraryFolder(dir) {
+            let target = destination.appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+            // The sites folder is one folder of folders, and is carried across one site
+            // at a time so what is already there keeps its own.
+            if dir.lastPathComponent == sitesName {
+                adoptChildren(of: dir, into: target, ubiquitous: ubiquitous,
+                              droppingDuplicates: droppingDuplicates)
+            } else if fm.fileExists(atPath: target.path) {
+                if droppingDuplicates { try? fm.removeItem(at: dir) }   // already have it
+            } else {
+                move(dir, to: target, ubiquitous: ubiquitous)
             }
+        }
+    }
+
+    private static func move(_ item: URL, to destination: URL, ubiquitous: Bool) {
+        let fm = FileManager.default
+        if ubiquitous {
+            try? fm.setUbiquitous(true, itemAt: item, destinationURL: destination)
+        } else {
+            try? fm.moveItem(at: item, to: destination)
         }
     }
 
@@ -274,10 +300,11 @@ final class ArticleStore {
         return FileManager.default.fileExists(atPath: stub.path)
     }
 
-    /// Moves each folder inside `source` into iCloud under `destination`, one at a time.
-    /// A folder already at the destination came from another device and wins; the local
-    /// copy is dropped only where asked, and `source` is removed once it is empty.
-    private static func adoptChildren(of source: URL, into destination: URL, droppingDuplicates: Bool) {
+    /// Moves each folder inside `source` under `destination`, one at a time. A folder
+    /// already at the destination came from elsewhere and wins; the moving copy is
+    /// dropped only where asked, and `source` is removed once it is empty.
+    private static func adoptChildren(of source: URL, into destination: URL,
+                                      ubiquitous: Bool, droppingDuplicates: Bool) {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(at: source,
                                                         includingPropertiesForKeys: [.isDirectoryKey],
@@ -289,7 +316,7 @@ final class ArticleStore {
                 if droppingDuplicates { try? fm.removeItem(at: child) }
                 continue
             }
-            try? fm.setUbiquitous(true, itemAt: child, destinationURL: target)
+            move(child, to: target, ubiquitous: ubiquitous)
         }
         if droppingDuplicates,
            let left = try? fm.contentsOfDirectory(atPath: source.path), left.isEmpty {
