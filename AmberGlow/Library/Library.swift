@@ -69,6 +69,7 @@ final class Library {
                     || (item.byline ?? "").lowercased().contains(query)
                     || item.sourceLabel.lowercased().contains(query)
                     || (item.excerpt ?? "").lowercased().contains(query)
+                    || (item.tags ?? []).contains { $0.lowercased().contains(query) }
             }
             .sorted { $0.addedAt > $1.addedAt }
     }
@@ -194,7 +195,9 @@ final class Library {
                 // Keep in-flight local edits (scroll positions) from being clobbered.
                 if local.state == .ready, merged[i].state != .ready { merged[i] = local }
                 else if local.lastScroll > merged[i].lastScroll { merged[i].lastScroll = local.lastScroll }
-                if local.readAt != nil, merged[i].readAt == nil { merged[i].readAt = local.readAt }
+                // Whether it has been read is not kept from here: the note can say
+                // otherwise — marked unread in Obsidian — and what this device last did
+                // is covered by `edited` above until the disk agrees.
                 if let opened = local.openedAt, opened > (merged[i].openedAt ?? .distantPast) {
                     merged[i].openedAt = opened
                 }
@@ -278,16 +281,19 @@ final class Library {
             updated.excerpt = result.excerpt.isEmpty ? nil : String(result.excerpt.prefix(320))
             updated.wordCount = result.wordCount
             updated.publishedAt = Self.parseDate(result.published)
+            // Saved as a bare address, it is named after one. Now it has a title, its
+            // note and folder take that name before anything more is written into them.
+            await store.rename(updated)
             // Pull the pictures onto the device before the body is written, so what is
             // stored already points at the copies rather than at the web.
             let offline = await OfflineAssets.localize(html: result.html, article: updated, store: store)
             updated.state = store.writeBody(offline.html, for: updated) ? .ready : .failed
-            // The portable copy, written from the same fetch: same article, same
-            // pictures, in a format that outlives this app.
-            if let sidecar = MarkdownSidecar.document(article: updated, markdown: result.markdown,
-                                                      assets: offline.assets) {
-                store.writeMarkdown(sidecar, for: updated)
-            }
+            // The note, written from the same fetch: same article, same pictures, in a
+            // format that outlives this app.
+            let body = MarkdownSidecar.body(article: updated, markdown: result.markdown,
+                                            assets: offline.assets,
+                                            assetsPath: store.assetsLinkPath(for: updated))
+            await store.writeNote(updated, body: body)
             replace(updated)
         } catch {
             guard var updated = articles.first(where: { $0.id == article.id }) else { return }
@@ -334,7 +340,10 @@ final class Library {
         // A page count is the honest unit for a PDF; the reader shows it in place of a
         // reading time, which would be a guess about something we cannot see inside.
         updated.wordCount = 0
+        await store.rename(updated)
         updated.state = store.writeDocument(data, for: updated) ? .ready : .failed
+        // The note embeds the document, so it opens in place in anything that reads it.
+        await store.writeNote(updated, body: nil)
         replace(updated)
     }
 
@@ -377,6 +386,10 @@ final class Library {
             updated.coverAsset = imported.coverAssetName
             updated.coverAssetClass = imported.coverAssetClass
             updated.state = .ready
+            // Named after the file it came in as until now; the book has a title of its
+            // own, and its note shows the cover and links the book.
+            await store.rename(updated)
+            await store.writeNote(updated, body: nil)
         case .failure(let error):
             updated.state = .failed
             lastError = error.localizedDescription
@@ -569,7 +582,7 @@ final class Library {
     @ObservationIgnored private var removed: [UUID: Date] = [:]
 
     /// Articles changed since they were last written. Only these are written: every
-    /// `article.json` in the library rewritten for one change is that many files for
+    /// `state.json` in the library rewritten for one change is that many files for
     /// iCloud to carry up, and that many changes to be told about and to scan for.
     @ObservationIgnored private var dirty: Set<UUID> = []
 
@@ -649,12 +662,7 @@ final class Library {
         }
         guard !repaired.isEmpty else { return }
         store.save(repaired)
-        for article in repaired {
-            guard let sidecar = store.readMarkdown(for: article),
-                  let updated = MarkdownSidecar.repointing(sidecar, published: article.publishedAt)
-            else { continue }
-            store.writeMarkdown(updated, for: article)
-        }
+        for article in repaired { store.setPublished(for: article) }
     }
 
     /// Local midnight on the day a stored date names, when that date is exactly midnight

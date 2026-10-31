@@ -3,7 +3,7 @@ import Foundation
 /// Reads and writes a book's table of contents as the `contents.json` sidecar.
 ///
 /// Kept out of `SavedArticle` itself: a densely-sectioned book can carry several hundred
-/// entries, and `article.json` is pretty-printed, read on every library scan, and synced —
+/// entries, and `state.json` is pretty-printed, read on every library scan, and synced —
 /// none of which a TOC benefits from sharing. It is written once, at import, and never
 /// touched again.
 enum BookContents {

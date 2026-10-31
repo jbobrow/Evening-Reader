@@ -3,10 +3,10 @@ import CoreGraphics
 
 /// A passage the reader marked, and — if they said so — why.
 ///
-/// Kept beside the article rather than inside it. `article.json` is read on every library
+/// Kept beside the article rather than inside it. `state.json` is read on every library
 /// scan and rewritten on every scroll; a set of highlights is neither, and a passage of a
 /// few hundred characters has no business travelling with the metadata. It lives in the
-/// `highlights.json` sidecar, in the article's own folder, so it syncs and moves and is
+/// `highlights.json` sidecar, in the article's attachments folder, so it syncs and moves and is
 /// deleted with the thing it belongs to and never contends with anything else.
 struct Highlight: Codable, Identifiable, Hashable {
     var id = UUID()
@@ -102,7 +102,8 @@ struct Highlight: Codable, Identifiable, Hashable {
     }
 }
 
-/// Reads and writes an article's highlights as its `highlights.json` sidecar.
+/// Reads and writes an article's highlights as its `highlights.json` sidecar, and copies
+/// them into the block at the end of its note, for anything reading the note instead.
 enum HighlightsFile {
     static let sidecarName = "highlights.json"
 
@@ -119,5 +120,6 @@ enum HighlightsFile {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(highlights) else { return }
         store.writeSidecar(data, named: sidecarName, for: article)
+        store.writeHighlights(highlights, for: article)
     }
 }

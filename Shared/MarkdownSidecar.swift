@@ -1,87 +1,34 @@
 import Foundation
 
-/// The portable copy of an article: `body.md`, written beside the reader's `body.html`.
+/// The body of an article's note: the article as Markdown, below the front matter that
+/// `NoteFile` writes.
 ///
-/// The reader never opens this file. It is there so a folder in the library is worth
-/// something outside this app — dropped into an Obsidian vault, opened in any editor,
-/// or read years from now by something that has never heard of Evening Reader. The store
-/// already treats a folder as the complete, portable thing; this is the part of it that
-/// anything else can read.
+/// The reader never renders this. It is there so the library is worth something outside
+/// this app — opened as an Obsidian vault, in any editor, or read years from now by
+/// something that has never heard of Evening Reader.
 ///
-/// The Markdown itself comes from Defuddle. What is added here is the frontmatter, and
-/// the picture links: an image already pulled onto the device is pointed at the copy in
-/// `assets/`, by a relative path, so the folder carries its own illustrations wherever
-/// it goes.
+/// The Markdown itself comes from Defuddle. What is changed here is the picture links: an
+/// image already pulled onto the device is pointed at the copy in the article's
+/// attachments folder, by a relative path, so the note carries its own illustrations
+/// wherever the library goes.
 enum MarkdownSidecar {
 
-    static func document(article: SavedArticle, markdown: String,
-                         assets: [String: String]) -> String? {
-        let body = localizeImages(in: markdown, article: article, assets: assets)
+    /// `assetsPath` is the link from the note to the article's pictures, as
+    /// `ArticleStore.assetsLinkPath` gives it. Nil when there is no text to keep.
+    static func body(article: SavedArticle, markdown: String,
+                     assets: [String: String], assetsPath: String) -> String? {
+        let body = localizeImages(in: markdown, article: article, assets: assets, assetsPath: assetsPath)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty else { return nil }
-        return frontmatter(for: article) + "\n" + body + "\n"
-    }
-
-    /// The same sidecar with its `published:` line put right, or nil when there is
-    /// nothing to change — no frontmatter, no such line, or a line that already says it.
-    ///
-    /// A written sidecar is a file someone may have moved, annotated or filed away, so
-    /// the correction is the one line it is about and nothing else: the file is not
-    /// rebuilt from an article that has since been read, archived or retitled.
-    static func repointing(_ sidecar: String, published: Date?) -> String? {
-        guard let published else { return nil }
-        var lines = sidecar.components(separatedBy: "\n")
-        guard lines.first == "---" else { return nil }
-        guard let end = lines.dropFirst().firstIndex(of: "---") else { return nil }
-        guard let at = lines[1..<end].firstIndex(where: { $0.hasPrefix("published: ") }) else {
-            return nil
-        }
-        let corrected = "published: \(day(published))"
-        guard lines[at] != corrected else { return nil }
-        lines[at] = corrected
-        return lines.joined(separator: "\n")
-    }
-
-    // MARK: - Frontmatter
-
-    private static func frontmatter(for article: SavedArticle) -> String {
-        var lines = ["---"]
-        lines.append("title: \(quoted(article.displayTitle))")
-        lines.append("source: \(quoted(article.url.absoluteString))")
-        if let byline = article.byline, !byline.isEmpty { lines.append("author: \(quoted(byline))") }
-        if let site = article.siteName, !site.isEmpty { lines.append("site: \(quoted(site))") }
-        if let published = article.publishedAt { lines.append("published: \(day(published))") }
-        lines.append("saved: \(day(article.addedAt))")
-        if article.wordCount > 0 { lines.append("words: \(article.wordCount)") }
-        lines.append("---")
-        return lines.joined(separator: "\n") + "\n"
-    }
-
-    /// A double-quoted YAML scalar, which is the one form that needs to worry about
-    /// nothing but backslashes and quotes — no leading-character rules, no colons, no
-    /// guessing whether a title happens to look like a number or a date.
-    private static func quoted(_ text: String) -> String {
-        let escaped = text
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: " ")
-        return "\"\(escaped)\""
-    }
-
-    static func day(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        formatter.timeZone = .current
-        return formatter.string(from: date)
+        return body.isEmpty ? nil : body + "\n"
     }
 
     // MARK: - Pictures
 
-    /// Repoints `![alt](https://…)` at `assets/<file>` for every picture already stored
+    /// Repoints `![alt](https://…)` at `<assetsPath>/<file>` for every picture already stored
     /// on disk. Anything not stored — too big, too many, or simply not fetched — keeps
     /// its remote URL, which is the honest thing for a link that only resolves online.
     static func localizeImages(in markdown: String, article: SavedArticle,
-                               assets: [String: String]) -> String {
+                               assets: [String: String], assetsPath: String) -> String {
         guard !assets.isEmpty else { return markdown }
         var byIdentity: [String: String] = [:]
         for (remote, name) in assets { byIdentity[imageIdentity(remote)] = name }
@@ -109,7 +56,7 @@ enum MarkdownSidecar {
 
             out += markdown[bang.lowerBound..<link.range.lowerBound]
             out += replacement(for: link.url, article: article,
-                               assets: assets, byIdentity: byIdentity)
+                               assets: assets, byIdentity: byIdentity, assetsPath: assetsPath)
             i = link.range.upperBound
         }
         out += markdown[i...]
@@ -118,7 +65,7 @@ enum MarkdownSidecar {
 
     private static func replacement(for destination: String, article: SavedArticle,
                                     assets: [String: String],
-                                    byIdentity: [String: String]) -> String {
+                                    byIdentity: [String: String], assetsPath: String) -> String {
         // Turndown escapes parentheses in a destination; the map is keyed by the real URL.
         let bare = destination
             .replacingOccurrences(of: "\\(", with: "(")
@@ -130,7 +77,7 @@ enum MarkdownSidecar {
         guard let name = assets[address] ?? byIdentity[imageIdentity(address)] else {
             return destination
         }
-        return "assets/\(name)"
+        return "\(assetsPath)/\(name)"
     }
 
     /// What identifies a picture, as opposed to which copy of it was asked for.

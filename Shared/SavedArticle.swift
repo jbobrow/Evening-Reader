@@ -34,6 +34,9 @@ struct SavedArticle: Codable, Identifiable, Hashable {
     var openedAt: Date?
     var lastScroll: Double = 0
     var isArchived: Bool = false
+    /// The note's tags. The app writes none of its own; these are the reader's, from the
+    /// note's front matter, kept so they can be searched and are never written over.
+    var tags: [String]?
     var state: State = .pending
     /// File name (not a full path) of the cached reader HTML inside the store's `Bodies` folder.
     var bodyFile: String?

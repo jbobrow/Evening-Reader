@@ -113,8 +113,9 @@ final class CloudLibrary {
 
     /// Lower comes down first.
     private static func rank(_ url: URL) -> Int {
+        if url.pathExtension.lowercased() == "md" { return 0 }      // the notes
         switch url.lastPathComponent {
-        case "article.json", "site.json": return 0
+        case "state.json", "article.json", "site.json": return 0
         case "contents.json", "highlights.json": return 1
         case "body.html", "body.md", "icon.png": return 2
         case "document.pdf": return 3
