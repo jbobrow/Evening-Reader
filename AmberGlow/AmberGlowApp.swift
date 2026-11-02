@@ -155,9 +155,11 @@ struct RootView: View {
                     // The drawer's paper runs on into the safe-area bands, as the page's
                     // does; stopped at them, a wide panel shows a strip of dimmed page
                     // under the drawer, along the home indicator. Its edge is drawn on
-                    // the paper, so it is wherever the paper ends.
+                    // the paper, so it is wherever the paper ends. It is the page's own
+                    // paper: the drawer is told apart by its edge and the dimmed page
+                    // beside it, not by a darker shade.
                     .background {
-                        GlowSurface(level: 0.83, bloomStrength: 0.25)
+                        GlowSurface()
                             .overlay(alignment: .trailing) { amber.rule.frame(width: 1) }
                             .ignoresSafeArea()
                     }

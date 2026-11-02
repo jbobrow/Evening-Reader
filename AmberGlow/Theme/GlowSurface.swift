@@ -6,13 +6,12 @@ struct GlowSurface: View {
     @Environment(DisplaySettings.self) private var settings
 
     var level: Double = 0.88
-    var bloomStrength: Double = 0.5
 
     var body: some View {
         ZStack {
             amber.color(level)
 
-            BacklightBloom(level: level, strength: bloomStrength)
+            BacklightBloom(level: level)
 
             if settings.showTexture {
                 PixelGrid()
