@@ -415,6 +415,10 @@ final class Library {
         guard var found = articles.first(where: { $0.id == article.id }) else { return }
         found.isArchived = archived
         if archived, found.readAt == nil { found.readAt = .now }
+        // Taken out of the archive is put back to be read: it goes to Unread, not to
+        // All. It is read again the next time it is opened — not now, if it is the one
+        // open, which is only marked read on its way in.
+        if !archived { found.readAt = nil }
         replace(found)
     }
 
