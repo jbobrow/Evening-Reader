@@ -89,6 +89,8 @@ struct HomePane: View {
                 Hairline()
                 results
             } else {
+                fieldFacade
+                Hairline()
                 GeometryReader { proxy in
                     ScrollView {
                         // At least the pane's height, so the signature can rest at its
@@ -152,7 +154,6 @@ struct HomePane: View {
             }
             libraryRow
             sitesBlock
-            fieldFacade
         }
         .padding(.horizontal, 20)
         .padding(.top, 26)
@@ -292,7 +293,8 @@ struct HomePane: View {
 
     /// Looks like the field, and is a button: tapping it turns the pane over to the real
     /// one. A text field that moved between two places in the layout would be rebuilt
-    /// on the way and lose the keyboard.
+    /// on the way and lose the keyboard. It stands where the real one will, under the
+    /// header, so the tap only brings in Cancel and the keyboard.
     private var fieldFacade: some View {
         Button {
             withAnimation(.easeOut(duration: 0.18)) { searching = true }
@@ -304,6 +306,7 @@ struct HomePane: View {
                 Text("Search your library or the web")
                     .font(.system(size: 14))
                     .foregroundStyle(amber.inkFaint)
+                    .frame(height: 19)
                 Spacer()
             }
             .padding(.horizontal, 10)
@@ -317,6 +320,8 @@ struct HomePane: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     // MARK: - The field

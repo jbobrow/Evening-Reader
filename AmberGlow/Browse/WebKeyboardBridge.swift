@@ -75,8 +75,9 @@ final class WebKeyboardBridge {
         if let container, container.superview == nil, let window = target?.window {
             // In the window's terms, since that is how a view with no superview is read:
             // at the foot of the glass, where the keyboard is.
-            container.frame = CGRect(x: 0, y: window.bounds.height - Self.height,
-                                     width: window.bounds.width, height: Self.height)
+            let height = AmberInputContainer.height(in: window)
+            container.frame = CGRect(x: 0, y: window.bounds.height - height,
+                                     width: window.bounds.width, height: height)
         }
         UIView.performWithoutAnimation { target?.reloadInputViews() }
     }
@@ -120,8 +121,6 @@ final class WebKeyboardBridge {
     private var focusedFieldIsLogin = false
     /// What is drawn over the system keyboard while it is on loan.
     private let veil = KeyboardVeil()
-
-    private static let height: CGFloat = 330
 
     private var keyboardObserver: NSObjectProtocol?
 
@@ -180,7 +179,7 @@ final class WebKeyboardBridge {
         host.sizingOptions = []
 
         let container = AmberInputContainer(
-            frame: CGRect(x: 0, y: 0, width: 0, height: Self.height),
+            frame: CGRect(x: 0, y: 0, width: 0, height: AmberInputContainer.height(in: nil)),
             inputViewStyle: .default
         )
         container.onWidthChange = { [weak self] width in

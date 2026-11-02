@@ -28,8 +28,6 @@ final class AmberKeyboardInstaller {
     private var boardWidth: CGFloat = 0
     private var style = Style()
 
-    private static let height: CGFloat = 330
-
     init() {
         host = UIHostingController(rootView: AmberKeyboard(palette: AmberPalette(),
                                                            showsTexture: true,
@@ -45,7 +43,7 @@ final class AmberKeyboardInstaller {
         // around the home indicator — the one place a second colour could still get in.
         // `.default` style means no system material, just our fill.
         container = AmberInputContainer(
-            frame: CGRect(x: 0, y: 0, width: 0, height: Self.height),
+            frame: CGRect(x: 0, y: 0, width: 0, height: AmberInputContainer.height(in: nil)),
             inputViewStyle: .default
         )
         container.backgroundColor = UIColor(style.palette.color(0.80))

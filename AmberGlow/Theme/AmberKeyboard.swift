@@ -78,6 +78,13 @@ struct AmberKeyboard: View {
 
     private let gap: CGFloat = 6
 
+    /// How tall the board stands, from the hairline at its top to the foot of the bottom
+    /// row: the edit strip, four rows of keys, the gaps between them and the padding
+    /// around them. The container is sized to this, so no slack is left to be shared out
+    /// above and below the keys.
+    static let height: CGFloat = 8 + 31 + 4 * keyHeight + 4 * 7 + 6
+    static let keyHeight: CGFloat = 46
+
     /// Shift and backspace take whatever is left of the third row once its seven letters
     /// have kept the width the top row gave them, so a key is the same size wherever it
     /// sits. On a wide panel that would leave two enormous slabs, so they stop at 74.
@@ -577,7 +584,7 @@ struct AmberKeyCap: View {
         }
         .frame(width: width)
         .frame(maxWidth: width == nil ? .infinity : nil)
-        .frame(height: 46)
+        .frame(height: AmberKeyboard.keyHeight)
         .contentShape(Rectangle())
         .onGeometryChange(for: CGRect.self) {
             $0.frame(in: .named(AmberKeyboard.space))
@@ -650,6 +657,20 @@ final class AmberInputContainer: UIInputView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if let window { screen = window.screen.bounds }
+        invalidateIntrinsicContentSize()
+    }
+
+    /// How tall the board stands on the glass it is on: its keys, and below them the
+    /// strip under the home indicator, which the keys keep clear of. Before it has a
+    /// window, the app's is the best guess at the glass it is about to be on.
+    static func height(in window: UIWindow?) -> CGFloat {
+        let glass = window ?? UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        return AmberKeyboard.height + (glass?.safeAreaInsets.bottom ?? 0)
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: Self.height(in: window))
     }
 
     /// Parked where the keyboard stands whenever the board is taken out of the
@@ -660,7 +681,7 @@ final class AmberInputContainer: UIInputView {
     override func didMoveToSuperview() {
         super.didMoveToSuperview()
         guard superview == nil, screen.height > 0 else { return }
-        let height = bounds.height > 0 ? bounds.height : 330
+        let height = bounds.height > 0 ? bounds.height : Self.height(in: nil)
         frame = CGRect(x: 0, y: screen.height - height, width: screen.width, height: height)
     }
 
