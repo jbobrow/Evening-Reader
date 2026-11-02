@@ -85,6 +85,52 @@
     if (clipped || cs.fontSize === "0px") cand.setAttribute("data-ag-unseen", "1");
   }
 
+  // The same page laid out more than once, for different widths, with all but one
+  // put away: a headline block for phones and another for desktops, or a graphic
+  // drawn at three sizes (ai2html's artboards). Only the one on show is read. Kept to
+  // short runs of text, so a passage the page folds away behind "Read more" is not
+  // lost with them.
+  var everything = document.body ? document.body.getElementsByTagName("*") : [];
+  for (var hv = 0; hv < everything.length; hv++) {
+    var hidden = everything[hv];
+    if (hidden.closest("[data-ag-unseen]")) continue;
+    if (/^(SCRIPT|STYLE|TEMPLATE|NOSCRIPT|BR)$/.test(hidden.tagName)) continue;
+    if (window.getComputedStyle(hidden).display !== "none") continue;
+    if ((hidden.textContent || "").replace(/\s+/g, " ").trim().length > 600) continue;
+    hidden.setAttribute("data-ag-unseen", "1");
+  }
+
+  // Words set over a picture — a map's place names, a chart's labels — belong to the
+  // picture, and out of it they are a column of fragments: "Russia", "Crossed the",
+  // "Bering Strait". On the live page they can be told by where they sit: placed
+  // absolutely, on top of an image that holds them.
+  var pictures = document.body ? document.body.querySelectorAll("img,picture,svg") : [];
+  var drawn = [];
+  for (var pi = 0; pi < pictures.length; pi++) {
+    var pr = pictures[pi].getBoundingClientRect();
+    if (pr.width >= 200 && pr.height >= 120) drawn.push(pr);
+  }
+  if (drawn.length) {
+    var floating = document.body.querySelectorAll("div,p,span");
+    for (var fi = 0; fi < floating.length; fi++) {
+      var label = floating[fi];
+      if (label.closest("[data-ag-unseen]")) continue;
+      var words = (label.textContent || "").replace(/\s+/g, " ").trim();
+      if (!words || words.length > 160) continue;
+      if (window.getComputedStyle(label).position !== "absolute") continue;
+      var lr = label.getBoundingClientRect();
+      if (!lr.width || !lr.height) continue;
+      var cx = lr.left + lr.width / 2, cy = lr.top + lr.height / 2;
+      for (var di = 0; di < drawn.length; di++) {
+        var r = drawn[di];
+        if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) {
+          label.setAttribute("data-ag-unseen", "1");
+          break;
+        }
+      }
+    }
+  }
+
   var doc = document.cloneNode(true);
   var body = doc.body;
   if (!body) return JSON.stringify({ ok: false, reason: "no-body" });
@@ -302,6 +348,30 @@
 
   clean(container);
 
+  // What a page sets where an advertisement goes — "Advertisement", "Skip
+  // advertisement", "Story continues below" — standing on its own as a paragraph. The
+  // advertisement itself is long gone by here; its label is all that was left.
+  var AD_LABEL = /^(advertisement|advertisements|skip advertisement|sponsored|sponsored content|ad|story continues below( advertisement)?|continue reading( the main story)?( below)?|article continues below( advertisement)?|scroll to continue( with content)?)$/i;
+  var labelled = container.querySelectorAll("p,div,span,h1,h2,h3,h4,h5,h6,small,aside");
+  for (var al = labelled.length - 1; al >= 0; al--) {
+    var adLabel = labelled[al];
+    if (adLabel.parentNode && AD_LABEL.test(txt(adLabel).replace(/[.:]$/, ""))) {
+      adLabel.parentNode.removeChild(adLabel);
+    }
+  }
+
+  // A frame whose picture never arrived, kept for its caption alone, says what is in
+  // a photograph that is not there.
+  // A figure that holds something else — a table, a block of code, a quotation — is
+  // more than its caption, and stays.
+  var frames = container.querySelectorAll("figure");
+  for (var fr = frames.length - 1; fr >= 0; fr--) {
+    var frame = frames[fr];
+    if (!frame.parentNode || frame.querySelector("img,table,pre,blockquote,ul,ol")) continue;
+    var caption = frame.querySelector("figcaption");
+    if (txt(frame) === (caption ? txt(caption) : "")) frame.parentNode.removeChild(frame);
+  }
+
   // Collapse runs of empty paragraphs the unwrapping may have produced.
   var ps = container.querySelectorAll("p,div,span,li");
   for (var p = ps.length - 1; p >= 0; p--) {
@@ -341,12 +411,58 @@
     }
   }
 
-  var byline = meta(["author", "article:author", "og:article:author", "twitter:creator", "dc.creator"]);
-  if (!byline) {
-    var bylineEl = doc.querySelector("[rel='author'],[itemprop='author'],.byline,.author,.c-byline");
-    if (bylineEl) byline = txt(bylineEl);
+  // A name, wherever the page gives one. Several of the usual places hold a link to
+  // the author's page instead — The Times puts one in article:author — which is no
+  // byline, so an address is passed over for the next place, and only as a last
+  // resort made into a name from its last path segment ("/by/jonathan-wolfe").
+  function isAddress(v) { return /^(https?:)?\/\//i.test(v) || /^www\./i.test(v); }
+
+  function schemaAuthor() {
+    var blocks = document.querySelectorAll("script[type='application/ld+json']");
+    for (var b = 0; b < blocks.length; b++) {
+      var data;
+      try { data = JSON.parse(blocks[b].textContent || ""); } catch (e) { continue; }
+      var queue = [].concat(data);
+      while (queue.length) {
+        var item = queue.shift();
+        if (!item || typeof item !== "object") continue;
+        if (item["@graph"]) queue = queue.concat(item["@graph"]);
+        var who = item.author || item.creator;
+        if (!who) continue;
+        var names = [].concat(who).map(function (w) {
+          return typeof w === "string" ? w : (w && w.name) || "";
+        }).filter(function (n) { return n && !isAddress(n); });
+        if (names.length) return names.join(", ");
+      }
+    }
+    return "";
   }
-  byline = byline.replace(/^\s*(by|By|BY)\s+/, "").slice(0, 120);
+
+  var bylineSources = [
+    function () { return meta(["author", "byl", "dc.creator", "parsely-author", "sailthru.author"]); },
+    schemaAuthor,
+    function () {
+      var el = doc.querySelector("[rel='author'],[itemprop='author'],.byline,.author,.c-byline");
+      return el ? txt(el) : "";
+    },
+    function () { return meta(["article:author", "og:article:author", "twitter:creator"]); }
+  ];
+  var byline = "", bylineAddress = "";
+  for (var bs = 0; bs < bylineSources.length && !byline; bs++) {
+    var found = (bylineSources[bs]() || "").trim();
+    if (!found) continue;
+    if (isAddress(found)) { bylineAddress = bylineAddress || found; continue; }
+    byline = found;
+  }
+  if (!byline && bylineAddress) {
+    var slug = bylineAddress.replace(/[?#].*$/, "").replace(/\/+$/, "").split("/").pop() || "";
+    if (/^[a-z]+(-[a-z]+){1,3}$/i.test(slug)) {
+      byline = slug.split("-").map(function (w) {
+        return w.charAt(0).toUpperCase() + w.slice(1);
+      }).join(" ");
+    }
+  }
+  byline = byline.replace(/^\s*(by|By|BY)\s+/, "").replace(/^@/, "").slice(0, 120);
 
   var site = siteName || location.hostname.replace(/^www\./, "");
   var published = meta(["article:published_time", "og:article:published_time", "date", "dc.date", "datePublished"]);
@@ -356,12 +472,49 @@
   var excerpt = meta(["og:description", "description", "twitter:description"]) ||
     articleText.slice(0, 320);
 
-  // Remove the headline if the extractor already captured it, so it isn't shown twice.
-  var firstHeading = container.querySelector("h1,h2");
-  if (firstHeading && title && txt(firstHeading).slice(0, 60) === title.slice(0, 60)) {
-    firstHeading.parentNode.removeChild(firstHeading);
+  // A block said a second time is the page's own repetition — a headline and its
+  // summary set once over the lead picture and again under it — and is read once.
+  var seenBlocks = {};
+  var repeatable = container.querySelectorAll("h1,h2,h3,p,figcaption,blockquote");
+  for (var rb = 0; rb < repeatable.length; rb++) {
+    var rep = repeatable[rb];
+    if (!rep.parentNode || rep.querySelector("img")) continue;
+    var said = txt(rep);
+    // A short line said twice can be meant — a refrain, a "* * *" — so only a
+    // heading, a caption or a paragraph of some length counts as a repeat.
+    if (said.length < (rep.tagName === "P" ? 80 : 20)) continue;
+    if (seenBlocks[said]) { rep.parentNode.removeChild(rep); continue; }
+    seenBlocks[said] = true;
   }
 
+  // The headline is shown above the article already. One at the top of the body is
+  // that headline again, even when it is worded differently from the title the page
+  // gives for sharing — so the first heading goes whenever nothing of the article
+  // comes before it.
+  var firstHeading = container.querySelector("h1,h2");
+  if (firstHeading) {
+    var before = "";
+    var walker = doc.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+    while (walker.nextNode()) {
+      if (firstHeading.contains(walker.currentNode)) break;
+      before += walker.currentNode.nodeValue;
+      if (before.replace(/\s+/g, "").length > 40) break;
+    }
+    var leads = before.replace(/\s+/g, "").length <= 40;
+    var sameAsTitle = title && txt(firstHeading).slice(0, 60) === title.slice(0, 60);
+    if ((leads && firstHeading.tagName === "H1") || sameAsTitle) {
+      firstHeading.parentNode.removeChild(firstHeading);
+    }
+  }
+
+  // Comments a page's tools leave in its markup ("Generated by ai2html") are no part
+  // of the article.
+  var notes = doc.createTreeWalker(container, NodeFilter.SHOW_COMMENT, null);
+  var comments = [];
+  while (notes.nextNode()) comments.push(notes.currentNode);
+  for (var cm = 0; cm < comments.length; cm++) comments[cm].parentNode.removeChild(comments[cm]);
+
+  articleText = txt(container);
   var words = articleText ? articleText.split(/\s+/).length : 0;
 
   return JSON.stringify({

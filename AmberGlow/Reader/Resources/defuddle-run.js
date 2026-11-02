@@ -110,10 +110,23 @@
     }
   }
 
+  // An advertisement's label left standing on its own — "Advertisement", "Skip
+  // advertisement" — the same as the app's own pass takes out.
+  var AD_LABEL = /^(advertisement|advertisements|skip advertisement|sponsored|sponsored content|ad|story continues below( advertisement)?|continue reading( the main story)?( below)?|article continues below( advertisement)?|scroll to continue( with content)?)$/i;
+  var labelled = root.querySelectorAll("p,div,span,h1,h2,h3,h4,h5,h6,small,aside");
+  for (var al = labelled.length - 1; al >= 0; al--) {
+    var said = (labelled[al].textContent || "").replace(/\s+/g, " ").trim().replace(/[.:]$/, "");
+    if (labelled[al].parentNode && AD_LABEL.test(said)) {
+      labelled[al].parentNode.removeChild(labelled[al]);
+    }
+  }
+
   /* ---------- report ---------- */
 
   var text = (root.textContent || "").replace(/\s+/g, " ").trim();
-  var markdown = (parsed.contentMarkdown || "").trim();
+  var markdown = (parsed.contentMarkdown || "").split("\n").filter(function (line) {
+    return !AD_LABEL.test(line.replace(/[*_#>\s]/g, " ").replace(/\s+/g, " ").trim().replace(/[.:]$/, ""));
+  }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 
   // A lower bar than the app's own pass deliberately. This runs *because* that pass
   // came back empty-handed, and a short post that really is the whole page is a fair

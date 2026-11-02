@@ -89,6 +89,7 @@ final class ArticleExtractor: NSObject {
         defer { teardown(web) }
 
         try await load(url, in: web)
+        await wakeLazyContent(in: web)
 
         // Give client-side renderers a beat, then try; retry once for slow hydration.
         // The last answer is kept even when it failed, for its reason and whatever
@@ -213,6 +214,30 @@ final class ArticleExtractor: NSObject {
         guard let c = continuation else { return }
         continuation = nil
         c.resume(with: result)
+    }
+
+    /// Reads the page down once, as a reader would, before it is taken apart. Most
+    /// publishers put a picture in the page only as it scrolls into view — The Times
+    /// leaves a captioned frame with nothing in it until then — so a page read where it
+    /// loaded, at its top, kept the captions and lost the photographs. Bounded, so a
+    /// page that grows without end as it is scrolled cannot hold the save up.
+    private func wakeLazyContent(in web: WKWebView) async {
+        let script = """
+            const images = () => document.querySelectorAll('img[loading="lazy"]');
+            images().forEach(i => { i.loading = 'eager'; });
+            const step = Math.max(window.innerHeight * 0.8, 400);
+            const started = Date.now();
+            for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
+              if (Date.now() - started > 3500) break;
+              window.scrollTo(0, y);
+              await new Promise(r => setTimeout(r, 70));
+            }
+            images().forEach(i => { i.loading = 'eager'; });
+            window.scrollTo(0, 0);
+            await new Promise(r => setTimeout(r, 250));
+            return true;
+            """
+        _ = try? await web.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page)
     }
 
     private func run(_ script: String, in web: WKWebView) async throws -> ExtractionResult? {
