@@ -138,6 +138,7 @@ struct AmberTextView: UIViewRepresentable {
                                  center: CGPoint(x: board.container.bounds.midX, y: 23),
                                  palette: parent.palette)
             case .paste(let text): view.insertText(text)
+            case .dictation(let text): AmberDictation.insert(text, into: view)
             case .autofill, .shift, .plane: break   // handled inside the keyboard's own state
             }
         }

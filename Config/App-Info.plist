@@ -68,6 +68,10 @@
 	</dict>
 	<key>UIFileSharingEnabled</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The mic on Evening Reader’s keyboard listens while you dictate a note or a search.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>What you dictate on Evening Reader’s keyboard is turned into text, on your iPhone where it can be.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

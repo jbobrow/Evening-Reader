@@ -148,6 +148,8 @@ struct AmberTextField: UIViewRepresentable {
             case .paste(let text):
                 // Over the selection, or at the caret — what the field's own paste does.
                 field.insertText(text)
+            case .dictation(let text):
+                AmberDictation.insert(text, into: field)
             case .autofill, .shift, .plane:
                 break   // handled inside the keyboard's own state
             }

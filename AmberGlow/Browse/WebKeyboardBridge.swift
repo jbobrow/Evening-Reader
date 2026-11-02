@@ -246,6 +246,8 @@ final class WebKeyboardBridge {
             // Typed in rather than sent as `paste:` — that would have the content view
             // read the pasteboard itself, and the system ask about it.
             input?.insertText(text)
+        case .dictation(let text):
+            AmberDictation.insert(text, into: input)
         case .autofill:
             wantsSystemKeyboard = true
             loanStarted = Date()

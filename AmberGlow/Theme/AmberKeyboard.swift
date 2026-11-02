@@ -24,6 +24,9 @@ enum AmberKey: Hashable {
     /// Hand this field to the system keyboard, whose bar is where Password AutoFill
     /// lives. Offered on web fields only.
     case autofill
+    /// Words heard by the board's mic, settled and ready to type in — see
+    /// `AmberDictation.insert`, which also spaces them off from the word before.
+    case dictation(String)
 }
 
 /// A keyboard drawn by the app, on the app's ramp.
@@ -53,6 +56,15 @@ struct AmberKeyboard: View {
     @State private var plane: Plane = .letters
     @State private var shifted = false
     @State private var capsLocked = false
+    /// The character the last key with accents typed, as it was typed — capital or not —
+    /// so a hold on it offers its accents in the same case. Shift has let go by then.
+    @State private var lastTyped: String?
+    @State private var accents: AccentPopup?
+    @StateObject private var dictation = AmberDictation()
+
+    /// The board's own coordinate space, which the keys report their holds in and the
+    /// accent popup is laid out in.
+    static let space = "amberBoard"
 
     private var amber: AmberPalette { palette }
 
@@ -104,8 +116,10 @@ struct AmberKeyboard: View {
                 HStack(spacing: gap) {
                     if index == 2 { leadingRowKey }
                     ForEach(row, id: \.self) { key in
-                        AmberKeyCap(label: display(key), palette: amber) {
-                            onKey(.char(display(key)))
+                        AmberKeyCap(label: display(key), palette: amber,
+                                    hold: hold(for: key)) {
+                            lastTyped = display(key)
+                            send(.char(display(key)))
                             if shifted && !capsLocked { shifted = false }
                         }
                     }
@@ -119,6 +133,16 @@ struct AmberKeyboard: View {
         .padding(.top, 8)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity)
+        .overlay(alignment: .topLeading) {
+            if let accents {
+                AccentPopupView(popup: accents, palette: amber)
+                    .offset(x: accents.frame.minX, y: accents.frame.minY)
+                    .allowsHitTesting(false)
+            }
+        }
+        .coordinateSpace(name: Self.space)
+        // Put away with the mic still open: there is no field left to type into.
+        .onDisappear { dictation.cancel() }
         .background {
             ZStack {
                 amber.color(0.80)
@@ -131,22 +155,106 @@ struct AmberKeyboard: View {
         }
     }
 
-    /// Where Select All / Cut / Copy / Paste live, in place of the grey shortcuts bar.
+    /// Every key goes out through here. A key pressed while the mic is open types what
+    /// has been heard first, so the words land before the key and not after it.
+    private func send(_ key: AmberKey) {
+        switch key {
+        case .shift, .plane: break
+        default: dictation.commitNow()
+        }
+        onKey(key)
+    }
+
+    /// Where Select All / Cut / Copy / Paste live, in place of the grey shortcuts bar —
+    /// and where the mic is, which turns the strip into what it is hearing.
     private var editStrip: some View {
-        HStack(spacing: gap) {
-            stripKey("Select All", .selectAll)
-            stripKey("Cut", .cut)
-            stripKey("Copy", .copy)
-            pasteKey
-            if showsAutofill {
-                stripKey("AutoFill", symbol: "key.fill", .autofill)
+        Group {
+            if dictation.isActive {
+                listeningStrip
+            } else if case .refused(let reason) = dictation.state {
+                Text(reason)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(amber.inkMuted)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
+            } else {
+                HStack(spacing: gap) {
+                    stripKey("Select All", .selectAll)
+                    stripKey("Cut", .cut)
+                    stripKey("Copy", .copy)
+                    pasteKey
+                    if showsAutofill {
+                        stripKey("AutoFill", symbol: "key.fill", .autofill)
+                    }
+                    if AmberDictation.isOffered {
+                        micKey
+                    }
+                }
             }
         }
         .padding(.bottom, 1)
     }
 
+    private var micKey: some View {
+        Button {
+            dictation.start { send(.dictation($0)) }
+        } label: {
+            Image(systemName: "mic")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(amber.ink)
+                .frame(width: 44, height: 30)
+                .background { stripKeyFace }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Dictate")
+    }
+
+    /// The strip while the mic is open: what has been heard so far, newest words kept in
+    /// view, and the way to stop. Stopping types it in.
+    private var listeningStrip: some View {
+        HStack(spacing: gap) {
+            HStack(spacing: 8) {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(amber.color(0.92))
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(amber.color(0.30)))
+                    .symbolEffect(.pulse, isActive: dictation.state == .listening)
+                Text(dictation.transcript.isEmpty
+                     ? (dictation.state == .starting ? "Starting…" : "Listening…")
+                     : dictation.transcript)
+                    .font(.system(size: 13.5, weight: dictation.transcript.isEmpty ? .medium : .regular))
+                    .foregroundStyle(dictation.transcript.isEmpty ? amber.inkMuted : amber.ink)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.leading, 2)
+            .padding(.trailing, 8)
+            .frame(height: 30)
+            .background { stripKeyFace }
+
+            Button { dictation.stop() } label: {
+                Text("Done")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(amber.color(0.92))
+                    .frame(width: 64, height: 30)
+                    .background {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(amber.color(0.30))
+                    }
+            }
+            .buttonStyle(.plain)
+            .disabled(dictation.state == .finishing)
+            .opacity(dictation.state == .finishing ? 0.6 : 1)
+        }
+    }
+
     private func stripKey(_ label: String, symbol: String? = nil, _ key: AmberKey) -> some View {
-        Button { onKey(key) } label: {
+        Button { send(key) } label: {
             HStack(spacing: 5) {
                 if let symbol {
                     Image(systemName: symbol)
@@ -167,7 +275,7 @@ struct AmberKeyboard: View {
     /// take the clipboard without the system putting up its own grey question first.
     private var pasteKey: some View {
         AmberPasteControl(palette: amber, fill: 0.86, fontSize: 12.5, cornerStyle: .medium) {
-            onKey(.paste($0))
+            send(.paste($0))
         }
         .frame(maxWidth: .infinity)
         .frame(height: 30)
@@ -197,20 +305,20 @@ struct AmberKeyboard: View {
                 if capsLocked { capsLocked = false; shifted = false }
                 else if shifted { capsLocked = true }
                 else { shifted = true }
-                onKey(.shift)
+                send(.shift)
             }
         } else {
             AmberKeyCap(label: plane == .numbers ? "#+=" : "123",
                         palette: amber, kind: .modifier, width: modifierWidth) {
                 plane = plane == .numbers ? .symbols : .numbers
-                onKey(.plane(plane))
+                send(.plane(plane))
             }
         }
     }
 
     private var backspaceKey: some View {
         AmberKeyCap(symbol: "delete.left", palette: amber, kind: .modifier,
-                    width: modifierWidth, repeats: true) { onKey(.backspace) }
+                    width: modifierWidth, repeats: true) { send(.backspace) }
     }
 
     private var bottomRow: some View {
@@ -223,26 +331,26 @@ struct AmberKeyboard: View {
             AmberKeyCap(label: plane == .letters ? "123" : "ABC",
                         palette: amber, kind: .modifier, width: modifierWidth) {
                 plane = plane == .letters ? .numbers : .letters
-                onKey(.plane(plane))
+                send(.plane(plane))
             }
             if showsDotCom {
                 AmberKeyCap(label: ".", palette: amber, kind: .modifier,
                             width: isNarrow ? keyWidth : 52) {
-                    onKey(.char("."))
+                    send(.char("."))
                 }
             }
-            AmberKeyCap(label: "space", palette: amber, kind: .space) { onKey(.space) }
+            AmberKeyCap(label: "space", palette: amber, kind: .space) { send(.space) }
             if showsDotCom {
                 AmberKeyCap(label: ".com", palette: amber, kind: .modifier,
                             width: isNarrow ? 62 : 74) {
-                    onKey(.dotCom)
+                    send(.dotCom)
                 }
             }
             AmberKeyCap(label: goLabel, palette: amber, kind: .go,
-                        width: isNarrow ? 72 : 92) { onKey(.go) }
+                        width: isNarrow ? 72 : 92) { send(.go) }
             if !isNarrow {
                 AmberKeyCap(symbol: "keyboard.chevron.compact.down",
-                            palette: amber, kind: .modifier, width: 60) { onKey(.hide) }
+                            palette: amber, kind: .modifier, width: 60) { send(.hide) }
             }
         }
     }
@@ -250,6 +358,151 @@ struct AmberKeyboard: View {
     private func display(_ key: String) -> String {
         guard plane == .letters, shifted || capsLocked else { return key }
         return key.uppercased()
+    }
+
+    // MARK: - Accents
+
+    /// What a hold on a key offers, after the system keyboard's own English layout. The
+    /// key has already typed its own character by the time the popup is up — keys go on
+    /// touch down, so fast typing never comes out of order — and choosing one swaps it.
+    private static let alternates: [String: [String]] = [
+        "a": ["à", "á", "â", "ä", "æ", "ã", "å", "ā"],
+        "c": ["ç", "ć", "č"],
+        "e": ["è", "é", "ê", "ë", "ē", "ė", "ę"],
+        "i": ["î", "ï", "í", "ī", "į", "ì"],
+        "l": ["ł"],
+        "n": ["ñ", "ń"],
+        "o": ["ô", "ö", "ò", "ó", "œ", "ø", "ō", "õ"],
+        "s": ["ß", "ś", "š"],
+        "u": ["û", "ü", "ù", "ú", "ū"],
+        "y": ["ÿ"],
+        "z": ["ž", "ź", "ż"],
+        "0": ["°"],
+        "-": ["–", "—", "•"],
+        "/": ["\\"],
+        "$": ["€", "£", "¥", "¢", "₩", "₹", "₽"],
+        "&": ["§"],
+        "\"": ["“", "”", "„", "«", "»"],
+        "'": ["‘", "’", "‚", "‹", "›"],
+        ".": ["…"],
+        "?": ["¿"],
+        "!": ["¡"],
+        "%": ["‰"]
+    ]
+
+    private static func alternates(for typed: String) -> [String] {
+        let lower = typed.lowercased()
+        guard let options = alternates[lower] else { return [] }
+        guard typed != lower else { return options }
+        // Capitals, where a letter has one of its own — ß does not.
+        return options.compactMap { $0.uppercased().count == 1 ? $0.uppercased() : nil }
+    }
+
+    private func hold(for key: String) -> KeyHold? {
+        guard Self.alternates[key] != nil else { return nil }
+        return KeyHold(
+            begin: { keyFrame in openAccents(over: keyFrame) },
+            move: { point in
+                guard var popup = accents else { return }
+                popup.select(at: point)
+                if popup.selected != accents?.selected { accents = popup }
+            },
+            end: {
+                defer { accents = nil }
+                guard let popup = accents, let index = popup.selected else { return }
+                send(.backspace)
+                send(.char(popup.options[index]))
+                lastTyped = popup.options[index]
+            }
+        )
+    }
+
+    private func openAccents(over key: CGRect) {
+        guard let typed = lastTyped else { return }
+        var options = Self.alternates(for: typed)
+        guard !options.isEmpty else { return }
+
+        let inset: CGFloat = 4
+        let cell = max(keyWidth, 30)
+        let width = cell * CGFloat(options.count) + inset * 2
+        let height: CGFloat = 46
+        // Over the key, reading rightward from it — or leftward from it where the board
+        // runs out, the way the system's popup turns at the right-hand keys.
+        // Turned, it runs backwards too, so the likeliest accents stay nearest the finger.
+        var x = key.minX - inset
+        if x + width > boardWidth - 4 {
+            x = key.maxX + inset - width
+            options.reverse()
+        }
+        x = max(4, min(x, boardWidth - 4 - width))
+        // The bottom tucks onto the key's top edge. Over the top row it sits on the edit
+        // strip, which is what that strip's height leaves room for.
+        let y = max(2, key.minY + 3 - height)
+
+        var popup = AccentPopup(options: options,
+                                frame: CGRect(x: x, y: y, width: width, height: height),
+                                key: key, cell: cell, inset: inset)
+        popup.select(at: CGPoint(x: key.midX, y: key.midY))
+        accents = popup
+    }
+}
+
+/// How a key that has a hold behaviour reports it, in the board's coordinate space.
+struct KeyHold {
+    var begin: (CGRect) -> Void
+    var move: (CGPoint) -> Void
+    var end: () -> Void
+}
+
+/// The row of accents shown over a held key.
+struct AccentPopup: Equatable {
+    var options: [String]
+    var frame: CGRect
+    /// The key it was opened over — drawing the finger well clear of it, downward, is
+    /// how a choice is let go of.
+    var key: CGRect
+    var cell: CGFloat
+    var inset: CGFloat
+    var selected: Int?
+
+    mutating func select(at point: CGPoint) {
+        guard point.y < key.maxY + 36 else { selected = nil; return }
+        let index = Int(((point.x - frame.minX - inset) / cell).rounded(.down))
+        selected = min(max(index, 0), options.count - 1)
+    }
+}
+
+private struct AccentPopupView: View {
+    var popup: AccentPopup
+    var palette: AmberPalette
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(popup.options.enumerated()), id: \.offset) { index, option in
+                let chosen = index == popup.selected
+                Text(option)
+                    .font(.system(size: 21))
+                    .foregroundStyle(chosen ? palette.color(0.92) : palette.inkStrong)
+                    .frame(width: popup.cell, height: popup.frame.height - popup.inset * 2)
+                    .background {
+                        if chosen {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(palette.color(0.30))
+                        }
+                    }
+            }
+        }
+        .padding(popup.inset)
+        .frame(width: popup.frame.width, height: popup.frame.height)
+        .background {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(palette.color(0.95))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(palette.color(0.60, opacity: 0.6), lineWidth: 1)
+                }
+                .shadow(color: palette.color(0.2, opacity: 0.25), radius: 6, y: 2)
+        }
     }
 }
 
@@ -264,12 +517,17 @@ struct AmberKeyCap: View {
     var width: CGFloat?
     var isActive: Bool = false
     var repeats: Bool = false
+    /// What a long press does, for keys with accents. The tap still happens on touch
+    /// down; the hold comes after it.
+    var hold: KeyHold?
     var action: () -> Void
 
     init(label: String, palette: AmberPalette, kind: Kind = .letter, width: CGFloat? = nil,
-         isActive: Bool = false, repeats: Bool = false, action: @escaping () -> Void) {
+         isActive: Bool = false, repeats: Bool = false, hold: KeyHold? = nil,
+         action: @escaping () -> Void) {
         self.label = label; self.symbol = nil; self.palette = palette; self.kind = kind
-        self.width = width; self.isActive = isActive; self.repeats = repeats; self.action = action
+        self.width = width; self.isActive = isActive; self.repeats = repeats; self.hold = hold
+        self.action = action
     }
 
     init(symbol: String, palette: AmberPalette, kind: Kind = .letter, width: CGFloat? = nil,
@@ -280,6 +538,10 @@ struct AmberKeyCap: View {
 
     @State private var pressed = false
     @State private var repeater: Timer?
+    @State private var holdTimer: Task<Void, Never>?
+    @State private var holding = false
+    /// Where the key sits on the board, for the popup a hold opens over it.
+    @State private var frame: CGRect = .zero
 
     private var face: Double {
         if isActive { return 0.30 }
@@ -317,20 +579,36 @@ struct AmberKeyCap: View {
         .frame(maxWidth: width == nil ? .infinity : nil)
         .frame(height: 46)
         .contentShape(Rectangle())
+        .onGeometryChange(for: CGRect.self) {
+            $0.frame(in: .named(AmberKeyboard.space))
+        } action: { frame = $0 }
         .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    guard !pressed else { return }
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(AmberKeyboard.space))
+                .onChanged { value in
+                    guard !pressed else {
+                        if holding { hold?.move(value.location) }
+                        return
+                    }
                     pressed = true
                     action()
                     if repeats { startRepeating() }
+                    if let hold { startHolding(hold) }
                 }
                 .onEnded { _ in
                     pressed = false
                     stopRepeating()
+                    holdTimer?.cancel()
+                    holdTimer = nil
+                    if holding {
+                        holding = false
+                        hold?.end()
+                    }
                 }
         )
-        .onDisappear { stopRepeating() }
+        .onDisappear {
+            stopRepeating()
+            holdTimer?.cancel()
+        }
     }
 
     private func startRepeating() {
@@ -341,6 +619,16 @@ struct AmberKeyCap: View {
                 MainActor.assumeIsolated { action() }
             }
             MainActor.assumeIsolated { repeater = t }
+        }
+    }
+
+    private func startHolding(_ hold: KeyHold) {
+        holdTimer?.cancel()
+        holdTimer = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(420))
+            guard !Task.isCancelled, pressed else { return }
+            holding = true
+            hold.begin(frame)
         }
     }
 
