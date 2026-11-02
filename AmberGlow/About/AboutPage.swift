@@ -35,8 +35,14 @@ struct AboutPage: View {
                     ink: amber.ink,
                     secondaryInk: amber.inkMuted,
                     faintInk: amber.inkFaint,
-                    rowBackground: amber.pageRaised,
-                    separator: amber.rule))
+                    // Outlined cards with the glow showing through them, rather than
+                    // solid ones: a flat face stood in front of the lamp, and its edge
+                    // came and went with the bloom behind it. Only a breath of the
+                    // brightest amber inside, so the rows still read as a group.
+                    rowBackground: amber.color(1.0, opacity: 0.18),
+                    separator: amber.rule,
+                    // Opaque, as the lines between rows lie along it at the top.
+                    cardOutline: amber.color(0.66)))
                 .tint(amber.ink)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

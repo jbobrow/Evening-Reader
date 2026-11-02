@@ -33,6 +33,11 @@ struct AboutStyle {
     var rowBackground: Color?
     /// Between rows. `nil` keeps the list's own.
     var separator: Color?
+    /// Draws each group of rows as a card outlined in this colour — the outline and
+    /// the lines between rows both — over whatever is behind the page, instead of
+    /// the system's grouped list. For an app that lights its own page and wants it
+    /// to show through. `nil` keeps the list.
+    var cardOutline: Color?
 
     #if canImport(UIKit)
     static let tertiaryLabel = Color(uiColor: .tertiaryLabel)
@@ -43,6 +48,8 @@ struct AboutStyle {
 
 extension EnvironmentValues {
     @Entry var aboutStyle = AboutStyle()
+    /// Set inside a card, where each row draws its own padding and its own line.
+    @Entry fileprivate var aboutRowInCard = false
 }
 
 /// The About page: icon, name, version and description, the app's own rows
@@ -59,6 +66,47 @@ struct AboutView<AppRows: View>: View {
     static var moreApps: URL { URL(string: "https://app.jonbobrow.com")! }
 
     var body: some View {
+        if let outline = style.cardOutline {
+            cards(outline: outline)
+        } else {
+            list
+        }
+    }
+
+    /// The groups as outlined cards, laid out by hand rather than by `List`, which
+    /// gives a group no outline of its own.
+    private func cards(outline: Color) -> some View {
+        ScrollView {
+            VStack(spacing: 28) {
+                header
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 4)
+                if AppRows.self != EmptyView.self || app.appStore != nil {
+                    card(outline: outline) { appAndStoreRows }
+                }
+                card(outline: outline) { webRows }
+                footer
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 24)
+        }
+    }
+
+    /// One group. Every row draws a line along its top, in the outline's colour; the
+    /// first one's lies under the outline itself, so only the lines between rows show.
+    private func card<Rows: View>(outline: Color,
+                                  @ViewBuilder rows: () -> Rows) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return VStack(spacing: 0) { rows() }
+            .buttonStyle(.plain)
+            .environment(\.aboutRowInCard, true)
+            .background(style.rowBackground ?? .clear, in: shape)
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(outline, lineWidth: 1) }
+    }
+
+    private var list: some View {
         List {
             Section {
                 header
@@ -208,16 +256,42 @@ private struct AboutRowLabel: View {
     var accessory = "chevron.right"
 
     @Environment(\.aboutStyle) private var style
+    @Environment(\.aboutRowInCard) private var inCard
 
     var body: some View {
-        HStack {
-            Label(title, systemImage: systemImage)
-                .foregroundStyle(style.ink)
-            Spacer()
-            Image(systemName: accessory)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(style.faintInk)   // not the row's tint
+        if inCard {
+            // What `List` would otherwise give a row: its height, its insets, the
+            // icon in a column of its own, and the line above, from the title on.
+            HStack(spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.body)
+                    .frame(width: 26)
+                    .foregroundStyle(style.ink)
+                Text(title)
+                    .foregroundStyle(style.ink)
+                Spacer(minLength: 8)
+                Image(systemName: accessory)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(style.faintInk)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .overlay(alignment: .top) {
+                (style.cardOutline ?? .clear)
+                    .frame(height: 1)
+                    .padding(.leading, 56)
+            }
+            .contentShape(Rectangle())
+        } else {
+            HStack {
+                Label(title, systemImage: systemImage)
+                    .foregroundStyle(style.ink)
+                Spacer()
+                Image(systemName: accessory)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(style.faintInk)   // not the row's tint
+            }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
     }
 }
