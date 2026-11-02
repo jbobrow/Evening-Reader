@@ -44,12 +44,13 @@ struct ReaderRenderer {
         """
     }
 
-    /// Night, for drawings: rgb = the ink colour, alpha = 1 - luma. Dark strokes become
-    /// ink and the paper around them goes transparent, which is the same inversion the
-    /// type gets — a line drawing reads as amber on black instead of as a white card.
+    /// Night, for drawings: rgb = the ink colour, alpha = alpha - luma. Dark strokes
+    /// become ink and the paper around them goes transparent, which is the same
+    /// inversion the type gets — a line drawing reads as amber on black instead of as a
+    /// white card. See `ag-ink` for why it is alpha - luma and not 1 - luma.
     static func nightInkMatrix(_ palette: AmberPalette) -> String {
         let (r, g, b) = palette.rgb(0.045)
-        return String(format: "0 0 0 0 %.4f  0 0 0 0 %.4f  0 0 0 0 %.4f  -0.2126 -0.7152 -0.0722 0 1",
+        return String(format: "0 0 0 0 %.4f  0 0 0 0 %.4f  0 0 0 0 %.4f  -0.2126 -0.7152 -0.0722 1 0",
                       r, g, b)
     }
 
@@ -299,12 +300,16 @@ struct ReaderRenderer {
         <body>
         <svg width="0" height="0" style="position:absolute" aria-hidden="true">
           <filter id="ag-ink" color-interpolation-filters="sRGB">
-            <!-- rgb = black, alpha = 1 - luma  ->  page * luma (a multiply) -->
+            <!-- rgb = black, alpha = alpha - luma  ->  page * luma (a multiply).
+                 From the picture's own alpha, not from 1: a drawing on a transparent
+                 ground (a PNG chart, an SVG) has black, clear pixels there, and
+                 1 - luma made every one of them solid ink - the whole picture a black
+                 square. Taken from alpha, clear stays clear, and paper is as before. -->
             <feColorMatrix type="matrix" values="
               0 0 0 0 0
               0 0 0 0 0
               0 0 0 0 0
-              -0.2126 -0.7152 -0.0722 0 1"/>
+              -0.2126 -0.7152 -0.0722 1 0"/>
           </filter>
           <filter id="ag-ink-night" color-interpolation-filters="sRGB">
             <!-- Drawings: rgb = ink, alpha = 1 - luma. Set live; see nightMatrices(). -->
