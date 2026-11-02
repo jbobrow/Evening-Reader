@@ -280,33 +280,158 @@ struct WebTint {
             }, { passive: true, capture: true });
           })();
 
-          // Fullscreen is refused.
+          // Fullscreen, kept inside the page.
           //
-          // It is presented in a window of its own, above everything the app draws, and
-          // nothing can filter that window's contents from outside — a video that went
-          // fullscreen would be the only thing on screen in full colour. Every route to
-          // it is closed here, and video is pinned inline instead.
+          // The real thing is presented in a window of its own, above everything the app
+          // draws, and nothing can filter that window's contents from outside — a video
+          // that went fullscreen would be the only thing on screen in full colour. So
+          // the page is given a fullscreen of its own instead: the element it asked for
+          // is pinned over the whole page, the page is told it is fullscreen (so a
+          // player swaps in its fullscreen controls and its way out), and the app is
+          // told, so it can put its bar away and, on a phone, turn to landscape (see
+          // `BrowserModel.videoFullscreen`). It is all still the page, so the panel's
+          // tint is still on it.
+          //
+          // Only the top document. A player in a frame could only fill its frame, which
+          // is no fullscreen at all, so there the request is refused as before.
           (function () {
-            if (window.__agNoFullscreen) return;
-            window.__agNoFullscreen = true;
+            if (window.__agFullscreen) return;
+            window.__agFullscreen = true;
 
+            var isTop = window.top === window;
             var refuse = function () { return Promise.reject(new Error("disabled")); };
             var ignore = function () {};
+            // What the page asked for, as the page will ask after it, and what is pinned
+            // over the page for it — the player around a bare video, so its controls
+            // come too.
+            var current = null;
+            var pinned = null;
 
-            Element.prototype.requestFullscreen = refuse;
-            Element.prototype.webkitRequestFullscreen = ignore;
-            Element.prototype.webkitRequestFullScreen = ignore;
-            if (window.HTMLVideoElement) {
-              HTMLVideoElement.prototype.webkitEnterFullscreen = ignore;
-              HTMLVideoElement.prototype.webkitEnterFullScreen = ignore;
+            var css = document.createElement('style');
+            css.id = 'ag-fullscreen-style';
+            css.textContent = [
+              '.ag-fs { position: fixed !important; inset: 0 !important;',
+              '  width: 100vw !important; height: 100vh !important;',
+              '  max-width: none !important; max-height: none !important;',
+              '  margin: 0 !important; transform: none !important;',
+              '  z-index: 2147482000 !important; background: #000 !important; }',
+              // A player sizes its own <video> to the box it is in, once told the box
+              // has changed; a bare video asked for on its own is fitted here.
+              'video.ag-fs { object-fit: contain !important; }',
+              'html.ag-fs-on, html.ag-fs-on body { overflow: hidden !important; }',
+              // A page's own fixed bars can sit in a higher layer than the player,
+              // whatever its z-index, so the rest of the page is hidden rather than
+              // covered. The player shows again inside it, and what in the player the
+              // page itself hides — controls at rest — stays hidden.
+              'html.ag-fs-on body :not(.ag-fs, .ag-fs *) { visibility: hidden !important; }',
+              'html.ag-fs-on .ag-fs { visibility: visible !important; }'
+            ].join('\\n');
+            (document.head || document.documentElement).appendChild(css);
+
+            var tell = function (on) {
+              try { window.webkit.messageHandlers.browse.postMessage({ name: 'fullscreen', on: on }); }
+              catch (e) {}
+            };
+            // The video a request came through, for the video's own events: a phone's
+            // player asks the video itself and watches the video for the answer.
+            var videoIn = function (el) {
+              return el.tagName === 'VIDEO' ? el : (el.querySelector && el.querySelector('video'));
+            };
+            var announce = function (el, on) {
+              ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (type) {
+                try { el.dispatchEvent(new Event(type, { bubbles: true })); } catch (e) {}
+              });
+              var video = videoIn(el);
+              if (video) {
+                try {
+                  video.dispatchEvent(new Event(on ? 'webkitbeginfullscreen' : 'webkitendfullscreen',
+                                                { bubbles: true }));
+                } catch (e) {}
+              }
+              // Players measure themselves on resize; the box they are in just changed.
+              setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0);
+              setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 350);
+            };
+            // A bare <video> asked for: the player around it, so its controls come too.
+            var playerFor = function (el) {
+              if (el.tagName !== 'VIDEO') return el;
+              return el.closest('#player-container-id, .html5-video-player, #movie_player') ||
+                     el.parentElement || el;
+            };
+            var exit = function () {
+              if (!current) return;
+              var el = current;
+              pinned.classList.remove('ag-fs');
+              current = null;
+              pinned = null;
+              document.documentElement.classList.remove('ag-fs-on');
+              announce(el, false);
+              tell(false);
+            };
+            var enteredAt = 0;
+            var enter = function (el) {
+              // Asked again for what is already up. A player that set itself up with
+              // two requests in a row means to be in; one asked well after means its
+              // button was pressed again — YouTube's asks to enter whichever way its
+              // button is showing, and expects that to bring it back out.
+              if (current && (current === el || pinned.contains(el) || el.contains(pinned))) {
+                if (Date.now() - enteredAt > 1000) exit();
+                return;
+              }
+              if (current) exit();
+              enteredAt = Date.now();
+              current = el;
+              pinned = playerFor(el);
+              pinned.classList.add('ag-fs');
+              document.documentElement.classList.add('ag-fs-on');
+              announce(el, true);
+              tell(true);
+            };
+            // For the app, when the page is left some other way — a turn back to
+            // portrait on a phone.
+            window.__agExitFullscreen = exit;
+
+            if (isTop) {
+              Element.prototype.requestFullscreen = function () { enter(this); return Promise.resolve(); };
+              Element.prototype.webkitRequestFullscreen = function () { enter(this); };
+              Element.prototype.webkitRequestFullScreen = function () { enter(this); };
+              document.exitFullscreen = function () { exit(); return Promise.resolve(); };
+              document.webkitExitFullscreen = exit;
+              document.webkitCancelFullScreen = exit;
+              if (window.HTMLVideoElement) {
+                HTMLVideoElement.prototype.webkitEnterFullscreen = function () { enter(this); };
+                HTMLVideoElement.prototype.webkitEnterFullScreen = function () { enter(this); };
+                HTMLVideoElement.prototype.webkitExitFullscreen = exit;
+                HTMLVideoElement.prototype.webkitExitFullScreen = exit;
+                try {
+                  Object.defineProperty(HTMLVideoElement.prototype, 'webkitDisplayingFullscreen', {
+                    configurable: true,
+                    get: function () { return !!pinned && (pinned === this || pinned.contains(this)); }
+                  });
+                } catch (e) {}
+              }
+            } else {
+              Element.prototype.requestFullscreen = refuse;
+              Element.prototype.webkitRequestFullscreen = ignore;
+              Element.prototype.webkitRequestFullScreen = ignore;
+              if (window.HTMLVideoElement) {
+                HTMLVideoElement.prototype.webkitEnterFullscreen = ignore;
+                HTMLVideoElement.prototype.webkitEnterFullScreen = ignore;
+              }
             }
-            // Pages check these to decide whether to offer the control at all.
-            try {
-              Object.defineProperty(document, "fullscreenEnabled",
-                { configurable: true, get: function () { return false; } });
-              Object.defineProperty(document, "webkitFullscreenEnabled",
-                { configurable: true, get: function () { return false; } });
-            } catch (e) {}
+            // Pages check these to decide whether to offer the control at all, and
+            // which state their own control should show.
+            var define = function (name, get) {
+              try { Object.defineProperty(document, name, { configurable: true, get: get }); }
+              catch (e) {}
+            };
+            define('fullscreenEnabled', function () { return isTop; });
+            define('webkitFullscreenEnabled', function () { return isTop; });
+            define('fullscreenElement', function () { return current; });
+            define('webkitFullscreenElement', function () { return current; });
+            define('webkitCurrentFullScreenElement', function () { return current; });
+            define('webkitIsFullScreen', function () { return !!current; });
+            define('fullscreen', function () { return !!current; });
 
             var pinAll = function (list) {
               for (var i = 0; i < list.length; i++) {

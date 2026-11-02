@@ -40,6 +40,8 @@ struct HomePane: View {
     /// Which tile's menu is open, and where in the pane it should hang.
     @State private var tileMenu: (site: Site, y: CGFloat)?
     @State private var tileFrames: [Site.ID: CGRect] = [:]
+    /// The saving half of the tour, asked for from the empty front page.
+    @State private var showSavingGuide = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -63,6 +65,9 @@ struct HomePane: View {
         // page beside it — but with a mask that runs into the safe-area bands, so a
         // scrim put up over the pane can still cover the whole glass.
         .mask { Rectangle().ignoresSafeArea() }
+        .modifier(AmberFullScreenPresentation(isPresented: $showSavingGuide) {
+            OnboardingSheet(savingOnly: true)
+        })
         .onChange(of: isOpen) { _, open in
             guard !open else { return }
             // The drawer is leaving for a page; a keyboard raised for the search has
@@ -218,13 +223,22 @@ struct HomePane: View {
             Text("Nothing to read yet.")
                 .font(.system(size: 20, weight: .medium, design: .serif))
                 .foregroundStyle(amber.inkStrong)
-            Text("Share a page to Evening Reader from Safari, share a book from Files, or paste a link.")
+            // The ways in that keep the reader here: the search above and the sites
+            // below, both of which end at a page with Read on it. Pasting a link is
+            // still a tap away in the Library, and offered there when one is copied.
+            Text("Search above for something to read, or open one of your sites below. To keep a page or a book from another app, tap Share there and choose Evening Reader.")
                 .font(.system(size: 13))
                 .lineSpacing(2)
                 .foregroundStyle(amber.inkFaint)
-            Button("Add a link", action: onAdd)
+            HStack(spacing: 10) {
+                Button("Search the web") {
+                    withAnimation(.easeOut(duration: 0.18)) { searching = true }
+                }
                 .buttonStyle(AmberButtonStyle(kind: .solid, size: 14))
-                .padding(.top, 4)
+                Button("Show me how") { showSavingGuide = true }
+                    .buttonStyle(AmberButtonStyle(kind: .outline, size: 14))
+            }
+            .padding(.top, 4)
         }
     }
 

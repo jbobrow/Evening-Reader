@@ -100,8 +100,18 @@ final class Sites {
         return (found.sorted { $0.addedAt < $1.addedAt }, map)
     }
 
+    /// The site a page is on. A phone is sent from a site's address to its mobile one —
+    /// youtube.com to m.youtube.com — and that is still the same site.
     func site(forHost host: String) -> Site? {
-        sites.first { $0.host == host }
+        let wanted = Self.bareHost(host)
+        return sites.first { Self.bareHost($0.host) == wanted }
+    }
+
+    private static func bareHost(_ host: String) -> String {
+        for prefix in ["www.", "m."] where host.hasPrefix(prefix) {
+            return String(host.dropFirst(prefix.count))
+        }
+        return host
     }
 
     /// The site's own icon, if one was fetched when it was added.
@@ -144,6 +154,42 @@ final class Sites {
             sites[i] = site
         } else {
             sites.append(site)
+        }
+    }
+
+    /// What a new reader finds on the front page: places their reading already lives —
+    /// books on Kindle and from the library, the day's links, something to watch — so
+    /// the first thing they learn is that a site opens here, lit like everything else.
+    ///
+    /// Their ids are fixed, and with them their folder names, so a second device setting
+    /// up before the first one's sites have arrived writes the same folders over again
+    /// rather than a second set beside them.
+    private static let starters: [Site] = [
+        Site(id: UUID(uuidString: "5E1F0001-6B1D-4C0A-9E57-000000000001")!,
+             name: "Kindle", url: URL(string: "https://read.amazon.com")!),
+        Site(id: UUID(uuidString: "5E1F0001-6B1D-4C0A-9E57-000000000002")!,
+             name: "Libby", url: URL(string: "https://libbyapp.com")!),
+        Site(id: UUID(uuidString: "5E1F0001-6B1D-4C0A-9E57-000000000003")!,
+             name: "Hacker News", url: URL(string: "https://news.ycombinator.com")!),
+        Site(id: UUID(uuidString: "5E1F0001-6B1D-4C0A-9E57-000000000004")!,
+             name: "YouTube", url: URL(string: "https://www.youtube.com")!),
+    ]
+
+    /// Puts the starters on an empty front page, each with its own icon once it has
+    /// been fetched. Called once, on a first launch; one that is removed stays removed.
+    func addStarters() {
+        guard sites.isEmpty else { return }
+        let now = Date.now
+        for (i, starter) in Self.starters.enumerated() {
+            var site = starter
+            site.addedAt = now.addingTimeInterval(Double(i))
+            save(site, icon: nil)
+            Task {
+                // Into the site as it is by then: it may have been renamed meanwhile.
+                guard let icon = await Self.fetchIcon(for: site.url),
+                      let current = sites.first(where: { $0.id == site.id }) else { return }
+                save(current, icon: icon)
+            }
         }
     }
 

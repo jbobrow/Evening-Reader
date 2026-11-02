@@ -16,6 +16,8 @@ struct DetailPane: View {
     var panelOpen: Bool
     var onOpenLink: (URL) -> Void
     var onDismissArticle: () -> Void
+    /// Opens an article from the empty page, as the front page would.
+    var onOpenArticle: (SavedArticle) -> Void
     var onGlow: () -> Void
 
     @State private var selection: WebSelection?
@@ -749,12 +751,31 @@ struct DetailPane: View {
                 .lineSpacing(isCompact ? 4 : 6)
                 .foregroundStyle(amber.inkStrong)
                 .padding(.horizontal, isCompact ? 26 : 40)
-            Text("Pick something from the front page, or add a link.")
-                .font(.system(size: isCompact ? 13 : 14))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(amber.inkFaint)
+            // The page beside the drawer at rest. It points at nothing to do but the
+            // one thing worth doing next, when there is one: going back to the article
+            // that was being read. A phone never rests here — see `drawerPinned`.
+            if let current = library.continueReading {
+                Button { onOpenArticle(current) } label: {
+                    VStack(spacing: 4) {
+                        Text("Continue")
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(1.2)
+                            .textCase(.uppercase)
+                            .foregroundStyle(amber.inkFaint)
+                        Text(current.displayTitle)
+                            .font(.system(size: isCompact ? 15 : 17, design: .serif))
+                            .foregroundStyle(amber.inkMuted)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
                 .padding(.horizontal, 26)
-                .padding(.top, isCompact ? 16 : 22)
+                .padding(.top, isCompact ? 18 : 26)
+            }
             Spacer()
             Spacer()
         }

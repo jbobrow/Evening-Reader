@@ -94,6 +94,11 @@ struct RootView: View {
         return library.articles.first { $0.id == selection }
     }
 
+    /// On a phone with nothing open, the drawer is the floor. It fills the glass, so
+    /// putting it away would only show an empty page with a way back to it; a pull
+    /// gives a little and springs back instead.
+    private var drawerPinned: Bool { isCompact && selected == nil }
+
     var body: some View {
         GeometryReader { geo in
             // On a phone the drawer is the screen. At 86% it would leave a 55pt ribbon of
@@ -124,6 +129,7 @@ struct RootView: View {
                     panelOpen: glowPanel == .reader,
                     onOpenLink: { browseTarget = BrowseTarget(url: $0) },
                     onDismissArticle: { selection = nil },
+                    onOpenArticle: { open($0) },
                     onGlow: { toggleGlow(.reader) }
                 )
                 .onPreferenceChange(PageHasSelection.self) { pageHasSelection = $0 }
@@ -236,6 +242,13 @@ struct RootView: View {
             drawerDrag = 0
             drawerTracking = false
         }
+        // The article on the page went — archived from its own top bar, removed, or gone
+        // from iCloud — and on a phone that leaves an empty page. The drawer comes back
+        // over it, as it would have been there to choose the next one.
+        .onChange(of: drawerPinned) { _, pinned in
+            guard pinned, !showLibrary else { return }
+            withAnimation(.drawer) { showLibrary = true }
+        }
         // The sites live beside the library, and move into iCloud with it.
         .onChange(of: library.syncState) { _, _ in
             sites.refreshFromDisk()
@@ -286,6 +299,7 @@ struct RootView: View {
                     // The tour covers whatever this version brought, so its news is
                     // not news to someone just starting.
                     WhatsNew.markSeen()
+                    sites.addStarters()
                     try? await Task.sleep(for: .seconds(0.5))
                     showOnboarding = true
                 } else {
@@ -362,15 +376,21 @@ struct RootView: View {
                           abs(value.translation.width) > 4 else { return }
                     drawerTracking = true
                 }
-                drawerDrag = value.translation.width
+                let pull = value.translation.width
+                // Pinned, it moves a fraction of the pull and no further than a hand's
+                // width of give: enough to feel answered, not enough to look like it
+                // is going.
+                drawerDrag = drawerPinned && showLibrary && pull < 0
+                    ? -min(-pull * 0.15, 36)
+                    : pull
             }
             .onEnded { value in
                 guard drawerTracking else { drawerDrag = 0; return }
                 drawerTracking = false
                 let predicted = value.predictedEndTranslation.width
                 let opened = showLibrary
-                    ? predicted > -width * 0.4      // a small pull leaves it open
-                    : predicted > width * 0.3       // a decisive pull brings it out
+                    ? drawerPinned || predicted > -width * 0.4   // a small pull leaves it open
+                    : predicted > width * 0.3                   // a decisive pull brings it out
                 withAnimation(.drawer) {
                     showLibrary = opened
                     drawerDrag = 0

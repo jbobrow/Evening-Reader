@@ -53,6 +53,11 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// — which is how it turns one — so each page turned was a page rebuilt. An article
     /// is a document that simply reflows, and there the room is worth having back.
     var chromeStays: Bool { !isSaveable || isAppSite }
+    /// Whether the page has something in its own fullscreen — a video, nearly always.
+    /// The page keeps it inside itself so the panel's tint stays on it (see `WebTint`);
+    /// the bar goes away and a phone turns sideways, so it is watched the way a
+    /// fullscreen video is.
+    var videoFullscreen: Bool = false
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
@@ -93,6 +98,7 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         // content ran off the left edge and video sat letterboxed in a column meant
         // for a wider layout.
         web.customUserAgent = ArticleExtractor.browsingUserAgent
+
         // Opaque, and backed with white.
         //
         // The page is filtered on its way to the ramp — luminance, then squeezed into the
@@ -197,6 +203,13 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         frames.removeAll()
         pasteOffer = nil
+        // A new document has nothing in fullscreen, whatever the last one had.
+        videoFullscreen = false
+    }
+
+    /// Takes the page out of its fullscreen, for a way out the page did not offer.
+    func exitVideoFullscreen() {
+        web.evaluateJavaScript("window.__agExitFullscreen && window.__agExitFullscreen();")
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -392,6 +405,11 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         }
         if name == "chrome" {
             followScroll(show: dict["show"] as? Bool ?? true)
+            return
+        }
+        if name == "fullscreen" {
+            guard message.frameInfo.isMainFrame else { return }
+            videoFullscreen = dict["on"] as? Bool ?? false
             return
         }
         if name == "field" {

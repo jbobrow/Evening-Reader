@@ -19,6 +19,8 @@ struct LibraryPane: View {
     @State private var rowMenu: (article: SavedArticle, y: CGFloat)?
     @State private var rowFrames: [SavedArticle.ID: CGRect] = [:]
     @State private var searchFocused = false
+    /// The saving half of the tour, asked for from the empty shelf.
+    @State private var showSavingGuide = false
 
     private var items: [SavedArticle] { library.list(scope: scope, search: search) }
 
@@ -32,6 +34,9 @@ struct LibraryPane: View {
         }
         .coordinateSpace(name: "libraryPane")
         .overlay { rowMenuOverlay }
+        .modifier(AmberFullScreenPresentation(isPresented: $showSavingGuide) {
+            OnboardingSheet(savingOnly: true)
+        })
         .onAppear { library.checkClipboard() }
     }
 
@@ -231,14 +236,16 @@ struct LibraryPane: View {
                 .font(.system(size: 16, design: .serif))
                 .foregroundStyle(amber.inkMuted)
             if scope != .archive {
-                Text("Share a page to Evening Reader from Safari, share a book from Files, or paste a link.")
+                // As on the front page: the share sheet is the way in worth learning,
+                // and pasting is the + above, offered outright when a link is copied.
+                Text("Search from the front page for something to read, or tap Share in Safari or any other app and choose Evening Reader.")
                     .font(.system(size: 13))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(amber.inkFaint)
                     // The pane is as wide as the phone, and a line of 13pt run right
                     // across it is a paragraph of a sentence.
                     .frame(maxWidth: 300)
-                Button("Add a link", action: onAdd)
+                Button("Show me how") { showSavingGuide = true }
                     .buttonStyle(AmberButtonStyle(kind: .solid, size: 14))
                     .padding(.top, 4)
             }

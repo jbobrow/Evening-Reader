@@ -29,11 +29,17 @@ struct BrowseScreen: View {
     @State private var pageHeight: CGFloat = 0
     /// How much room the scrubber is taking, so the ground under it can match.
     @State private var scrubberHeight: CGFloat = 0
+    /// The phone was turned sideways for a video, and goes back upright after it.
+    @State private var turnedForVideo = false
+    /// The phone has been held sideways since the video went fullscreen, so turning it
+    /// back upright is the reader leaving it.
+    @State private var heldSideways = false
 
     var body: some View {
         pane
             .animation(.easeOut(duration: 0.22), value: model.chromeHidden)
             .animation(.easeOut(duration: 0.22), value: model.appMode)
+            .animation(.easeOut(duration: 0.22), value: model.videoFullscreen)
             .background(GlowSurface(level: 0.88))
             .overlay {
                 // The reader outside the condition, so it is the panel itself that comes
@@ -51,6 +57,15 @@ struct BrowseScreen: View {
                 .allowsHitTesting(glowOpen)
             }
             .statusBarHidden(true)
+            .persistentSystemOverlays(model.videoFullscreen ? .hidden : .automatic)
+            .onChange(of: model.videoFullscreen) { _, on in turnForVideo(on) }
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                guard model.videoFullscreen, UIDevice.current.userInterfaceIdiom == .phone else { return }
+                let held = UIDevice.current.orientation
+                if held.isLandscape { heldSideways = true }
+                // Turned back upright: the way out of a fullscreen video on a phone.
+                else if held == .portrait, heldSideways { model.exitVideoFullscreen() }
+            }
             .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
                 NewSiteSheet(draft: draft)
             })
@@ -97,7 +112,7 @@ struct BrowseScreen: View {
             // On an article the bar goes away as the page is read down and comes back as
             // it is read up, or on a tap — the same room the reader gives a page.
             // Anywhere else it stays (see `BrowserModel.chromeStays`).
-            if !model.chromeHidden {
+            if !model.chromeHidden && !model.videoFullscreen {
                 VStack(spacing: 0) {
                     bar
                     if model.isLoading {
@@ -188,10 +203,11 @@ struct BrowseScreen: View {
                         }
                     }
                     // Run to the physical bottom of the glass; otherwise the page stops at
-                    // the home-indicator inset and leaves a ledge.
-                    .ignoresSafeArea(.container, edges: .bottom)
+                    // the home-indicator inset and leaves a ledge. A video in fullscreen
+                    // has the whole of the glass.
+                    .ignoresSafeArea(.container, edges: model.videoFullscreen ? .all : .bottom)
 
-                if model.pageCount > 1 {
+                if model.pageCount > 1 && !model.videoFullscreen {
                     PageScrubber(page: model.page,
                                  total: model.pageCount,
                                  percent: model.percent,
@@ -209,10 +225,32 @@ struct BrowseScreen: View {
         }
     }
 
+    /// A phone held upright turns sideways for a fullscreen video, the way a video is
+    /// watched, and back upright when the video comes out of it. One already held
+    /// sideways is left as it is, and so is an iPad, where a video fills either way.
+    private func turnForVideo(_ on: Bool) {
+        guard UIDevice.current.userInterfaceIdiom == .phone,
+              let scene = UIApplication.shared.connectedScenes
+                  .compactMap({ $0 as? UIWindowScene })
+                  .first(where: { $0.activationState == .foregroundActive })
+        else { return }
+        if on {
+            heldSideways = UIDevice.current.orientation.isLandscape
+            guard scene.effectiveGeometry.interfaceOrientation.isPortrait else { return }
+            turnedForVideo = true
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+        } else {
+            heldSideways = false
+            guard turnedForVideo else { return }
+            turnedForVideo = false
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        }
+    }
+
     /// The site a page belongs to, if it is one of the reader's own.
     private func site(for url: URL) -> Site? {
         guard let host = url.host else { return nil }
-        return sites.site(forHost: host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
+        return sites.site(forHost: host)
     }
 
     /// Where a white page lands on the ramp — the same level the app's own surfaces use,
