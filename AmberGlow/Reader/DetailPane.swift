@@ -21,6 +21,10 @@ struct DetailPane: View {
     var onGlow: () -> Void
 
     @State private var selection: WebSelection?
+    /// The glass above the safe area — the island's band — which the page runs under.
+    @State private var safeTop: CGFloat = 0
+    /// How tall the bar is, once it has been shown; near enough before then.
+    @State private var barHeight: CGFloat = 52
     /// An end of the selection is being dragged — see `SelectionGrips`.
     @State private var gripping = false
     @State private var bridge = ReaderBridge()
@@ -82,19 +86,34 @@ struct DetailPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        ZStack(alignment: .top) {
             if let article {
-                // The chrome is lifted out of the layout rather than hidden in place, so
-                // the page reclaims the space instead of leaving a gap where the bar was.
-                if chromeVisible {
-                    chrome(for: article)
-                    Hairline()
-                }
+                // The bar comes down over the page rather than pushing it aside, so the
+                // text does not move under the reader's eye when it comes and goes. The
+                // page is faded out beneath it — see `topFade` — and the column keeps
+                // that much room at its top, so the title is never under it.
                 content(for: article)
+                if chromeVisible {
+                    VStack(spacing: 0) {
+                        chrome(for: article)
+                        Hairline()
+                    }
+                    .background { HeightReader(height: $barHeight) }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
             } else {
                 splash
             }
         }
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { safeTop = geo.safeAreaInsets.top }
+                    .onChange(of: geo.safeAreaInsets.top) { _, top in safeTop = top }
+            }
+        }
+        // An article opens to the page alone; a tap brings the bar.
+        .onAppear { if article != nil { chromeVisible = false } }
         .preference(key: PageHasSelection.self, value: selection != nil || gripping)
         // A novel's text is not kept around once nothing is reading it.
         //
@@ -102,6 +121,7 @@ struct DetailPane: View {
         // Another article taking its place is a new one starting, not a pause.
         .onChange(of: article?.id) { _, id in
             if id == nil { loadedBody = nil; putDown() } else { sitting = ReadingSitting() }
+            if id != nil { chromeVisible = false }
         }
         .onChange(of: showLibrary) { _, open in
             if open { putDown() } else { ReviewPrompter.shared.cancelPendingRequest() }
@@ -608,6 +628,20 @@ struct DetailPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// Where the page is let show at its top. Clear over the band that has to stay
+    /// clear — just the top of the island's band with the bar away, all of it and the
+    /// bar with the bar down — then a soft edge into the page.
+    private var topFade: some View {
+        let clear = chromeVisible ? safeTop + barHeight : safeTop * 0.6
+        let soft: CGFloat = chromeVisible ? 14 : max(safeTop * 0.5, 14) + 14
+        return VStack(spacing: 0) {
+            Color.clear.frame(height: clear)
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: soft)
+            Color.black
+        }
+    }
+
     private func articlePage(for article: SavedArticle, body: String) -> some View {
         // The page runs to the physical bottom of the glass; the scrubber does
         // not. It is a control, so it stays a sibling of the web view rather than
@@ -619,6 +653,7 @@ struct DetailPane: View {
                 body: body,
                 palette: settings.palette,
                 settings: settings,
+                topRoom: Double(safeTop + barHeight),
                 onProgress: { p in noteProgress(p, in: article) },
                 onOpenLink: onOpenLink,
                 onTap: toggleChrome,
@@ -683,9 +718,13 @@ struct DetailPane: View {
                     }
                 }
             }
-            // The web view is otherwise inset by the home-indicator safe area,
-            // which left a visible ledge where the document's fill stopped.
-            .ignoresSafeArea(.container, edges: .bottom)
+            // The page runs under the island and fades out there rather than stopping
+            // at a hard edge, and when the bar is down it fades out beneath that.
+            .mask { topFade }
+            // The web view is otherwise inset by the home-indicator safe area, which
+            // left a visible ledge where the document's fill stopped — and at the top it
+            // stopped short of the island.
+            .ignoresSafeArea(.container, edges: [.top, .bottom])
 
             if pageCount > 1 {
                 PageScrubber(page: page,

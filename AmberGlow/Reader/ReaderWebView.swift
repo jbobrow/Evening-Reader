@@ -53,6 +53,8 @@ struct ReaderWebView: UIViewRepresentable {
     let body: String
     let palette: AmberPalette
     let settings: DisplaySettings
+    /// Glass at the top the page runs under — see `ReaderRenderer.styleVariables`.
+    var topRoom: Double = 0
     var onProgress: (Double) -> Void
     var onOpenLink: (URL) -> Void
     var onTap: () -> Void
@@ -148,13 +150,16 @@ struct ReaderWebView: UIViewRepresentable {
             didLoad = false
             lastMarks = nil
             let html = ReaderRenderer.document(article: parent.article, body: parent.body,
-                                               palette: parent.palette, settings: parent.settings)
-            lastStyle = ReaderRenderer.applyStyleScript(palette: parent.palette, settings: parent.settings)
+                                               palette: parent.palette, settings: parent.settings,
+                                               topRoom: parent.topRoom)
+            lastStyle = ReaderRenderer.applyStyleScript(palette: parent.palette, settings: parent.settings,
+                                                        topRoom: parent.topRoom)
             web.loadHTMLString(html, baseURL: parent.article.url)
         }
 
         func applyStyle(_ parent: ReaderWebView) {
-            let script = ReaderRenderer.applyStyleScript(palette: parent.palette, settings: parent.settings)
+            let script = ReaderRenderer.applyStyleScript(palette: parent.palette, settings: parent.settings,
+                                                         topRoom: parent.topRoom)
             guard script != lastStyle, let web else { return }
             lastStyle = script
             web.evaluateJavaScript(script)

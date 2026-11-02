@@ -5,8 +5,13 @@ import Foundation
 /// reader's place on the page.
 struct ReaderRenderer {
 
-    static func styleVariables(palette: AmberPalette, settings: DisplaySettings) -> [String: String] {
+    /// `topRoom` is the glass the page runs under at its top — the island's band and
+    /// the bar that comes down over it — which the column keeps clear of, so the title
+    /// is never under either at the top of the page.
+    static func styleVariables(palette: AmberPalette, settings: DisplaySettings,
+                               topRoom: Double = 0) -> [String: String] {
         [
+            "--top-room": String(format: "%.0fpx", topRoom),
             "--page": palette.pageHex,
             "--page-dim": palette.pageDimHex,
             "--page-raised": palette.pageRaisedHex,
@@ -27,8 +32,9 @@ struct ReaderRenderer {
     }
 
     /// JS that pushes a new set of variables into an already-loaded document.
-    static func applyStyleScript(palette: AmberPalette, settings: DisplaySettings) -> String {
-        let pairs = styleVariables(palette: palette, settings: settings)
+    static func applyStyleScript(palette: AmberPalette, settings: DisplaySettings,
+                                 topRoom: Double = 0) -> String {
+        let pairs = styleVariables(palette: palette, settings: settings, topRoom: topRoom)
             .map { "\"\($0.key)\":\"\($0.value)\"" }
             .joined(separator: ",")
         return """
@@ -58,8 +64,9 @@ struct ReaderRenderer {
     }
 
     static func document(article: SavedArticle, body: String,
-                         palette: AmberPalette, settings: DisplaySettings) -> String {
-        let vars = styleVariables(palette: palette, settings: settings)
+                         palette: AmberPalette, settings: DisplaySettings,
+                         topRoom: Double = 0) -> String {
+        let vars = styleVariables(palette: palette, settings: settings, topRoom: topRoom)
             .sorted { $0.key < $1.key }
             .map { "      \($0.key): \($0.value);" }
             .joined(separator: "\n")
@@ -144,7 +151,7 @@ struct ReaderRenderer {
              height to give away. The `vh` term lets a taller screen take more: the same
              inset that sits right on an 11" reads as tight on a 13", where the page is
              bigger but a fixed margin is not. */
-          padding: max(3.4em, 6vh) 30px 180px;
+          padding: calc(max(3.4em, 6vh) + var(--top-room, 0px)) 30px 180px;
         }
         header.ag-head { margin: 0 0 34px; }
         header.ag-head h1 {
