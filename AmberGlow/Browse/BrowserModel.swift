@@ -57,7 +57,33 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
     /// The page keeps it inside itself so the panel's tint stays on it (see `WebTint`);
     /// the bar goes away and a phone turns sideways, so it is watched the way a
     /// fullscreen video is.
-    var videoFullscreen: Bool = false
+    var videoFullscreen: Bool = false {
+        didSet {
+            guard videoFullscreen != oldValue else { return }
+            // The page is ordinarily kept clear of the glass's safe edges — the island,
+            // the home indicator — and a video pinned to it was pushed in and cut off
+            // with it. In fullscreen it has the whole of the glass to fit itself to.
+            web.scrollView.contentInsetAdjustmentBehavior = videoFullscreen ? .never : .automatic
+            // What shows where the page has not yet drawn — as the glass turns and the
+            // page is laid out again at the new size — is black around a video, not
+            // the white a page sits on.
+            let ground: UIColor = videoFullscreen ? .black : .white
+            web.backgroundColor = ground
+            web.scrollView.backgroundColor = ground
+        }
+    }
+    /// The fullscreen video, as the page last reported it, for the app's controls.
+    /// Nil when what is in fullscreen is not a video.
+    var video: VideoState?
+    /// Counts the page's requests to leave fullscreen, which the screen carries out in
+    /// its own order (see `BrowseScreen.leaveVideoFullscreen`).
+    var videoLeaveRequests = 0
+
+    struct VideoState: Equatable {
+        var time: Double = 0
+        var duration: Double = 0
+        var paused = false
+    }
 
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
     @ObservationIgnored private var appliedTint: String?
@@ -205,11 +231,30 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         pasteOffer = nil
         // A new document has nothing in fullscreen, whatever the last one had.
         videoFullscreen = false
+        video = nil
     }
 
-    /// Takes the page out of its fullscreen, for a way out the page did not offer.
-    func exitVideoFullscreen() {
-        web.evaluateJavaScript("window.__agExitFullscreen && window.__agExitFullscreen();")
+    /// Puts the video playing on the page into fullscreen, if one is. Answers whether
+    /// there was one.
+    func enterPlayingVideoFullscreen() async -> Bool {
+        let entered = try? await web.evaluateJavaScript(
+            "window.__agVideo ? window.__agVideo.enterPlaying() : false")
+        return entered as? Bool ?? false
+    }
+
+    /// Lets the page's fullscreen video go back into the page.
+    func releaseVideoFullscreen() {
+        web.evaluateJavaScript("window.__agVideo && window.__agVideo.release();")
+    }
+
+    func toggleVideo() {
+        video?.paused.toggle()
+        web.evaluateJavaScript("window.__agVideo && window.__agVideo.toggle();")
+    }
+
+    func seekVideo(to time: Double) {
+        video?.time = time
+        web.evaluateJavaScript("window.__agVideo && window.__agVideo.seek(\(time));")
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -410,6 +455,19 @@ final class BrowserModel: NSObject, WKScriptMessageHandler, WKUIDelegate,
         if name == "fullscreen" {
             guard message.frameInfo.isMainFrame else { return }
             videoFullscreen = dict["on"] as? Bool ?? false
+            video = videoFullscreen && dict["video"] as? Bool == true ? VideoState() : nil
+            return
+        }
+        if name == "video" {
+            guard message.frameInfo.isMainFrame, videoFullscreen, video != nil else { return }
+            video = VideoState(time: dict["time"] as? Double ?? 0,
+                               duration: dict["duration"] as? Double ?? 0,
+                               paused: dict["paused"] as? Bool ?? false)
+            return
+        }
+        if name == "fullscreenLeave" {
+            guard message.frameInfo.isMainFrame, videoFullscreen else { return }
+            videoLeaveRequests += 1
             return
         }
         if name == "field" {

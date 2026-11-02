@@ -20,6 +20,23 @@ struct AmberGlowApp: App {
                 .statusBarHidden(true)          // no clock, no wifi, no battery — just the panel
                 .persistentSystemOverlays(.hidden)
                 .tracksReviewEligibility()
+                .background(BlackGlass())
+        }
+    }
+}
+
+/// Paints the window itself black. Nothing the app draws ever shows it, except while the
+/// glass turns: the system rotates the app's views as a picture and the corners it
+/// sweeps past are the window, which the light colour scheme leaves white — a flash of
+/// the brightest, bluest thing the screen can show. Black is no light at all.
+private struct BlackGlass: UIViewRepresentable {
+    func makeUIView(context: Context) -> Probe { Probe() }
+    func updateUIView(_ uiView: Probe, context: Context) {}
+
+    final class Probe: UIView {
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            window?.backgroundColor = .black
         }
     }
 }
@@ -232,6 +249,10 @@ struct RootView: View {
             .environment(library)
             .environment(settings)
             .environment(sites)
+            // What the cover's own container shows where the browser does not reach —
+            // the corners swept as the glass turns — is black rather than the system's
+            // white.
+            .presentationBackground(.black)
         }
         .onOpenURL(perform: handle)
         // Whatever moved the drawer, any drag that was in flight is finished with. A

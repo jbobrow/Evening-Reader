@@ -30,17 +30,29 @@ struct BrowseScreen: View {
     /// How much room the scrubber is taking, so the ground under it can match.
     @State private var scrubberHeight: CGFloat = 0
     /// The phone was turned sideways for a video, and goes back upright after it.
+    /// Turned by hand in the meantime, the video simply fits itself to the glass
+    /// either way; only the exit button, or the page, takes it out of fullscreen.
     @State private var turnedForVideo = false
-    /// The phone has been held sideways since the video went fullscreen, so turning it
-    /// back upright is the reader leaving it.
-    @State private var heldSideways = false
+    /// The video went fullscreen because the phone was turned sideways while it played,
+    /// so turning it back upright is the way out — as the phone's own players have it.
+    /// One put into fullscreen by its button stays in, whichever way it is held.
+    @State private var fullscreenByTurning = false
 
     var body: some View {
         pane
             .animation(.easeOut(duration: 0.22), value: model.chromeHidden)
             .animation(.easeOut(duration: 0.22), value: model.appMode)
             .animation(.easeOut(duration: 0.22), value: model.videoFullscreen)
-            .background(GlowSurface(level: 0.88))
+            .background {
+                // Behind a fullscreen video, the glass the page does not reach — round
+                // the island and the home indicator — is the video's own black, as the
+                // tint draws it, rather than a lit page framing it.
+                if model.videoFullscreen {
+                    amber.color(0.0).ignoresSafeArea()
+                } else {
+                    GlowSurface(level: 0.88)
+                }
+            }
             .overlay {
                 // The reader outside the condition, so it is the panel itself that comes
                 // and goes — and the panel's own transition, up from the bottom on a phone,
@@ -57,15 +69,7 @@ struct BrowseScreen: View {
                 .allowsHitTesting(glowOpen)
             }
             .statusBarHidden(true)
-            .persistentSystemOverlays(model.videoFullscreen ? .hidden : .automatic)
-            .onChange(of: model.videoFullscreen) { _, on in turnForVideo(on) }
-            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-                guard model.videoFullscreen, UIDevice.current.userInterfaceIdiom == .phone else { return }
-                let held = UIDevice.current.orientation
-                if held.isLandscape { heldSideways = true }
-                // Turned back upright: the way out of a fullscreen video on a phone.
-                else if held == .portrait, heldSideways { model.exitVideoFullscreen() }
-            }
+            .modifier(videoFullscreenHandling)
             .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
                 NewSiteSheet(draft: draft)
             })
@@ -225,25 +229,72 @@ struct BrowseScreen: View {
         }
     }
 
+    /// Out of a fullscreen video, in the order that keeps its picture: the phone back
+    /// upright first, if it was turned for the video, and the video let go of into the
+    /// page only once the glass has finished turning. Let go of mid-turn, a playing
+    /// video can be left drawing nothing at all.
+    /// Everything a fullscreen video asks of the screen, gathered in one place.
+    private var videoFullscreenHandling: VideoFullscreenHandling {
+        VideoFullscreenHandling(
+            model: model,
+            onLeave: { leaveVideoFullscreen() },
+            onFullscreenChange: { on in
+                turnForVideo(on)
+                if !on { fullscreenByTurning = false }
+            },
+            onTurn: followTurn)
+    }
+
+    private func leaveVideoFullscreen(glassTurning: Bool = false) {
+        guard model.videoFullscreen else { return }
+        let turnedBack = turnUpright() || glassTurning
+        Task {
+            if turnedBack { try? await Task.sleep(for: .milliseconds(700)) }
+            model.releaseVideoFullscreen()
+        }
+    }
+
+    /// A phone turned with a video on the page: sideways while one plays puts it in
+    /// fullscreen, and back upright takes it out again if that is how it went in.
+    private func followTurn(_ held: UIDeviceOrientation) {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return }
+        if held.isLandscape, !model.videoFullscreen {
+            Task {
+                guard await model.enterPlayingVideoFullscreen() else { return }
+                fullscreenByTurning = true
+            }
+        } else if held == .portrait, model.videoFullscreen, fullscreenByTurning {
+            leaveVideoFullscreen(glassTurning: true)
+        }
+    }
+
+    /// Puts the glass back upright, if it was turned for the video. Says whether it did.
+    private func turnUpright() -> Bool {
+        guard turnedForVideo, let scene = activeScene else { return false }
+        turnedForVideo = false
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        return true
+    }
+
+    private var activeScene: UIWindowScene? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+    }
+
     /// A phone held upright turns sideways for a fullscreen video, the way a video is
     /// watched, and back upright when the video comes out of it. One already held
     /// sideways is left as it is, and so is an iPad, where a video fills either way.
     private func turnForVideo(_ on: Bool) {
-        guard UIDevice.current.userInterfaceIdiom == .phone,
-              let scene = UIApplication.shared.connectedScenes
-                  .compactMap({ $0 as? UIWindowScene })
-                  .first(where: { $0.activationState == .foregroundActive })
-        else { return }
+        guard UIDevice.current.userInterfaceIdiom == .phone, let scene = activeScene else { return }
         if on {
-            heldSideways = UIDevice.current.orientation.isLandscape
             guard scene.effectiveGeometry.interfaceOrientation.isPortrait else { return }
             turnedForVideo = true
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
         } else {
-            heldSideways = false
-            guard turnedForVideo else { return }
-            turnedForVideo = false
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            // Gone some other way than through `leaveVideoFullscreen` — the page
+            // navigated, say — and still sideways.
+            _ = turnUpright()
         }
     }
 
@@ -565,3 +616,206 @@ struct BrowseScreen: View {
     }
 }
 
+/// The fullscreen video's side of the screen: its controls over the page, the home
+/// indicator put away, and what to do as it comes and goes and as the phone turns.
+private struct VideoFullscreenHandling: ViewModifier {
+    var model: BrowserModel
+    var onLeave: () -> Void
+    var onFullscreenChange: (Bool) -> Void
+    var onTurn: (UIDeviceOrientation) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .persistentSystemOverlays(model.videoFullscreen ? .hidden : .automatic)
+            .overlay {
+                if model.videoFullscreen {
+                    VideoControls(model: model, onLeave: onLeave)
+                        .transition(.opacity)
+                }
+            }
+            .onChange(of: model.videoFullscreen) { _, on in onFullscreenChange(on) }
+            .onChange(of: model.videoLeaveRequests) { _, _ in onLeave() }
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                onTurn(UIDevice.current.orientation)
+            }
+    }
+}
+
+/// The controls over a fullscreen video. The site's own are hidden with the rest of its
+/// page, so these stand in for them: a tap on the video brings them up — play or pause,
+/// where you are, and the way out — and they go again after a few seconds of playing.
+private struct VideoControls: View {
+    @Environment(\.amber) private var amber
+    var model: BrowserModel
+    var onLeave: () -> Void
+
+    @State private var shown = true
+    @State private var hideTask: Task<Void, Never>?
+    /// Where the scrubber is while a finger is on it, ahead of the video catching up.
+    @State private var scrubbing: Double?
+    @State private var seekTask: Task<Void, Never>?
+
+    private var video: BrowserModel.VideoState? { model.video }
+
+    var body: some View {
+        ZStack {
+            // The whole glass answers a tap, shown or not.
+            Color.black.opacity(0.001)
+                .contentShape(Rectangle())
+                .onTapGesture { shown ? hide() : show() }
+            if shown {
+                amber.color(0.0, opacity: 0.35)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                controls
+                    .transition(.opacity)
+            }
+        }
+        .ignoresSafeArea()
+        .animation(.easeOut(duration: 0.2), value: shown)
+        .onAppear { show() }
+        .onDisappear { hideTask?.cancel(); seekTask?.cancel() }
+        .onChange(of: video?.paused) { _, _ in scheduleHide() }
+    }
+
+    private var controls: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button(action: onLeave) {
+                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .foregroundStyle(amber.color(0.93))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Exit full screen")
+            }
+            Spacer()
+            if let video {
+                Button { model.toggleVideo(); show() } label: {
+                    Image(systemName: video.paused ? "play.fill" : "pause.fill")
+                        .font(.system(size: 30, weight: .semibold))
+                        .frame(width: 72, height: 72)
+                        .foregroundStyle(amber.color(0.93))
+                        .background(Circle().fill(amber.color(0.0, opacity: 0.45)))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(video.paused ? "Play" : "Pause")
+            }
+            Spacer()
+            if let video, video.duration > 0 {
+                progress(video)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .safeAreaPadding(.all)
+    }
+
+    private func progress(_ video: BrowserModel.VideoState) -> some View {
+        let time = scrubbing ?? video.time
+        return HStack(spacing: 14) {
+            Text(Self.clock(time))
+                .frame(minWidth: 44, alignment: .trailing)
+            VideoScrubber(fraction: video.duration > 0 ? time / video.duration : 0) { f in
+                seek(to: f * video.duration)
+            }
+            Text(Self.clock(video.duration))
+                .frame(minWidth: 44, alignment: .leading)
+        }
+        .font(.system(size: 13, weight: .medium).monospacedDigit())
+        .foregroundStyle(amber.color(0.93))
+    }
+
+    /// The scrubber's place goes to the video as the finger moves, a few times a
+    /// second, and once more where it comes to rest.
+    private func seek(to time: Double) {
+        let throttled = scrubbing != nil
+        scrubbing = time
+        show()
+        if !throttled { model.seekVideo(to: time) }
+        seekTask?.cancel()
+        seekTask = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let at = scrubbing else { return }
+            model.seekVideo(to: at)
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            scrubbing = nil
+        }
+    }
+
+    private func show() {
+        shown = true
+        scheduleHide()
+    }
+
+    private func hide() {
+        hideTask?.cancel()
+        shown = false
+    }
+
+    /// Out of the way after a few seconds, while the video plays and nothing is being
+    /// moved. A paused video keeps its controls up.
+    private func scheduleHide() {
+        hideTask?.cancel()
+        guard shown, let video, !video.paused else { return }
+        hideTask = Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, scrubbing == nil else { return }
+            shown = false
+        }
+    }
+
+    private static func clock(_ seconds: Double) -> String {
+        let s = max(0, Int(seconds.rounded(.down)))
+        let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
+    }
+}
+
+/// Where the video is, as a player draws it: a thin rounded line, filled to here, and
+/// a round handle. The whole line takes a touch — anywhere on it jumps there, and a
+/// drag carries on from it — and the handle grows while it is held.
+private struct VideoScrubber: View {
+    @Environment(\.amber) private var amber
+    var fraction: Double
+    var onChange: (Double) -> Void
+
+    @State private var dragging = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = max(geo.size.width, 1)
+            let f = min(max(fraction, 0), 1)
+            let knob: CGFloat = dragging ? 18 : 12
+            ZStack(alignment: .leading) {
+                Capsule().fill(amber.color(0.93, opacity: 0.3))
+                    .frame(height: dragging ? 6 : 4)
+                Capsule().fill(amber.color(0.93))
+                    .frame(width: max(width * f, 4), height: dragging ? 6 : 4)
+                Circle().fill(amber.color(0.95))
+                    .frame(width: knob, height: knob)
+                    .offset(x: width * f - knob / 2)
+            }
+            .frame(height: geo.size.height)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        dragging = true
+                        onChange(min(max(value.location.x / width, 0), 1))
+                    }
+                    .onEnded { _ in dragging = false }
+            )
+            .animation(.easeOut(duration: 0.12), value: dragging)
+        }
+        .frame(height: 32)
+        .accessibilityElement()
+        .accessibilityLabel("Position")
+        .accessibilityValue("\(Int((min(max(fraction, 0), 1) * 100).rounded())) percent")
+    }
+}

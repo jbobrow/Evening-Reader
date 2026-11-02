@@ -285,15 +285,18 @@ struct WebTint {
           // The real thing is presented in a window of its own, above everything the app
           // draws, and nothing can filter that window's contents from outside — a video
           // that went fullscreen would be the only thing on screen in full colour. So
-          // the page is given a fullscreen of its own instead: the element it asked for
-          // is pinned over the whole page, the page is told it is fullscreen (so a
-          // player swaps in its fullscreen controls and its way out), and the app is
-          // told, so it can put its bar away and, on a phone, turn to landscape (see
-          // `BrowserModel.videoFullscreen`). It is all still the page, so the panel's
-          // tint is still on it.
+          // the page is given a fullscreen of its own instead: the video is pinned over
+          // the whole page and everything else in it is hidden, the site's own player
+          // included, and the app draws the controls — play, where you are, and the way
+          // out — over it (see `VideoControls`). It is all still the page, so the
+          // panel's tint is still on it.
+          //
+          // Leaving is the app's to do, in its own order: the phone turned back upright
+          // first, and only then the video let go of. Let go of while the glass is still
+          // turning, a playing video can be left drawing nothing where it lands.
           //
           // Only the top document. A player in a frame could only fill its frame, which
-          // is no fullscreen at all, so there the request is refused as before.
+          // is no fullscreen at all, so there the request is refused.
           (function () {
             if (window.__agFullscreen) return;
             window.__agFullscreen = true;
@@ -302,8 +305,7 @@ struct WebTint {
             var refuse = function () { return Promise.reject(new Error("disabled")); };
             var ignore = function () {};
             // What the page asked for, as the page will ask after it, and what is pinned
-            // over the page for it — the player around a bare video, so its controls
-            // come too.
+            // for it: the video inside it when there is one, else the element itself.
             var current = null;
             var pinned = null;
 
@@ -315,98 +317,139 @@ struct WebTint {
               '  max-width: none !important; max-height: none !important;',
               '  margin: 0 !important; transform: none !important;',
               '  z-index: 2147482000 !important; background: #000 !important; }',
-              // A player sizes its own <video> to the box it is in, once told the box
-              // has changed; a bare video asked for on its own is fitted here.
               'video.ag-fs { object-fit: contain !important; }',
-              'html.ag-fs-on, html.ag-fs-on body { overflow: hidden !important; }',
-              // A page's own fixed bars can sit in a higher layer than the player,
+              // A box with a transform, a filter or the like is what a fixed element
+              // inside it is placed against, and one that hides its overflow cuts it
+              // off at its own edges — YouTube's player does both — so those round
+              // what is pinned are set aside while it is.
+              '.ag-fs-around { transform: none !important; filter: none !important;',
+              '  perspective: none !important; contain: none !important;',
+              '  will-change: auto !important; backdrop-filter: none !important;',
+              '  overflow: visible !important; clip-path: none !important; mask: none !important; }',
+              // The page under the video is black, not the page's own white, wherever
+              // the video does not reach.
+              'html.ag-fs-on, html.ag-fs-on body { overflow: hidden !important;',
+              '  background: #000 !important; }',
+              // A page's own fixed bars can sit in a higher layer than the video,
               // whatever its z-index, so the rest of the page is hidden rather than
-              // covered. The player shows again inside it, and what in the player the
-              // page itself hides — controls at rest — stays hidden.
+              // covered.
               'html.ag-fs-on body :not(.ag-fs, .ag-fs *) { visibility: hidden !important; }',
               'html.ag-fs-on .ag-fs { visibility: visible !important; }'
             ].join('\\n');
             (document.head || document.documentElement).appendChild(css);
 
-            var tell = function (on) {
-              try { window.webkit.messageHandlers.browse.postMessage({ name: 'fullscreen', on: on }); }
-              catch (e) {}
+            var post = function (message) {
+              try { window.webkit.messageHandlers.browse.postMessage(message); } catch (e) {}
             };
-            // The video a request came through, for the video's own events: a phone's
-            // player asks the video itself and watches the video for the answer.
             var videoIn = function (el) {
               return el.tagName === 'VIDEO' ? el : (el.querySelector && el.querySelector('video'));
             };
-            var announce = function (el, on) {
-              ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (type) {
-                try { el.dispatchEvent(new Event(type, { bubbles: true })); } catch (e) {}
-              });
-              var video = videoIn(el);
-              if (video) {
-                try {
-                  video.dispatchEvent(new Event(on ? 'webkitbeginfullscreen' : 'webkitendfullscreen',
-                                                { bubbles: true }));
-                } catch (e) {}
-              }
-              // Players measure themselves on resize; the box they are in just changed.
+            // Where the video is, for the app's controls: a few times a second while it
+            // plays, and at once when it starts, stops or is moved.
+            var lastReport = 0;
+            var report = function (force) {
+              if (!pinned || pinned.tagName !== 'VIDEO') return;
+              var now = Date.now();
+              if (!force && now - lastReport < 250) return;
+              lastReport = now;
+              post({ name: 'video', time: pinned.currentTime || 0,
+                     duration: isFinite(pinned.duration) ? pinned.duration : 0,
+                     paused: pinned.paused });
+            };
+            var watched = ['timeupdate', 'play', 'pause', 'seeked', 'durationchange', 'ended'];
+            var onVideo = function (e) { report(e.type !== 'timeupdate'); };
+
+            // Players measure themselves on resize; the box the video is in just
+            // changed. The page is not sent fullscreen events of its own: a player told
+            // its video went fullscreen and came back rebuilds around it, and YouTube's
+            // was left drawing nothing where the video landed. Its controls are hidden
+            // with the rest of the page anyway — the app's stand in for them.
+            var nudge = function () {
               setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0);
               setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 350);
             };
-            // A bare <video> asked for: the player around it, so its controls come too.
-            var playerFor = function (el) {
-              if (el.tagName !== 'VIDEO') return el;
-              return el.closest('#player-container-id, .html5-video-player, #movie_player') ||
-                     el.parentElement || el;
+            var around = function (el, on) {
+              for (var p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+                p.classList.toggle('ag-fs-around', on);
+              }
             };
-            var exit = function () {
+            var release = function () {
               if (!current) return;
-              var el = current;
+              watched.forEach(function (t) { pinned.removeEventListener(t, onVideo); });
               pinned.classList.remove('ag-fs');
+              around(pinned, false);
               current = null;
               pinned = null;
               document.documentElement.classList.remove('ag-fs-on');
-              announce(el, false);
-              tell(false);
+              nudge();
+              post({ name: 'fullscreen', on: false });
             };
-            var enteredAt = 0;
+            // The page asked to leave: the app does it, in its order.
+            var askToLeave = function () {
+              if (current) post({ name: 'fullscreenLeave' });
+            };
             var enter = function (el) {
-              // Asked again for what is already up. A player that set itself up with
-              // two requests in a row means to be in; one asked well after means its
-              // button was pressed again — YouTube's asks to enter whichever way its
-              // button is showing, and expects that to bring it back out.
-              if (current && (current === el || pinned.contains(el) || el.contains(pinned))) {
-                if (Date.now() - enteredAt > 1000) exit();
-                return;
-              }
-              if (current) exit();
-              enteredAt = Date.now();
+              // A player can ask twice as it sets itself up; what is up stays up.
+              if (current && (current === el || pinned === el || el.contains(pinned))) return;
+              if (current) release();
               current = el;
-              pinned = playerFor(el);
+              pinned = videoIn(el) || el;
               pinned.classList.add('ag-fs');
+              around(pinned, true);
               document.documentElement.classList.add('ag-fs-on');
-              announce(el, true);
-              tell(true);
+              watched.forEach(function (t) { pinned.addEventListener(t, onVideo); });
+              nudge();
+              post({ name: 'fullscreen', on: true, video: pinned.tagName === 'VIDEO' });
+              report(true);
             };
-            // For the app, when the page is left some other way — a turn back to
-            // portrait on a phone.
-            window.__agExitFullscreen = exit;
+            // The app's side of the controls.
+            window.__agVideo = {
+              release: release,
+              toggle: function () {
+                if (!pinned || pinned.tagName !== 'VIDEO') return;
+                if (pinned.paused) { try { pinned.play(); } catch (e) {} } else { pinned.pause(); }
+              },
+              seek: function (t) {
+                if (!pinned || pinned.tagName !== 'VIDEO') return;
+                try { pinned.currentTime = t; } catch (e) {}
+                report(true);
+              },
+              // The phone turned sideways with a video playing: that video, the
+              // largest one playing if there are several, goes fullscreen. Says
+              // whether there was one.
+              enterPlaying: function () {
+                if (current || !isTop) return false;
+                var best = null, bestArea = 0;
+                var list = document.getElementsByTagName('video');
+                for (var i = 0; i < list.length; i++) {
+                  var v = list[i];
+                  if (v.paused || v.ended || v.readyState < 2) continue;
+                  var r = v.getBoundingClientRect();
+                  var area = r.width * r.height;
+                  if (area > bestArea) { best = v; bestArea = area; }
+                }
+                if (!best || bestArea < 100 * 60) return false;
+                enter(best);
+                return true;
+              }
+            };
 
             if (isTop) {
               Element.prototype.requestFullscreen = function () { enter(this); return Promise.resolve(); };
               Element.prototype.webkitRequestFullscreen = function () { enter(this); };
               Element.prototype.webkitRequestFullScreen = function () { enter(this); };
-              document.exitFullscreen = function () { exit(); return Promise.resolve(); };
-              document.webkitExitFullscreen = exit;
-              document.webkitCancelFullScreen = exit;
+              document.exitFullscreen = function () { askToLeave(); return Promise.resolve(); };
+              document.webkitExitFullscreen = askToLeave;
+              document.webkitCancelFullScreen = askToLeave;
               if (window.HTMLVideoElement) {
                 HTMLVideoElement.prototype.webkitEnterFullscreen = function () { enter(this); };
                 HTMLVideoElement.prototype.webkitEnterFullScreen = function () { enter(this); };
-                HTMLVideoElement.prototype.webkitExitFullscreen = exit;
-                HTMLVideoElement.prototype.webkitExitFullScreen = exit;
+                HTMLVideoElement.prototype.webkitExitFullscreen = askToLeave;
+                HTMLVideoElement.prototype.webkitExitFullScreen = askToLeave;
                 try {
                   Object.defineProperty(HTMLVideoElement.prototype, 'webkitDisplayingFullscreen', {
                     configurable: true,
-                    get: function () { return !!pinned && (pinned === this || pinned.contains(this)); }
+                    get: function () { return !!pinned && pinned === this; }
                   });
                 } catch (e) {}
               }
