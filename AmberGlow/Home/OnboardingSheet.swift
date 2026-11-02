@@ -36,6 +36,7 @@ struct OnboardingSheet: View {
 private struct OnboardingPages: View {
     @Environment(\.amber) private var amber
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.closePage) private var closePage
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var savingOnly: Bool
@@ -114,7 +115,9 @@ private struct OnboardingPages: View {
             footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(GlowSurface(level: 0.9))
+        // Its own ground only when the system presents it; on a page cover the cover
+        // supplies the page's lamp.
+        .background { if closePage == nil { GlowSurface(level: 0.9) } }
         .statusBarHidden(true)
     }
 
@@ -196,7 +199,7 @@ private struct OnboardingPages: View {
 
     private func finish() {
         OnboardingSheet.hasBeenSeen = true
-        dismiss()
+        if let closePage { closePage() } else { dismiss() }
     }
 }
 

@@ -92,6 +92,7 @@ private struct WhatsNewPage: View {
 
     @Environment(\.amber) private var amber
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.closePage) private var closePage
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// Taking the tour swaps this page for it, so finishing the tour closes both.
@@ -110,7 +111,8 @@ private struct WhatsNewPage: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(GlowSurface(level: 0.9))
+        // Its own ground only when the system presents it; see `OnboardingPages`.
+        .background { if closePage == nil { GlowSurface(level: 0.9) } }
         .statusBarHidden(true)
     }
 
@@ -175,7 +177,7 @@ private struct WhatsNewPage: View {
                 .buttonStyle(AmberButtonStyle(kind: .outline))
             }
             Spacer()
-            Button("Continue") { dismiss() }
+            Button("Continue") { if let closePage { closePage() } else { dismiss() } }
                 .buttonStyle(AmberButtonStyle(kind: .solid))
         }
         .frame(maxWidth: 460)

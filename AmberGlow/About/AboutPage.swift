@@ -5,7 +5,9 @@ import SwiftUI
 /// everything else with.
 struct AboutPage: View {
     @Environment(\.amber) private var amber
-    @Environment(\.dismiss) private var dismiss
+    /// Puts the page away. It is drawn over the page rather than presented (see
+    /// `PageCover`), so the environment's `dismiss` has nothing to dismiss.
+    var onClose: () -> Void
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The tour, or a version's news, opened over this page.
@@ -46,15 +48,15 @@ struct AboutPage: View {
                 .tint(amber.ink)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(GlowSurface(level: 0.9))
+        // No ground of its own: it comes up over the page on the page's own lamp.
         .statusBarHidden(true)
-        .modifier(AmberFullScreenPresentation(isPresented: $showTour) {
+        .modifier(PageCover(isPresented: $showTour) {
             OnboardingSheet()
         })
-        .modifier(AmberFullScreenPresentation(isPresented: Binding(
+        .modifier(PageCover(isPresented: Binding(
             get: { whatsNew != nil },
             set: { if !$0 { whatsNew = nil } })) {
-            if let whatsNew { WhatsNewSheet(release: whatsNew) }
+            if let release = whatsNew ?? WhatsNew.latest { WhatsNewSheet(release: release) }
         })
     }
 
@@ -64,7 +66,7 @@ struct AboutPage: View {
                 .font(.system(size: isCompact ? 22 : 26, weight: .semibold, design: .serif))
                 .foregroundStyle(amber.inkStrong)
             Spacer(minLength: 12)
-            AmberIconButton(symbol: "xmark") { dismiss() }
+            AmberIconButton(symbol: "xmark", action: onClose)
         }
         .frame(maxWidth: measure)
         .frame(maxWidth: .infinity)

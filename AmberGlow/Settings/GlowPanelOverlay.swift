@@ -51,16 +51,9 @@ struct GlowPanelOverlay: View {
             PanelControls()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            ZStack {
-                amber.color(0.93)
-                if settings.showTexture { PixelGrid() }
-            }
-            .ignoresSafeArea()
-        }
-        // Up over the page, the way the drawer comes in from the side. Sliding rather
-        // than fading keeps it a thing that arrived and can be sent away again.
-        .transition(.move(edge: .bottom))
+        // No ground, edge or transition of its own: on a phone it comes up over the
+        // page on the page's own lamp (see `PageCover`), the same paper, with only a
+        // shadow along its top edge while it moves.
     }
 
     private var card: some View {

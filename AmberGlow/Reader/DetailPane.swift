@@ -127,11 +127,11 @@ struct DetailPane: View {
             if open { putDown() } else { ReviewPrompter.shared.cancelPendingRequest() }
         }
         .overlay { markCard }
-        .modifier(AmberFullScreenPresentation(isPresented: $showHighlights) {
+        .modifier(PageCover(isPresented: $showHighlights) {
             if let article {
-                HighlightsSheet(scope: article) { _, mark in
-                    revealHighlight = mark.id
-                }
+                HighlightsSheet(scope: article,
+                                onOpen: { _, mark in revealHighlight = mark.id },
+                                onClose: { showHighlights = false })
             }
         })
         .overlay { definitionCard }
@@ -203,27 +203,29 @@ struct DetailPane: View {
     /// away the thing the note is being written about.
     @ViewBuilder
     private var markCard: some View {
+        // As the display settings come: the card slides up and the page dims under it;
+        // on the way out the dimming goes at once and the card slides away, so no light
+        // is seen coming back up. Siblings, so each keeps its own transition.
         if let mark = openMark, let article {
-            ZStack {
-                AmberScrim { closeMark() }
-                HighlightCard(
-                    highlight: mark,
-                    onRemove: {
-                        highlights.remove(mark.id, from: article)
-                        closeMark()
-                    },
-                    onClose: closeMark,
-                    onNote: { note in highlights.setNote(note, on: mark.id, in: article) }
-                )
-                .padding(.horizontal, 18)
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            }
+            AmberScrim { closeMark() }
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
+            HighlightCard(
+                highlight: mark,
+                onRemove: {
+                    highlights.remove(mark.id, from: article)
+                    closeMark()
+                },
+                onClose: closeMark,
+                onNote: { note in highlights.setNote(note, on: mark.id, in: article) }
+            )
+            .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
     private func closeMark() {
-        withAnimation(.easeOut(duration: 0.16)) { openMark = nil }
+        withAnimation(.drawer) { openMark = nil }
     }
 
     /// A passage picked out of a list has been reached.
@@ -239,7 +241,7 @@ struct DetailPane: View {
             return
         }
         revealHighlight = nil
-        withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
+        withAnimation(.drawer) { openMark = mark }
     }
 
     private var isCompact: Bool { sizeClass == .compact }
@@ -331,7 +333,7 @@ struct DetailPane: View {
     /// closing the card without typing leaves a plain one.
     private func keep(_ mark: Highlight, in article: SavedArticle) {
         highlights.add(mark, to: article)
-        withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
+        withAnimation(.drawer) { openMark = mark }
     }
 
     /// A PDF is read-only, so nothing that edits appears. The article's `WebEditor` runs
@@ -670,7 +672,7 @@ struct DetailPane: View {
                 onHighlight: { mark in keep(mark, in: article) },
                 onMarkTap: { id in
                     guard let mark = highlights.highlight(id, in: article) else { return }
-                    withAnimation(.easeOut(duration: 0.16)) { openMark = mark }
+                    withAnimation(.drawer) { openMark = mark }
                 },
                 onHighlightBreaks: { found in highlights.setBreaks(found, in: article) },
                 bridge: bridge

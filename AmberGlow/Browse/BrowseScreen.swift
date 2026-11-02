@@ -59,15 +59,21 @@ struct BrowseScreen: View {
                 // is the one that plays. Conditional on the reader, the reader was what
                 // appeared, and it only knows how to fade.
                 GeometryReader { geo in
-                    if glowOpen {
+                    if glowOpen && !isCompact {
                         GlowPanelOverlay(isCompact: isCompact, alignment: .topTrailing,
                                          top: 54, size: geo.size) {
                             withAnimation(.drawer) { glowOpen = false }
                         }
                     }
                 }
-                .allowsHitTesting(glowOpen)
+                .allowsHitTesting(glowOpen && !isCompact)
             }
+            // On a phone the display settings are a page of their own, up over this one.
+            .modifier(PageCover(isPresented: Binding(
+                get: { isCompact && glowOpen },
+                set: { if !$0 { glowOpen = false } })) {
+                GlowPanelOverlay(isCompact: true, size: .zero) { glowOpen = false }
+            })
             .statusBarHidden(true)
             .modifier(videoFullscreenHandling)
             .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in

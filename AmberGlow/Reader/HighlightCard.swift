@@ -86,7 +86,9 @@ struct HighlightCard: View {
         .frame(maxWidth: 420)
         .background {
             ZStack {
-                amber.color(0.93)
+                // The page's own shade, as the display settings are: the card is a
+                // piece of the page brought forward, not a lighter sheet laid on it.
+                amber.color(0.88)
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(amber.color(0.62, opacity: 0.5), lineWidth: 1)
             }

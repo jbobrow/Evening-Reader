@@ -16,13 +16,15 @@ struct HighlightsSheet: View {
     @Environment(Highlights.self) private var highlights
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// One reading's marks, or — when nil — the whole library's.
     var scope: SavedArticle?
     /// Take me to the passage this came off.
     var onOpen: (SavedArticle, Highlight) -> Void
+    /// Puts the page away. It is drawn over the page rather than presented, so the
+    /// environment's `dismiss` has nothing to dismiss.
+    var onClose: () -> Void = {}
 
     @State private var search = ""
     @State private var searchFocused = false
@@ -84,7 +86,8 @@ struct HighlightsSheet: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(GlowSurface(level: 0.9))
+        // No ground of its own: it comes up over the page on the page's own lamp
+        // (see `PageCover`).
         .statusBarHidden(true)
         .overlay { card }
     }
@@ -109,7 +112,7 @@ struct HighlightsSheet: View {
                 .foregroundStyle(amber.inkFaint)
             }
             Spacer(minLength: 12)
-            AmberIconButton(symbol: "xmark") { dismiss() }
+            AmberIconButton(symbol: "xmark") { onClose() }
         }
         .frame(maxWidth: measure)
         .frame(maxWidth: .infinity)
@@ -189,10 +192,10 @@ struct HighlightsSheet: View {
     /// straight to the words on the page — and brings the card with it.
     private func choose(_ mark: Highlight, in article: SavedArticle) {
         if scope == nil {
-            showing = Showing(article: article, highlight: mark)
+            withAnimation(.drawer) { showing = Showing(article: article, highlight: mark) }
         } else {
             onOpen(article, mark)
-            dismiss()
+            onClose()
         }
     }
 
@@ -273,26 +276,28 @@ struct HighlightsSheet: View {
 
     @ViewBuilder
     private var card: some View {
+        // As in the reader: up over the list, which dims as it comes and is let go of
+        // at once as it leaves. Siblings, so each keeps its own transition.
         if let showing {
-            ZStack {
-                AmberScrim { withAnimation(.easeOut(duration: 0.16)) { self.showing = nil } }
-                HighlightCard(
-                    highlight: showing.highlight,
-                    source: showing.article.displayTitle,
-                    atSource: false,
-                    onOpen: {
-                        onOpen(showing.article, showing.highlight)
-                        dismiss()
-                    },
-                    onRemove: {
-                        highlights.remove(showing.highlight.id, from: showing.article)
-                        withAnimation(.easeOut(duration: 0.16)) { self.showing = nil }
-                    },
-                    onClose: { withAnimation(.easeOut(duration: 0.16)) { self.showing = nil } }
-                )
-                .padding(.horizontal, 18)
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            }
+            AmberScrim { withAnimation(.drawer) { self.showing = nil } }
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
+            HighlightCard(
+                highlight: showing.highlight,
+                source: showing.article.displayTitle,
+                atSource: false,
+                onOpen: {
+                    onOpen(showing.article, showing.highlight)
+                    onClose()
+                },
+                onRemove: {
+                    highlights.remove(showing.highlight.id, from: showing.article)
+                    withAnimation(.drawer) { self.showing = nil }
+                },
+                onClose: { withAnimation(.drawer) { self.showing = nil } }
+            )
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 

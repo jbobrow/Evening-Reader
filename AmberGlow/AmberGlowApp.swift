@@ -215,8 +215,8 @@ struct RootView: View {
         .modifier(AmberItemPresentation(isCompact: isCompact, item: $siteDraft) { draft in
             NewSiteSheet(draft: draft)
         })
-        .modifier(AmberFullScreenPresentation(isPresented: $showHighlights) {
-            HighlightsSheet { article, mark in
+        .modifier(PageCover(isPresented: $showHighlights) {
+            HighlightsSheet(onOpen: { article, mark in
                 open(article)
                 // `open` only puts the drawer away on a phone, where it is the whole
                 // screen. Here it goes either way: this is a request to see one
@@ -224,18 +224,27 @@ struct RootView: View {
                 // it is on.
                 withAnimation(.drawer) { showLibrary = false }
                 revealHighlight = mark.id
-            }
+            }, onClose: { showHighlights = false })
         })
-        .modifier(AmberFullScreenPresentation(isPresented: $showOnboarding) {
+        // On a phone the display settings are a page of their own; see `glowOverlay`
+        // for the card a wide panel gets.
+        .modifier(PageCover(isPresented: Binding(
+            get: { isCompact && glowPanel != nil },
+            set: { if !$0 { glowPanel = nil } })) {
+            GlowPanelOverlay(isCompact: true, size: .zero) { glowPanel = nil }
+        })
+        .modifier(PageCover(isPresented: $showOnboarding) {
             OnboardingSheet()
         })
-        .modifier(AmberFullScreenPresentation(isPresented: Binding(
+        // The release is let go of as the page starts down; the newest one is the same
+        // release, and keeps the page filled until it is gone.
+        .modifier(PageCover(isPresented: Binding(
             get: { whatsNew != nil },
             set: { if !$0 { whatsNew = nil } })) {
-            if let whatsNew { WhatsNewSheet(release: whatsNew) }
+            if let release = whatsNew ?? WhatsNew.latest { WhatsNewSheet(release: release) }
         })
-        .modifier(AmberFullScreenPresentation(isPresented: $showAbout) {
-            AboutPage()
+        .modifier(PageCover(isPresented: $showAbout) {
+            AboutPage { showAbout = false }
         })
         .fullScreenCover(item: $browseTarget) { target in
             BrowseScreen(initialURL: target.url,
@@ -530,7 +539,7 @@ struct RootView: View {
 
     @ViewBuilder
     private func glowOverlay(in size: CGSize) -> some View {
-        if let anchor = glowPanel {
+        if let anchor = glowPanel, !isCompact {
             GlowPanelOverlay(isCompact: isCompact,
                              alignment: anchor == .library ? .topLeading : .topTrailing,
                              top: chromeVisible ? 54 : 16,
