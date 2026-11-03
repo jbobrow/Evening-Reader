@@ -93,9 +93,11 @@ final class ArticleExtractor: NSObject {
 
         // Give client-side renderers a beat, then try; retry once for slow hydration.
         // The last answer is kept even when it failed, for its reason and whatever
-        // metadata it did manage to find.
+        // metadata it did manage to find. A post on X gets one try more: the reading of
+        // one waits for the post itself, and says so rather than read the page without it.
         var primary: ExtractionResult?
-        for delay in [0.35, 1.6] {
+        for delay in [0.35, 1.6, 3.0] {
+            if delay == 3.0 && primary?.reason != "x-not-ready" { break }
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             let attempt = try await run(script, in: web)
             primary = attempt ?? primary

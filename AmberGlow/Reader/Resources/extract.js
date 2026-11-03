@@ -66,6 +66,435 @@
     return linked / total;
   }
 
+  /* ---------- 0. a post on X ---------- */
+
+  // A post on X is no article, and scored as one it comes out badly: the whole post a
+  // single paragraph, set between the author's picture and the count of its likes, and
+  // an author's thread cut off after its first post. So a post's page is read on its own
+  // terms, post by post, from either page X serves: the one for a reader signed out,
+  // and the one for a reader signed in to the browser, whose posts are marked up
+  // differently and found by their test ids.
+  var X_HOST = /(^|\.)(x|twitter)\.com$/i;
+  var X_STATUS = /^\/([A-Za-z0-9_]{1,15})\/status(?:es)?\/(\d+)/;
+  var X_RESERVED = /^(i|home|explore|search|notifications|messages|settings|compose|hashtag|intent|login|signup|tos|privacy)$/i;
+  // The pictures a post carries: its photographs, and the stills of its videos and GIFs.
+  // Not the avatars, the emoji, or a link card's thumbnail.
+  var X_MEDIA = /^https:\/\/pbs\.twimg\.com\/(media|ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\//;
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function readPostOnX() {
+    if (!X_HOST.test(location.hostname)) return null;
+    var here = location.pathname.match(X_STATUS);
+    if (!here) return null;
+
+    function answer(fields) {
+      var out = {
+        ok: false, reason: "", url: location.href, title: "", byline: "", site: "X",
+        published: "", excerpt: "", leadImage: "", wordCount: 0, length: 0,
+        html: "", markdown: "", source: "amber"
+      };
+      for (var k in fields) out[k] = fields[k];
+      return JSON.stringify(out);
+    }
+
+    // A long-form X Article is a document, with its own headings and lists, and
+    // Defuddle has a reader made for it. Not ready, as far as this pass goes.
+    if (document.querySelector("[data-testid='twitterArticleReadView']")) {
+      return answer({ reason: "x-article" });
+    }
+
+    function shown(el) { return el.getClientRects().length > 0; }
+    function outside(el, without) { return !without || !without.contains(el); }
+    function pathOf(a) {
+      try {
+        var u = new URL(a.href);
+        return X_HOST.test(u.hostname) ? u.pathname : "";
+      } catch (e) { return ""; }
+    }
+
+    // A post is an <article> on both pages. Signed out, a quoted post is an <article>
+    // inside it; signed in, it is a link-like block holding a second post's name and text.
+    var posts = [].slice.call(document.querySelectorAll("article")).filter(function (a) {
+      return !(a.parentElement && a.parentElement.closest("article")) && shown(a);
+    });
+    // Signed in, the posts arrive after the page does. Not yet, rather than a reading
+    // of the empty shell around them: the host tries again, and then asks Defuddle.
+    if (!posts.length) return answer({ reason: "x-not-ready" });
+
+    function innerQuote(post) {
+      var inner = post.querySelector("article");
+      if (inner) return inner;
+      var blocks = post.querySelectorAll("div[role='link']");
+      for (var i = 0; i < blocks.length; i++) {
+        if (blocks[i].querySelector("[data-testid='User-Name'],[data-testid='tweetText']")) return blocks[i];
+      }
+      return null;
+    }
+
+    // The post's own words. Signed in, they are marked as such. Signed out, they are the
+    // one block the page sets with its line breaks kept — the post's own newlines, which
+    // are its paragraphs.
+    function textsOf(scope, without) {
+      var found = [].slice.call(scope.querySelectorAll("[data-testid='tweetText']"));
+      if (!found.length) {
+        found = [].slice.call(scope.querySelectorAll("div,span,p")).filter(function (el) {
+          var ws = window.getComputedStyle(el).whiteSpace;
+          return (ws === "pre-wrap" || ws === "pre-line" || ws === "break-spaces") && !el.closest("a,button");
+        });
+      }
+      found = found.filter(function (el) { return outside(el, without) && shown(el) && txt(el); });
+      return found.filter(function (el) {
+        return !found.some(function (other) { return other !== el && other.contains(el); });
+      });
+    }
+
+    // The quoted post, with whatever around it belongs to it alone — signed out, the
+    // link laid over it to its own page sits beside it rather than in it.
+    function quoteOf(post) {
+      var inner = innerQuote(post);
+      if (!inner) return null;
+      var own = textsOf(post, inner);
+      var whole = inner;
+      while (whole.parentElement && whole.parentElement !== post) {
+        var up = whole.parentElement;
+        if (own.some(function (t) { return up.contains(t); })) break;
+        if (txt(up) !== txt(whole)) break;
+        if (up.querySelectorAll("img,video").length !== whole.querySelectorAll("img,video").length) break;
+        whole = up;
+      }
+      return { post: inner, whole: whole };
+    }
+
+    // Who wrote it: the first link to a profile, and its first link with a name in it
+    // rather than the handle.
+    function authorOf(scope, without) {
+      var anchors = scope.querySelectorAll("a[href]");
+      var handle = "", name = "";
+      for (var i = 0; i < anchors.length; i++) {
+        var a = anchors[i];
+        if (!outside(a, without)) continue;
+        var m = pathOf(a).match(/^\/([A-Za-z0-9_]{1,15})\/?$/);
+        if (!m || X_RESERVED.test(m[1])) continue;
+        if (!handle) handle = m[1];
+        if (m[1].toLowerCase() !== handle.toLowerCase()) continue;
+        var said = txt(a);
+        if (said && said.charAt(0) !== "@") { name = said; break; }
+      }
+      return { handle: handle, name: name || handle };
+    }
+
+    function statusOf(scope, without, handle) {
+      var anchors = scope.querySelectorAll("a[href]");
+      for (var i = 0; i < anchors.length; i++) {
+        if (!outside(anchors[i], without)) continue;
+        var m = pathOf(anchors[i]).match(X_STATUS);
+        if (m && (!handle || m[1].toLowerCase() === handle.toLowerCase())) return m[2];
+      }
+      return "";
+    }
+
+    // The words as runs of text, each run knowing whether it is bold, italic or a
+    // link. The page draws a post's emphasis in its own type — Premium posts have it —
+    // so it is told by its weight and slant on the page rather than by a tag.
+    function runsOf(root) {
+      var runs = [];
+      var base = window.getComputedStyle(root);
+      var baseBold = parseInt(base.fontWeight, 10) >= 600;
+      var baseItalic = base.fontStyle === "italic";
+      function push(run) {
+        var last = runs[runs.length - 1];
+        if (last && !last.href && !run.href && last.bold === run.bold && last.italic === run.italic) {
+          last.text += run.text;
+        } else {
+          runs.push(run);
+        }
+      }
+      (function walk(node, bold, italic) {
+        for (var c = node.firstChild; c; c = c.nextSibling) {
+          if (c.nodeType === 3) {
+            push({ text: c.nodeValue.replace(/ /g, " "), bold: bold, italic: italic });
+            continue;
+          }
+          if (c.nodeType !== 1 || c.hasAttribute("hidden")) continue;
+          // Emoji are pictures, signed in, and say what they are in their alt.
+          if (c.tagName === "IMG") {
+            if (attr(c, "alt")) push({ text: attr(c, "alt"), bold: bold, italic: italic });
+            continue;
+          }
+          if (c.tagName === "BR") { push({ text: "\n", bold: bold, italic: italic }); continue; }
+          var cs = window.getComputedStyle(c);
+          if (cs.display === "none") continue;
+          if (c.tagName === "A") {
+            var label = (c.innerText || c.textContent || "").replace(/\s+/g, " ").trim();
+            if (!label || /^show more$/i.test(label)) continue;
+            // Signed out, a link says where it really goes in its title; its address
+            // is X's own redirect, which works but says nothing.
+            var title = attr(c, "title");
+            var href = /^https?:\/\//i.test(title) ? title : c.href;
+            runs.push({ text: label, href: href, bold: bold, italic: italic });
+            continue;
+          }
+          walk(c,
+               bold || (!baseBold && parseInt(cs.fontWeight, 10) >= 600),
+               italic || (!baseItalic && cs.fontStyle === "italic"));
+        }
+      })(root, false, false);
+      return runs;
+    }
+
+    // Lines, split at the post's own newlines.
+    function linesOf(runs) {
+      var lines = [[]];
+      runs.forEach(function (run) {
+        if (run.href) { lines[lines.length - 1].push(run); return; }
+        run.text.split("\n").forEach(function (piece, i) {
+          if (i) lines.push([]);
+          if (piece) lines[lines.length - 1].push({ text: piece, bold: run.bold, italic: run.italic });
+        });
+      });
+      return lines;
+    }
+
+    function plain(line) {
+      return line.map(function (run) { return run.text; }).join("");
+    }
+
+    function inline(line) {
+      return line.map(function (run) {
+        var h = esc(run.text);
+        if (run.href) h = "<a href=\"" + esc(run.href) + "\">" + h + "</a>";
+        if (run.italic) h = "<em>" + h + "</em>";
+        if (run.bold) h = "<strong>" + h + "</strong>";
+        return h;
+      }).join("");
+    }
+
+    // A post written with a list or a quotation in it, as plain text — "1." and "-" at
+    // the start of its lines, or ">" — is set as one.
+    var LINE_KINDS = [
+      { kind: "ol", marker: /^\s*(\d{1,3})[.)]\s+/ },
+      { kind: "ul", marker: /^\s*[-•‣◦▪*–]\s+/ },
+      { kind: "quote", marker: /^\s*>\s?/ }
+    ];
+
+    function kindOf(line) {
+      var said = plain(line);
+      for (var i = 0; i < LINE_KINDS.length; i++) {
+        var m = said.match(LINE_KINDS[i].marker);
+        if (m && said.length > m[0].length) return { kind: LINE_KINDS[i].kind, marker: m };
+      }
+      return { kind: "p", marker: null };
+    }
+
+    function withoutMarker(line, length) {
+      var out = [];
+      line.forEach(function (run) {
+        if (length > 0 && !run.href) {
+          var cut = Math.min(length, run.text.length);
+          length -= cut;
+          run = { text: run.text.slice(cut), bold: run.bold, italic: run.italic };
+          if (!run.text) return;
+        }
+        out.push(run);
+      });
+      return out;
+    }
+
+    // Blocks from lines: a blank line ends a paragraph, a single newline is a line break
+    // within one, and a run of list lines is a list — one list across the blank lines
+    // some people leave between its items.
+    function blocksOf(lines) {
+      var blocks = [];
+      var open = null;
+      lines.forEach(function (line) {
+        if (!plain(line).trim()) { if (open && open.kind !== "ol" && open.kind !== "ul") open = null; else if (open) open.gap = true; return; }
+        var k = kindOf(line);
+        if (!open || open.kind !== k.kind || (open.gap && k.kind !== "ol" && k.kind !== "ul")) {
+          open = { kind: k.kind, items: [], start: k.kind === "ol" ? parseInt(k.marker[1], 10) : 1 };
+          blocks.push(open);
+        }
+        open.gap = false;
+        open.items.push(k.marker ? withoutMarker(line, k.marker[0].length) : line);
+      });
+      return blocks.map(function (b) {
+        if (b.kind === "p") return "<p>" + b.items.map(inline).join("<br>") + "</p>";
+        if (b.kind === "quote") return "<blockquote><p>" + b.items.map(inline).join("<br>") + "</p></blockquote>";
+        var start = b.kind === "ol" && b.start !== 1 ? " start=\"" + b.start + "\"" : "";
+        return "<" + b.kind + start + ">" + b.items.map(function (item) {
+          return "<li>" + inline(item) + "</li>";
+        }).join("") + "</" + b.kind + ">";
+      }).join("");
+    }
+
+    // A video's still, rather than a photograph. The page puts a player in place of the
+    // still only after a while, and before that it is a bare picture like any other —
+    // except that a photograph, on either page, is a link to its own "/photo/1".
+    function isVideoStill(el, src) {
+      if (el.tagName === "VIDEO" || /video_thumb\//.test(src)) return true;
+      if (el.closest("[data-testid='videoPlayer'],[data-testid='videoComponent']")) return true;
+      return !el.closest("a[href*='/photo/']");
+    }
+
+    function mediaOf(scope, without, link) {
+      var html = "", seen = {};
+      var found = scope.querySelectorAll("img,video");
+      for (var i = 0; i < found.length; i++) {
+        var el = found[i];
+        if (!outside(el, without)) continue;
+        var src = el.tagName === "VIDEO" ? attr(el, "poster") : (el.currentSrc || el.src || "");
+        try { src = new URL(src, document.baseURI).href; } catch (e) { continue; }
+        if (!X_MEDIA.test(src)) continue;
+        var key = src.split("?")[0].replace(/:\w+$/, "");
+        if (seen[key]) continue;
+        seen[key] = true;
+        var video = isVideoStill(el, src);
+        if (!video && /\/media\//.test(src)) {
+          try {
+            var large = new URL(src);
+            if (large.searchParams.has("name")) { large.searchParams.set("name", "large"); src = large.href; }
+          } catch (e) {}
+        }
+        var alt = el.tagName === "IMG" ? attr(el, "alt") : "";
+        if (/^(image|embedded video)$/i.test(alt)) alt = "";
+        var img = "<img src=\"" + esc(src) + "\"" + (alt ? " alt=\"" + esc(alt) + "\"" : "") + ">";
+        // A video cannot be kept, but its still can, and a way back to it.
+        html += video
+          ? "<figure>" + img + "<figcaption><a href=\"" + esc(link) + "\">Video on X</a></figcaption></figure>"
+          : "<figure>" + img + "</figure>";
+      }
+      return html;
+    }
+
+    // A link X shows as a card, with its address taken out of the words.
+    function cardOf(scope, without, texts) {
+      var anchors = scope.querySelectorAll("[data-testid='card.wrapper'] a[href], a[href^='https://t.co/']");
+      for (var i = 0; i < anchors.length; i++) {
+        var a = anchors[i];
+        if (!outside(a, without) || texts.some(function (t) { return t.contains(a); })) continue;
+        var lines = (a.innerText || "").split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
+        var domain = "", words = [];
+        lines.forEach(function (l) {
+          var d = l.replace(/^from\s+/i, "");
+          if (!domain && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(d)) domain = d;
+          else words.push(l);
+        });
+        if (!words.length) continue;
+        return "<p><a href=\"" + esc(a.href) + "\">" + esc(words[0]) + "</a>" +
+          (domain ? " — " + esc(domain) : "") + "</p>";
+      }
+      return "";
+    }
+
+    function render(scope, without, link, headline) {
+      var texts = textsOf(scope, without);
+      var html = "";
+      texts.forEach(function (t, i) {
+        var lines = linesOf(runsOf(t));
+        if (i === 0 && headline) lines = lines.slice(headline);
+        html += blocksOf(lines);
+      });
+      return html + cardOf(scope, without, texts) + mediaOf(scope, without, link);
+    }
+
+    function quoteHTML(quote) {
+      var who = authorOf(quote.post, null);
+      var id = statusOf(quote.whole, null, who.handle);
+      var head = "<strong>" + esc(who.name) + "</strong>" +
+        (who.handle && who.handle !== who.name ? " @" + esc(who.handle) : "");
+      var link = id ? "https://x.com/" + who.handle + "/status/" + id : "";
+      if (link) head = "<a href=\"" + esc(link) + "\">" + head + "</a>";
+      return "<blockquote><p>" + head + "</p>" + render(quote.post, null, link || location.href, 0) + "</blockquote>";
+    }
+
+    // The post the address names, and the author's own posts on either side of it: the
+    // thread it belongs to, up to the first reply from anyone else. Until the named post
+    // is on the page, nothing else on it is any use — the next post down, read in its
+    // place, is a thread's second half under its own headline.
+    var focal = -1;
+    for (var f = 0; f < posts.length; f++) {
+      var fq = quoteOf(posts[f]);
+      if (statusOf(posts[f], fq && fq.whole, "") === here[2]) { focal = f; break; }
+    }
+    if (focal < 0) return answer({ reason: "x-not-ready" });
+    var focalQuote = quoteOf(posts[focal]);
+    var author = authorOf(posts[focal], focalQuote && focalQuote.whole);
+    var same = function (p) {
+      var q = quoteOf(p);
+      return authorOf(p, q && q.whole).handle.toLowerCase() === author.handle.toLowerCase();
+    };
+    var from = focal, to = focal;
+    while (from > 0 && same(posts[from - 1])) from--;
+    while (to < posts.length - 1 && same(posts[to + 1])) to++;
+    var thread = posts.slice(from, to + 1);
+
+    // A first line set apart, short, and not a sentence — no stop at its end — is the
+    // post's own headline, "File over app", and is its title rather than a line of it.
+    var firstQuote = quoteOf(thread[0]);
+    var firstTexts = textsOf(thread[0], firstQuote && firstQuote.whole);
+    var firstLines = firstTexts.length ? linesOf(runsOf(firstTexts[0])).map(plain) : [];
+    var headline = 0, title = "";
+    if (firstLines.length > 2 && firstLines[0].trim().length <= 90 && !firstLines[1].trim() &&
+        !/[.!?…:,;—–-]["'”’)]*$/.test(firstLines[0].trim()) &&
+        firstLines.slice(2).join("").trim()) {
+      title = firstLines[0].trim();
+      headline = 2;
+    }
+
+    var html = "";
+    thread.forEach(function (post, i) {
+      var quote = quoteOf(post);
+      var id = statusOf(post, quote && quote.whole, author.handle);
+      var link = id ? "https://x.com/" + author.handle + "/status/" + id : location.href;
+      html += render(post, quote && quote.whole, link, i === 0 ? headline : 0);
+      if (quote) html += quoteHTML(quote);
+    });
+
+    // Read back as text with a space at every block's end, so a list's items, and the
+    // paragraph before it, do not run together into one word for the excerpt and count.
+    var holder = document.createElement("div");
+    holder.innerHTML = html.replace(/(<br>|<\/(p|li|blockquote)>)/g, "$1 ");
+    [].slice.call(holder.querySelectorAll("figcaption")).forEach(function (c) { c.remove(); });
+    var said = txt(holder);
+    var picture = holder.querySelector("img");
+    if (!said && !picture) return answer({ reason: "x-not-ready" });
+
+    // Otherwise the opening sentence, which is what a post is known by — from its first
+    // line alone, so a list that follows cannot lend it its "1."
+    if (!title) {
+      var opening = (firstLines.filter(function (l) { return l.trim(); })[0] || "").replace(/\s+/g, " ").trim();
+      var sentence = opening.match(/^(.{20,}?[.!?…])(\s|$)/);
+      title = sentence ? sentence[1] : opening;
+      if (title.length > 100) title = title.slice(0, 100).replace(/\s+\S*$/, "") + "…";
+      if (!title) title = author.name + " on X";
+    }
+
+    var stamp = thread[0].querySelector("time[datetime]");
+    var published = (stamp && outside(stamp, firstQuote && firstQuote.whole) && attr(stamp, "datetime")) ||
+      meta(["article:published_time"]);
+
+    // For the Defuddle pass, which writes the Markdown note from this same reading
+    // rather than from its own.
+    window.__agPostOnX = html;
+
+    return answer({
+      ok: true,
+      title: title,
+      byline: author.name,
+      published: published,
+      excerpt: said.slice(0, 320),
+      leadImage: picture ? picture.getAttribute("src") : "",
+      wordCount: said ? said.split(/\s+/).length : 0,
+      length: said.length,
+      html: html
+    });
+  }
+
+  var onX = readPostOnX();
+  if (onX) return onX;
+
   /* ---------- 1. working copy ---------- */
 
   // The same screen-reader-only text, wherever a site did it without one of the usual

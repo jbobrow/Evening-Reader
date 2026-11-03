@@ -29,6 +29,23 @@
 
   if (typeof Defuddle !== "function") { return bail("defuddle-missing"); }
 
+  // A post on X, already read by the app's own pass, which reads its paragraphs, lists
+  // and thread where Defuddle's reading runs them together. Only the Markdown is wanted
+  // from here, and it is written from that same reading, so the note says what the page
+  // in the reader does.
+  if (typeof window.__agPostOnX === "string" && window.__agPostOnX) {
+    var post = {};
+    for (var p in EMPTY) { post[p] = EMPTY[p]; }
+    try {
+      post.markdown = Defuddle.createMarkdownContent(window.__agPostOnX, location.href).trim();
+    } catch (e) {
+      return bail("defuddle-threw");
+    }
+    post.ok = !!post.markdown;
+    post.html = window.__agPostOnX;
+    return JSON.stringify(post);
+  }
+
   // Screen-reader-only text — "(opens a new tab)" after a link — taken off the page
   // before it is read, the same as the app's own pass does. `data-ag-unseen` is that
   // pass's mark for text the page renders invisible without one of the usual class
