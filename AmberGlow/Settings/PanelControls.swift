@@ -12,6 +12,7 @@ struct PanelControls: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.duoPose) private var pose
 
     enum Tab: String, CaseIterable, Identifiable {
         case light, type
@@ -223,6 +224,21 @@ struct PanelControls: View {
                                            set: { settings.measure = $0 }),
                             leadingSymbol: "arrow.right.and.line.vertical.and.arrow.left",
                             trailingSymbol: "arrow.left.and.line.vertical.and.arrow.right")
+            }
+        }
+        // Only on glass that folds. Anywhere else there is no crease to set a gutter
+        // on, and a control for it would be a promise the device cannot keep.
+        if pose != .none {
+            group("Opened sideways") {
+                VStack(alignment: .leading, spacing: 8) {
+                    AmberToggle(isOn: Binding(get: { settings.bookView },
+                                              set: { settings.bookView = $0 }),
+                                title: "Two-page spread")
+                    Text("The crease is the gutter. Swipe, or tap near either edge, to turn the page.")
+                        .font(.system(size: 12.5))
+                        .lineSpacing(2)
+                        .foregroundStyle(amber.inkFaint)
+                }
             }
         }
     }

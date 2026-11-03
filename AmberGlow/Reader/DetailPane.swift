@@ -6,6 +6,8 @@ struct DetailPane: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.duoPose) private var pose
+    @Environment(\.controlsTrailing) private var controlsTrailing
 
     let article: SavedArticle?
     @Binding var showLibrary: Bool
@@ -23,6 +25,13 @@ struct DetailPane: View {
     @State private var selection: WebSelection?
     /// The glass above the safe area — the island's band — which the page runs under.
     @State private var safeTop: CGFloat = 0
+    /// The band below it, the home indicator's, which a spread keeps clear of.
+    @State private var safeBottom: CGFloat = 0
+    /// Wider than it is tall: on an iPhone Duo opened this way, the page can be a
+    /// two-page spread with the crease for its gutter.
+    @State private var isLandscape = false
+    /// Whether the page is a spread right now, as the document last reported.
+    @State private var pageSpread = false
     /// How tall the bar is, once it has been shown; near enough before then.
     @State private var barHeight: CGFloat = 52
     /// An end of the selection is being dragged — see `SelectionGrips`.
@@ -108,8 +117,14 @@ struct DetailPane: View {
         .background {
             GeometryReader { geo in
                 Color.clear
-                    .onAppear { safeTop = geo.safeAreaInsets.top }
+                    .onAppear {
+                        safeTop = geo.safeAreaInsets.top
+                        safeBottom = geo.safeAreaInsets.bottom
+                        isLandscape = geo.size.width > geo.size.height
+                    }
                     .onChange(of: geo.safeAreaInsets.top) { _, top in safeTop = top }
+                    .onChange(of: geo.safeAreaInsets.bottom) { _, bottom in safeBottom = bottom }
+                    .onChange(of: geo.size) { _, size in isLandscape = size.width > size.height }
             }
         }
         // An article opens to the page alone; a tap brings the bar.
@@ -245,6 +260,11 @@ struct DetailPane: View {
     }
 
     private var isCompact: Bool { sizeClass == .compact }
+
+    /// A two-page spread: the iPhone Duo opened sideways, with the setting on. Turned
+    /// upright, or folded shut, the same article goes back to being a column — and on
+    /// any other device it never was anything else.
+    private var paged: Bool { pose == .open && isLandscape && settings.bookView }
 
     private func searchURL(for text: String) -> URL {
         var components = URLComponents(string: "https://duckduckgo.com/")!
@@ -412,12 +432,19 @@ struct DetailPane: View {
     /// the drawer slides over the page, and the button says so.
     private var drawerSymbol: String { isCompact ? "chevron.left" : "sidebar.left" }
 
+    /// The button that brings the drawer. First on the bar, where the drawer comes from
+    /// — or last, with the rest, on glass held in one hand (`controlsTrailing`), where
+    /// it points at the drawer rather than back along the way to it.
+    private var drawerButton: some View {
+        AmberIconButton(symbol: controlsTrailing ? "sidebar.left" : drawerSymbol) {
+            withAnimation(.drawer) { showLibrary = true }
+        }
+    }
+
     private func chrome(for article: SavedArticle) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                AmberIconButton(symbol: drawerSymbol) {
-                    withAnimation(.drawer) { showLibrary = true }
-                }
+                if !controlsTrailing { drawerButton }
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(article.displayTitle)
@@ -429,7 +456,7 @@ struct DetailPane: View {
                         .tracking(0.5)
                         .foregroundStyle(amber.inkFaint)
                 }
-                .padding(.leading, 6)
+                .padding(.leading, controlsTrailing ? 4 : 6)
 
                 Spacer(minLength: 12)
 
@@ -452,6 +479,7 @@ struct DetailPane: View {
                     library.setArchived(article, !article.isArchived)
                     if !article.isArchived { onDismissArticle() }
                 }
+                if controlsTrailing { drawerButton }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -503,6 +531,7 @@ struct DetailPane: View {
                                       self.pageCount = total
                                       self.percent = percent
                                       self.documentLength = length
+                                      self.pageSpread = false
                                   },
                                   onTap: toggleChrome,
                                   onSelection: noteSelection,
@@ -656,14 +685,19 @@ struct DetailPane: View {
                 palette: settings.palette,
                 settings: settings,
                 topRoom: Double(safeTop + barHeight),
+                bottomRoom: Double(safeBottom),
+                topInset: Double(safeTop),
+                paged: paged,
                 onProgress: { p in noteProgress(p, in: article) },
                 onOpenLink: onOpenLink,
                 onTap: toggleChrome,
                 onSelection: noteSelection,
-                onPages: { page, total, percent in
-                    self.page = page
-                    self.pageCount = total
-                    self.percent = percent
+                onPages: { report in
+                    page = report.page
+                    pageCount = report.total
+                    percent = report.percent
+                    documentLength = report.length
+                    pageSpread = report.spread
                 },
                 onChapter: { anchor in noteChapter(anchor, in: article) },
                 highlights: highlights.list(for: article),
@@ -734,7 +768,11 @@ struct DetailPane: View {
                              percent: percent,
                              style: Binding(get: { settings.progressStyle },
                                             set: { settings.progressStyle = $0 }),
-                             available: pageHeight) { velocity in
+                             available: pageHeight,
+                             // A spread's length is its width, which a page count
+                             // taken in screen heights would understate.
+                             documentLength: pageSpread ? documentLength : 0,
+                             spread: pageSpread) { velocity in
                     bridge.runJavaScript("window.__agPager && window.__agPager.autoScroll(\(velocity));")
                 }
                 .padding(.trailing, 16)
@@ -775,10 +813,9 @@ struct DetailPane: View {
     private var splash: some View {
         VStack(spacing: 0) {
             HStack {
-                AmberIconButton(symbol: drawerSymbol) {
-                    withAnimation(.drawer) { showLibrary = true }
-                }
-                Spacer()
+                if controlsTrailing { Spacer() }
+                drawerButton
+                if !controlsTrailing { Spacer() }
             }
             .padding(12)
 

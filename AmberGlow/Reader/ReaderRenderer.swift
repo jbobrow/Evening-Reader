@@ -7,11 +7,17 @@ struct ReaderRenderer {
 
     /// `topRoom` is the glass the page runs under at its top — the island's band and
     /// the bar that comes down over it — which the column keeps clear of, so the title
-    /// is never under either at the top of the page.
+    /// is never under either at the top of the page. `bottomRoom` is the home
+    /// indicator's band, which a page set as a spread keeps its foot clear of.
     static func styleVariables(palette: AmberPalette, settings: DisplaySettings,
-                               topRoom: Double = 0) -> [String: String] {
+                               topRoom: Double = 0, bottomRoom: Double = 0,
+                               topInset: Double = 0) -> [String: String] {
         [
             "--top-room": String(format: "%.0fpx", topRoom),
+            "--top-inset": String(format: "%.0fpx", topInset),
+            "--bottom-room": String(format: "%.0fpx", bottomRoom),
+            // A spread's page margin, outer edge and gutter's half alike.
+            "--page-side": "36px",
             "--page": palette.pageHex,
             "--page-dim": palette.pageDimHex,
             "--page-raised": palette.pageRaisedHex,
@@ -31,16 +37,24 @@ struct ReaderRenderer {
         ]
     }
 
-    /// JS that pushes a new set of variables into an already-loaded document.
+    /// JS that pushes a new set of variables into an already-loaded document, and sets
+    /// it as a spread or as a column — see `setPaged` in the page's own script.
     static func applyStyleScript(palette: AmberPalette, settings: DisplaySettings,
-                                 topRoom: Double = 0) -> String {
-        let pairs = styleVariables(palette: palette, settings: settings, topRoom: topRoom)
+                                 topRoom: Double = 0, bottomRoom: Double = 0,
+                                 topInset: Double = 0, paged: Bool = false) -> String {
+        // In one order, whatever order the dictionary happens to hold them in: the
+        // script is compared with the last one run to tell a change from a redraw,
+        // and the same variables in a different order would run on every scroll.
+        let pairs = styleVariables(palette: palette, settings: settings,
+                                   topRoom: topRoom, bottomRoom: bottomRoom, topInset: topInset)
+            .sorted { $0.key < $1.key }
             .map { "\"\($0.key)\":\"\($0.value)\"" }
             .joined(separator: ",")
         return """
         window.__ag && window.__ag.apply({\(pairs)});
         window.__ag && window.__ag.nightMatrices("\(nightInkMatrix(palette))",
                                                  "\(nightPhotoMatrix(palette))");
+        window.__ag && window.__ag.setPaged(\(paged));
         """
     }
 
@@ -64,10 +78,14 @@ struct ReaderRenderer {
                       r, g, b)
     }
 
+    /// `paged` sets the document as a two-page spread from the start — the iPhone Duo
+    /// opened sideways, with the setting on — rather than as a column.
     static func document(article: SavedArticle, body: String,
                          palette: AmberPalette, settings: DisplaySettings,
-                         topRoom: Double = 0) -> String {
-        let vars = styleVariables(palette: palette, settings: settings, topRoom: topRoom)
+                         topRoom: Double = 0, bottomRoom: Double = 0,
+                         topInset: Double = 0, paged: Bool = false) -> String {
+        let vars = styleVariables(palette: palette, settings: settings,
+                                  topRoom: topRoom, bottomRoom: bottomRoom, topInset: topInset)
             .sorted { $0.key < $1.key }
             .map { "      \($0.key): \($0.value);" }
             .joined(separator: "\n")
@@ -96,7 +114,7 @@ struct ReaderRenderer {
 
         return """
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="en"\(paged ? " class=\"ag-paged\"" : "")>
         <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -295,6 +313,46 @@ struct ReaderRenderer {
           padding-top: 1em;
         }
         .ag-noteref { font-size: 0.7em; vertical-align: super; text-decoration: none; }
+
+        /* A spread: the iPhone Duo opened sideways, with the crease for a gutter.
+           The text is poured into columns half the glass wide and the glass tall, so
+           each column is a page and each screen a pair of them, and the document runs
+           sideways to be turned rather than down to be scrolled. The column pitch is
+           exactly half the glass: a page's outer margin and the gutter's half are the
+           same width, so the gap between the two columns is two margins and the pair
+           sits centred on the crease. The document's own width is set by script to a
+           whole number of screens — see fitPages() — so the last turn lands square.
+           The head margin is set from the glass alone, not from the bar as the
+           column's is: the bar's height is measured once it has been shown, and a
+           margin that moved with it would pour the pages again under the reader's
+           eye the first time they tapped for it. 68px is the island's band or the
+           bar, whichever is there, and a little air under it. */
+        html.ag-paged body {
+          height: 100vh;
+          box-sizing: border-box;
+          padding: calc(var(--top-inset, 0px) + 68px) var(--page-side)
+                   calc(var(--bottom-room, 0px) + 28px);
+          column-width: calc(50vw - 2 * var(--page-side));
+          column-gap: calc(2 * var(--page-side));
+          column-fill: auto;
+          orphans: 2;
+          widows: 2;
+        }
+        html.ag-paged .wrap { max-width: none; margin: 0; padding: 0; }
+        /* The title keeps the opening of the text with it rather than facing a page
+           of its own. Chapters open on a fresh page, as a book's do. */
+        html.ag-paged header.ag-head { break-after: avoid; }
+        html.ag-paged .ag-chapter:not(:first-of-type) {
+          break-before: column; margin-top: 0; padding-top: 0; border-top: none;
+        }
+        /* A picture taller than a page is cut off, not continued, so each is held to
+           the page's height and kept whole. */
+        html.ag-paged img {
+          max-height: calc(100vh - var(--top-inset, 0px) - var(--bottom-room, 0px) - 96px - 3.2em);
+          break-inside: avoid;
+        }
+        html.ag-paged figure, html.ag-paged blockquote { break-inside: avoid; }
+        html.ag-paged img.ag-cover { max-height: 40vh; }
         </style>
         </head>
         <body>
@@ -335,13 +393,25 @@ struct ReaderRenderer {
         </article>
         </div>
         <script>
+        // Where the reader is, as a fraction of the document, held for relaying out
+        // the page — turned, or set from a column to a spread — so it can be found again.
+        var anchored = 0, relaying = false;
         window.__ag = {
           apply: function (vars) {
             var root = document.documentElement;
             for (var key in vars) { root.style.setProperty(key, vars[key]); }
           },
+          // Set as a spread, the document runs sideways: every measure of where the
+          // reader is, and every move, is taken across rather than down.
+          paged: function () {
+            return document.documentElement.classList.contains("ag-paged");
+          },
           progress: function () {
             var h = document.documentElement;
+            if (window.__ag.paged()) {
+              var span = h.scrollWidth - window.innerWidth;
+              return span > 0 ? Math.min(1, Math.max(0, window.scrollX / span)) : 0;
+            }
             var max = h.scrollHeight - window.innerHeight;
             return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
           },
@@ -353,20 +423,112 @@ struct ReaderRenderer {
           },
           restore: function (fraction) {
             var h = document.documentElement;
+            anchored = fraction;
+            if (window.__ag.paged()) {
+              // Onto a page, never between two — and the earlier of the two when the
+              // fraction falls between, as it does coming from a column: the line at
+              // the top of the glass there is the first unread one, and it is better
+              // to open a page before it than a page after.
+              var w = window.innerWidth || 1;
+              var span = Math.max(0, h.scrollWidth - w);
+              window.scrollTo(Math.floor(span * fraction / w + 0.001) * w, 0);
+              return;
+            }
             var max = h.scrollHeight - window.innerHeight;
             if (max > 0 && fraction > 0.001) { window.scrollTo(0, max * fraction); }
+          },
+          // A column or a spread. Switched live — the glass turned, or the setting
+          // changed — the reader is put back where they were, near enough: the
+          // fraction read in one layout is the fraction sought in the other.
+          setPaged: function (on) {
+            var root = document.documentElement;
+            var was = window.__ag.paged();
+            if (was === on) { if (on) { window.__ag.fitPages(); } return; }
+            var keep = window.__ag.progress();
+            relaying = true;
+            root.classList.toggle("ag-paged", on);
+            if (on) { window.__ag.fitPages(); } else { root.style.width = ""; }
+            window.__ag.restore(keep);
+            requestAnimationFrame(function () { relaying = false; });
+          },
+          // Sizes the document to a whole number of screens, so the last turn lands
+          // on a page that starts at the glass's left edge rather than on whatever is
+          // left over. The text's extent is measured where the text ends, not where
+          // the document does: columns past the document's width still lay out, so
+          // the document is never narrowed to be measured — narrowed, the scroll view
+          // clamps the reader's place to the narrower document before it is widened
+          // again. Rounding can leave one column past the edge; measured again, the
+          // document takes it in.
+          fitPages: function () {
+            var root = document.documentElement, body = document.body;
+            if (!window.__ag.paged()) {
+              root.style.width = ""; body.style.width = "";
+              return 1;
+            }
+            var w = window.innerWidth || 1;
+            var x = window.scrollX;
+            var range = document.createRange();
+            range.selectNodeContents(document.querySelector(".wrap") || body);
+            var extent = range.getBoundingClientRect().right + x;
+            var screens = Math.max(1, Math.ceil((extent + 1) / w));
+            var fit = function () {
+              root.style.width = (screens * w) + "px";
+              body.style.width = (screens * w) + "px";
+            };
+            fit();
+            var again = range.getBoundingClientRect().right + window.scrollX;
+            if (again > screens * w + 1) { screens += 1; fit(); }
+            // Back on the page the reader was on, if the fitting moved it.
+            var span = Math.max(0, screens * w - w);
+            var page = Math.min(span, Math.round(x / w) * w);
+            if (Math.abs(window.scrollX - page) > 1) { window.scrollTo(page, 0); }
+            return screens;
+          },
+          // Onto the nearer page, after a scroll that stopped between two.
+          snap: function () {
+            if (!window.__ag.paged()) return;
+            var w = window.innerWidth || 1;
+            var span = Math.max(0, document.documentElement.scrollWidth - w);
+            var target = Math.min(span, Math.max(0, Math.round(window.scrollX / w) * w));
+            window.scrollTo({ left: target, top: 0, behavior: "smooth" });
+          },
+          // The next pair of pages, or the one before.
+          turn: function (direction) {
+            if (!window.__ag.paged()) return;
+            var w = window.innerWidth || 1;
+            var span = Math.max(0, document.documentElement.scrollWidth - w);
+            var here = Math.round(window.scrollX / w) * w;
+            var target = Math.min(span, Math.max(0, here + direction * w));
+            if (Math.abs(target - here) < 1 && Math.abs(window.scrollX - here) < 1) return;
+            window.scrollTo({ left: target, top: 0, behavior: "smooth" });
+          },
+          // Brings an element into view: down to it in a column; in a spread, to the
+          // page it starts on, since a page cannot be shown from the middle.
+          scrollToElement: function (el, block) {
+            if (!el) return;
+            if (!window.__ag.paged()) { el.scrollIntoView({ block: block || "start" }); return; }
+            var boxes = el.getClientRects();
+            var box = boxes.length ? boxes[0] : el.getBoundingClientRect();
+            var w = window.innerWidth || 1;
+            var span = Math.max(0, document.documentElement.scrollWidth - w);
+            var x = window.scrollX + box.left;
+            window.scrollTo(Math.min(span, Math.max(0, Math.floor(x / w) * w)), 0);
           },
           // A book's chapters, so the contents sheet can jump to one and a same-document
           // link (a footnote, a cross-reference) can be followed without leaving the page.
           goto: function (anchor) {
             var el = document.getElementById(anchor);
-            if (el) { el.scrollIntoView({ block: "start" }); }
+            if (el) { window.__ag.scrollToElement(el, "start"); }
           },
           chapter: function () {
             var sections = document.getElementsByClassName("ag-chapter");
             var current = sections.length ? sections[0].id : "";
+            var paged = window.__ag.paged();
             for (var i = 0; i < sections.length; i++) {
-              if (sections[i].getBoundingClientRect().top <= 1) { current = sections[i].id; }
+              var box = sections[i].getBoundingClientRect();
+              // Begun on this spread, or before it; begun at or above the top.
+              var begun = paged ? box.left < window.innerWidth - 1 : box.top <= 1;
+              if (begun) { current = sections[i].id; }
               else { break; }
             }
             return current;
@@ -382,11 +544,45 @@ struct ReaderRenderer {
           ticking = true;
           requestAnimationFrame(function () {
             ticking = false;
-            post("progress", window.__ag.progress());
-            var here = window.__ag.chapter();
-            if (here && here !== lastChapter) { lastChapter = here; post("chapter", here); }
+            var here = window.__ag.progress();
+            if (!relaying) { anchored = here; }
+            post("progress", here);
+            var chapter = window.__ag.chapter();
+            if (chapter && chapter !== lastChapter) { lastChapter = chapter; post("chapter", chapter); }
           });
         }, { passive: true });
+        // The glass turned, or the panel changed size: a spread is poured again into
+        // pages of the new size, and opened at the page the reader was on.
+        window.addEventListener("resize", function () {
+          if (!window.__ag.paged()) return;
+          relaying = true;
+          var keep = anchored;
+          requestAnimationFrame(function () {
+            window.__ag.fitPages();
+            window.__ag.restore(keep);
+            requestAnimationFrame(function () { relaying = false; });
+          });
+        }, { passive: true });
+        if (window.__ag.paged()) {
+          document.addEventListener("DOMContentLoaded", function () { window.__ag.fitPages(); });
+          window.addEventListener("load", function () { window.__ag.fitPages(); });
+        }
+        // A picture takes its size once it is decoded, which can be after the load
+        // event has fired — and a spread poured before then is a column short. Any
+        // picture changing size pours the pages again, at the page the reader is on.
+        if (window.ResizeObserver) {
+          var refit = null;
+          var pictures = new ResizeObserver(function () {
+            if (!window.__ag.paged() || refit) return;
+            refit = requestAnimationFrame(function () { refit = null; window.__ag.fitPages(); });
+          });
+          var watchPictures = function () {
+            var list = document.images;
+            for (var i = 0; i < list.length; i++) { pictures.observe(list[i]); }
+          };
+          watchPictures();
+          document.addEventListener("DOMContentLoaded", watchPictures);
+        }
         \(SelectionReporter.script(handler: "reader"))
         \(DocumentPager.script(handler: "reader"))
         \(HighlightMarker.script(handler: "reader"))
@@ -547,6 +743,13 @@ struct ReaderRenderer {
           if (Math.abs(e.clientX - tapX) > 8 || Math.abs(e.clientY - tapY) > 8) return;
           var sel = window.getSelection ? String(window.getSelection()) : "";
           if (sel.length) return;
+          // On a spread, the outer reaches of either page turn it — where the thumbs
+          // rest, holding the glass open like a book. The middle still brings the bar.
+          if (window.__ag.paged()) {
+            var w = window.innerWidth || 1, edge = w * 0.18;
+            if (e.clientX < edge) { window.__ag.turn(-1); return; }
+            if (e.clientX > w - edge) { window.__ag.turn(1); return; }
+          }
           post("tap", 1);
         }, { passive: true });
         </script>

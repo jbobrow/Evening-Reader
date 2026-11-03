@@ -88,6 +88,10 @@ final class DisplaySettings {
     var showBloom: Bool { didSet { write(showBloom, "showBloom") } }
     /// Percent read, or which screenful you are on.
     var progressStyle: ProgressStyle { didSet { write(progressStyle.rawValue, "progressStyle") } }
+    /// On an iPhone Duo opened sideways, the page is set as a two-page spread with the
+    /// crease for its gutter, and turns rather than scrolls. Off, it scrolls as a
+    /// column, as it does everywhere else. Nothing on any other device reads this.
+    var bookView: Bool { didSet { write(bookView, "bookView") } }
 
     /// Glows the user has kept, most recent first.
     var presets: [GlowPreset] { didSet { writePresets() } }
@@ -140,6 +144,7 @@ final class DisplaySettings {
         progressStyle = ProgressStyle(
             rawValue: defaults.string(forKey: Self.prefix + "progressStyle") ?? ""
         ) ?? .percent
+        bookView = defaults.object(forKey: Self.prefix + "bookView") as? Bool ?? true
         presets = defaults.data(forKey: Self.prefix + "presets").map(Self.decodePresets) ?? []
     }
 
@@ -191,6 +196,7 @@ final class DisplaySettings {
         showTexture = restored.showTexture
         showBloom = restored.showBloom
         progressStyle = restored.progressStyle
+        bookView = restored.bookView
 
         let lost = (old[Self.prefix + "presets"] as? Data).map(Self.decodePresets) ?? []
         let missing = lost.filter { preset in

@@ -46,6 +46,25 @@ final class ReaderBridge: WKWebViewLike {
     func runJavaScript(_ source: String) { web?.evaluateJavaScript(source) }
 }
 
+/// Where the reader is, as the document's pager reports it — see `DocumentPager`.
+struct PageReport {
+    var page = 1
+    var total = 1
+    var percent = 0.0
+    /// How long the document is, in points, along the way it travels.
+    var length: CGFloat = 0
+    /// Set as a two-page spread, `page` being the left-hand one of the pair.
+    var spread = false
+
+    init(_ dict: [String: Any]) {
+        page = dict["page"] as? Int ?? 1
+        total = dict["total"] as? Int ?? 1
+        percent = dict["percent"] as? Double ?? 0
+        length = CGFloat(dict["length"] as? Double ?? 0)
+        spread = dict["spread"] as? Bool ?? false
+    }
+}
+
 /// Hosts the rendered reader document. Style changes are pushed as CSS variables so the
 /// page never reloads and never loses the reader's place.
 struct ReaderWebView: UIViewRepresentable {
@@ -55,11 +74,19 @@ struct ReaderWebView: UIViewRepresentable {
     let settings: DisplaySettings
     /// Glass at the top the page runs under — see `ReaderRenderer.styleVariables`.
     var topRoom: Double = 0
+    /// The home indicator's band at the bottom, which a spread keeps its foot clear of.
+    var bottomRoom: Double = 0
+    /// The island's band alone, without the bar — what a spread's head margin is set
+    /// from, so it holds still whether or not the bar is down.
+    var topInset: Double = 0
+    /// Set as a two-page spread that turns, rather than a column that scrolls: the
+    /// iPhone Duo opened sideways, with `DisplaySettings.bookView` on.
+    var paged: Bool = false
     var onProgress: (Double) -> Void
     var onOpenLink: (URL) -> Void
     var onTap: () -> Void
     var onSelection: (WebSelection?) -> Void
-    var onPages: (Int, Int, Double) -> Void
+    var onPages: (PageReport) -> Void
     /// The id of the `.ag-chapter` section currently at the top of the screen, for a
     /// book. Ignored otherwise.
     var onChapter: (String) -> Void = { _ in }
@@ -101,6 +128,7 @@ struct ReaderWebView: UIViewRepresentable {
         web.scrollView.backgroundColor = .clear
         context.coordinator.web = web
         bridge.web = web
+        context.coordinator.applyPaging(self)
         context.coordinator.loadIfNeeded(self)
         return web
     }
@@ -108,6 +136,7 @@ struct ReaderWebView: UIViewRepresentable {
     func updateUIView(_ web: WKWebView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.loadIfNeeded(self)
+        context.coordinator.applyPaging(self)
         context.coordinator.applyStyle(self)
         context.coordinator.applyHighlights(self)
         context.coordinator.revealIfAsked(self)
@@ -151,18 +180,31 @@ struct ReaderWebView: UIViewRepresentable {
             lastMarks = nil
             let html = ReaderRenderer.document(article: parent.article, body: parent.body,
                                                palette: parent.palette, settings: parent.settings,
-                                               topRoom: parent.topRoom)
+                                               topRoom: parent.topRoom, bottomRoom: parent.bottomRoom,
+                                               topInset: parent.topInset, paged: parent.paged)
             lastStyle = ReaderRenderer.applyStyleScript(palette: parent.palette, settings: parent.settings,
-                                                        topRoom: parent.topRoom)
+                                                        topRoom: parent.topRoom, bottomRoom: parent.bottomRoom,
+                                                        topInset: parent.topInset, paged: parent.paged)
             web.loadHTMLString(html, baseURL: parent.article.url)
         }
 
         func applyStyle(_ parent: ReaderWebView) {
             let script = ReaderRenderer.applyStyleScript(palette: parent.palette, settings: parent.settings,
-                                                         topRoom: parent.topRoom)
+                                                         topRoom: parent.topRoom, bottomRoom: parent.bottomRoom,
+                                                         topInset: parent.topInset, paged: parent.paged)
             guard script != lastStyle, let web else { return }
             lastStyle = script
             web.evaluateJavaScript(script)
+        }
+
+        /// The scroll view's part of a spread: it travels sideways and comes to rest a
+        /// screen at a time, so a swipe is a page turned and never a page half shown.
+        /// The document's part is `setPaged`, run with the style.
+        func applyPaging(_ parent: ReaderWebView) {
+            guard let web, web.scrollView.isPagingEnabled != parent.paged else { return }
+            web.scrollView.isPagingEnabled = parent.paged
+            web.scrollView.isDirectionalLockEnabled = parent.paged
+            web.scrollView.showsHorizontalScrollIndicator = false
         }
 
         /// Draws the marks. The script is only run when the set has changed — or when the
@@ -267,9 +309,7 @@ struct ReaderWebView: UIViewRepresentable {
             case "settled":
                 settleScroll()
             case "pages":
-                parent.onPages(dict["page"] as? Int ?? 1,
-                               dict["total"] as? Int ?? 1,
-                               dict["percent"] as? Double ?? 0)
+                parent.onPages(PageReport(dict))
             case "chapter":
                 if let anchor = dict["value"] as? String { parent.onChapter(anchor) }
             case "tap":

@@ -15,6 +15,56 @@ struct Fold: Equatable {
     var isVertical: Bool { frame.height > frame.width }
 }
 
+/// How an iPhone Duo is being held, for the few views that lay themselves out
+/// differently on one. `.none` on anything that does not fold, which is every other
+/// device the app runs on — and those are left exactly as they were.
+enum DuoPose: Equatable {
+    /// A phone or a tablet that does not fold.
+    case none
+    /// Folded shut, on the outer screen: a phone held in one hand, the thumb along its
+    /// right-hand edge.
+    case closed
+    /// Open, on the inner screen — flat, held like a book, or stood up like a laptop.
+    case open
+}
+
+extension EnvironmentValues {
+    @Entry var duoPose: DuoPose = .none
+
+    /// Whether a bar's buttons all gather at its trailing edge. Folded shut, the Duo is
+    /// a wide phone held in one hand, and the thumb that holds it rests along the
+    /// right-hand edge: a button on the far left of the bar is a reach across the
+    /// glass, so every one of them moves over to where the thumb already is.
+    var controlsTrailing: Bool { duoPose == .closed }
+}
+
+extension View {
+    /// Keeps `pose` current with the hinge: shut, open, or not there at all.
+    func readsDuoPose(_ pose: Binding<DuoPose>) -> some View {
+        modifier(DuoPoseReader(pose: pose))
+    }
+}
+
+private struct DuoPoseReader: ViewModifier {
+    @Binding var pose: DuoPose
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if canImport(SwiftUI, _version: 8.0.85)
+        if #available(iOS 27.1, *) {
+            content.onHingeChange { _, context in
+                guard let hinge = context.hinge else { pose = .none; return }
+                pose = hinge.status == .closed ? .closed : .open
+            }
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 extension GeometryProxy {
     /// Where the fold crosses this view, while the glass is bent. Nil on anything that
     /// does not fold, opened flat — and in a build made with an SDK older than iOS 27.1,
@@ -25,6 +75,20 @@ extension GeometryProxy {
         if #available(iOS 27.1, *) {
             return reservedRegions(kind: .division)
                 .first(where: \.isActive)
+                .map { Fold(frame: $0.frame) }
+        }
+        #endif
+        return nil
+    }
+
+    /// Where the crease crosses this view, bent or flat. The glass opened flat still has
+    /// its crease, and a layout that can take it for a spine — the drawer as the
+    /// left-hand page — is better off doing so whether or not the glass is bent at it.
+    var crease: Fold? {
+        #if canImport(SwiftUI, _version: 8.0.85)
+        if #available(iOS 27.1, *) {
+            return reservedRegions(kind: .division, options: .includeInactive)
+                .first
                 .map { Fold(frame: $0.frame) }
         }
         #endif

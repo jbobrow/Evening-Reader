@@ -5,6 +5,7 @@ struct LibraryPane: View {
     @Environment(Library.self) private var library
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
+    @Environment(\.controlsTrailing) private var controlsTrailing
 
     @Binding var scope: Library.Scope
     @Binding var search: String
@@ -44,7 +45,9 @@ struct LibraryPane: View {
 
     private var header: some View {
         HStack(spacing: 2) {
-            AmberIconButton(symbol: "chevron.left", action: onBack)
+            // Back is first, where the front page is — or last, beside the other
+            // button, on glass held in one hand (`controlsTrailing`).
+            if !controlsTrailing { AmberIconButton(symbol: "chevron.left", action: onBack) }
             VStack(alignment: .leading, spacing: 1) {
                 Text("Library")
                     .font(.system(size: 22, weight: .semibold, design: .serif))
@@ -54,9 +57,10 @@ struct LibraryPane: View {
                     .tracking(0.6)
                     .foregroundStyle(amber.inkFaint)
             }
-            .padding(.leading, 4)
+            .padding(.leading, controlsTrailing ? 10 : 4)
             Spacer()
             AmberIconButton(symbol: "plus", action: onAdd)
+            if controlsTrailing { AmberIconButton(symbol: "chevron.left", action: onBack) }
         }
         .padding(.leading, 6)
         .padding(.trailing, 8)

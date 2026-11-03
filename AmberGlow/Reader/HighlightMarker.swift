@@ -240,7 +240,14 @@ enum HighlightMarker {
             /// Bring one into view — the jump from the highlights list.
             reveal: function (id) {
               var mark = root().querySelector('mark.ag-hl[data-hl="' + id + '"]');
-              if (mark) { mark.scrollIntoView({ block: "center" }); }
+              if (!mark) return;
+              // Through the page's own travel where it has one, so a spread turns to
+              // the page the mark is on rather than scrolling to some point inside it.
+              if (window.__ag && window.__ag.scrollToElement) {
+                window.__ag.scrollToElement(mark, "center");
+              } else {
+                mark.scrollIntoView({ block: "center" });
+              }
             }
           };
         })();

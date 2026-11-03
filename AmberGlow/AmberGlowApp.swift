@@ -92,6 +92,11 @@ struct RootView: View {
     /// The opening. `launching` is the black itself; `launchName` is the name on it.
     @State private var launching = true
     @State private var launchName = false
+    /// How an iPhone Duo is being held, as its hinge reports — `.none` on anything else.
+    @State private var hingePose: DuoPose = .none
+    /// The pose the glass is in, for the views outside the window's own tree — the
+    /// browser's cover — which inherit nothing from it.
+    @State private var pose: DuoPose = .none
 
     enum PanelAnchor { case library, reader }
 
@@ -123,8 +128,14 @@ struct RootView: View {
             // and the reader behind it is a different article from the one you are
             // choosing. Full width makes it a push instead of a peek.
             let fold = geo.fold
+            // The drawer takes the crease for its edge bent or flat — see `spineWidth`.
+            let crease = geo.crease
+            // The hinge is asked first. A crease with no word from the hinge still
+            // means glass that folds, and that it is open: shut, the crease is not
+            // on the screen that is lit.
+            let glassPose = hingePose == .none && crease != nil ? DuoPose.open : hingePose
             let drawerWidth = isCompact ? geo.size.width
-                : spineWidth(fold, in: geo.size) ?? min(380, geo.size.width * 0.86)
+                : spineWidth(crease, in: geo.size) ?? min(380, geo.size.width * 0.86)
             // How far the drawer goes to be out of sight. A full-width drawer's paper runs
             // on into the band past the safe area on its right — where the iPhone Duo's
             // outer camera sits, closed, or a landscape iPhone's Dynamic Island — so it
@@ -205,7 +216,10 @@ struct RootView: View {
                         .zIndex(5)
                 }
             }
+            .environment(\.duoPose, glassPose)
+            .onChange(of: glassPose, initial: true) { _, now in pose = now }
         }
+        .readsDuoPose($hingePose)
         .statusBarHidden(true)
         .modifier(AddLinkPresentation(isCompact: isCompact, isPresented: $showAdd) {
             AddLinkSheet { url in
@@ -258,6 +272,7 @@ struct RootView: View {
             .environment(library)
             .environment(settings)
             .environment(sites)
+            .environment(\.duoPose, pose)
             // What the cover's own container shows where the browser does not reach —
             // the corners swept as the glass turns — is black rather than the system's
             // white.
@@ -383,14 +398,16 @@ struct RootView: View {
 
     // MARK: - Drawer
 
-    /// The drawer's width on an iPhone Duo held open like a book: the left-hand page,
-    /// ending at the spine, with the article on the right-hand one. At its usual 380 the
+    /// The drawer's width on an iPhone Duo opened sideways: the left-hand page, ending
+    /// at the crease, with the article on the right-hand one. At its usual 380 the
     /// drawer's edge would stand a hand's width off the crease, and the page beside it
-    /// would be bent across it. Nil in any other pose, and for a spine too far off centre
-    /// to leave either page a useful width.
-    private func spineWidth(_ fold: Fold?, in size: CGSize) -> CGFloat? {
-        guard let fold, fold.isVertical else { return nil }
-        let spine = fold.frame.midX
+    /// would run across it. Bent like a book or opened flat alike — the crease is the
+    /// spine either way, and with the article set as a spread its right-hand page is
+    /// left whole beside the drawer. Nil in any other pose, and for a spine too far off
+    /// centre to leave either page a useful width.
+    private func spineWidth(_ crease: Fold?, in size: CGSize) -> CGFloat? {
+        guard let crease, crease.isVertical else { return nil }
+        let spine = crease.frame.midX
         guard spine >= 320, size.width - spine >= 320 else { return nil }
         return spine
     }

@@ -9,6 +9,7 @@ struct BrowseScreen: View {
     @Environment(\.amber) private var amber
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.controlsTrailing) private var controlsTrailing
 
     let initialURL: URL?
     /// Leaving for the drawer: the browser goes, and the front page is what is left.
@@ -346,19 +347,28 @@ struct BrowseScreen: View {
         if showsAppBar {
             appBar
         } else if isCompact {
+            // Held in one hand (`controlsTrailing`), every button keeps to the
+            // right-hand end of its row, under the thumb; the address takes the rest.
             VStack(spacing: 8) {
                 HStack(spacing: 4) {
-                    closeButton
+                    if !controlsTrailing { closeButton }
                     addressField
                     glowButton
+                    if controlsTrailing { closeButton }
                 }
                 HStack(spacing: 8) {
-                    travelChip(symbol: "chevron.left", enabled: model.canGoBack) { model.web.goBack() }
-                    travelChip(symbol: "chevron.right", enabled: model.canGoForward) { model.web.goForward() }
+                    if !controlsTrailing {
+                        travelChip(symbol: "chevron.left", enabled: model.canGoBack) { model.web.goBack() }
+                        travelChip(symbol: "chevron.right", enabled: model.canGoForward) { model.web.goForward() }
+                    }
                     Spacer(minLength: 12)
                     if model.isSaveable {
                         saveButton
                         readButton
+                    }
+                    if controlsTrailing {
+                        travelChip(symbol: "chevron.left", enabled: model.canGoBack) { model.web.goBack() }
+                        travelChip(symbol: "chevron.right", enabled: model.canGoForward) { model.web.goForward() }
                     }
                 }
             }
@@ -399,14 +409,11 @@ struct BrowseScreen: View {
     /// not a page you are done with.
     private var appBar: some View {
         HStack(spacing: 4) {
-            AmberIconButton(symbol: "sidebar.left") {
-                addressFocused = false
-                AmberKeyboardInstaller.putAway()
-                onShowDrawer()
-                dismiss()
+            if !controlsTrailing {
+                drawerButton
+                backButton
+                forwardButton
             }
-            backButton
-            forwardButton
             Button {
                 address = model.currentURL?.absoluteString ?? address
                 editingAddress = true
@@ -434,10 +441,25 @@ struct BrowseScreen: View {
                     .padding(.trailing, 2)
             }
             glowButton
+            if controlsTrailing {
+                backButton
+                forwardButton
+                drawerButton
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .animation(.easeOut(duration: 0.22), value: model.isSaveable)
+    }
+
+    /// Out to the front page, the browser going with it.
+    private var drawerButton: some View {
+        AmberIconButton(symbol: "sidebar.left") {
+            addressFocused = false
+            AmberKeyboardInstaller.putAway()
+            onShowDrawer()
+            dismiss()
+        }
     }
 
     /// What the app is called: its tile's name, or what the page calls itself if the

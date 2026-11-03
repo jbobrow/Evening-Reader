@@ -13,21 +13,38 @@ enum DocumentPager {
             payload.name = "pages";
             try { window.webkit.messageHandlers.\(handler).postMessage(payload); } catch (e) {}
           };
+          // Set as a spread (see `ReaderRenderer`), the document runs sideways: a page
+          // is a screen's width rather than its height, and two of them show at once.
+          var paged = function () {
+            return document.documentElement.classList.contains("ag-paged");
+          };
           var pager = {
             velocity: 0, raf: null, lastFrame: 0,
             report: function () {
+              if (paged()) {
+                var w = window.innerWidth || 1;
+                var width = document.documentElement.scrollWidth;
+                var spreads = Math.max(1, Math.round(width / w));
+                var at = Math.min(spreads - 1, Math.max(0, Math.round(window.scrollX / w)));
+                post({ page: 2 * at + 1, total: 2 * spreads,
+                       percent: spreads > 1 ? at / (spreads - 1) : 0,
+                       spread: true, length: width });
+                return;
+              }
               var h = window.innerHeight || 1;
               var doc = document.documentElement.scrollHeight;
               var total = Math.max(1, Math.ceil(doc / h));
               var page = Math.min(total, Math.floor(window.scrollY / h) + 1);
               var max = doc - h;
               var pct = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
-              post({ page: page, total: total, percent: pct });
+              post({ page: page, total: total, percent: pct, spread: false, length: doc });
             },
             autoScroll: function (v) {
               pager.velocity = v;
               if (v === 0) {
                 if (pager.raf) { cancelAnimationFrame(pager.raf); pager.raf = null; }
+                // Let go between pages, the spread settles onto the nearer one.
+                if (paged() && window.__ag && window.__ag.snap) { window.__ag.snap(); }
                 return;
               }
               if (pager.raf) return;
@@ -35,7 +52,8 @@ enum DocumentPager {
               var step = function (t) {
                 var dt = Math.min(0.05, (t - pager.lastFrame) / 1000);
                 pager.lastFrame = t;
-                window.scrollBy(0, pager.velocity * dt);
+                if (paged()) { window.scrollBy(pager.velocity * dt, 0); }
+                else { window.scrollBy(0, pager.velocity * dt); }
                 pager.raf = requestAnimationFrame(step);
               };
               pager.raf = requestAnimationFrame(step);
@@ -91,6 +109,9 @@ struct PageScrubber: View {
     /// screenful. It is not right for a PDF, whose pages are its own and, set to the
     /// width of a phone, are a good deal shorter than the glass.
     var documentLength: CGFloat = 0
+    /// The page is a two-page spread — see `DisplaySettings.bookView` — so `page` is
+    /// the left-hand one of the pair on the glass, and the readout names both.
+    var spread = false
     /// Points per second, signed. Zero stops.
     var scroll: (Double) -> Void
 
@@ -252,7 +273,12 @@ struct PageScrubber: View {
     // MARK: - Readout
 
     private var shortLabel: String {
-        style == .percent ? "\(Int((percent * 100).rounded()))%" : "\(page) of \(total)"
+        style == .percent ? "\(Int((percent * 100).rounded()))%" : "\(pageLabel) of \(total)"
+    }
+
+    /// "12", or "12–13" for the pair of pages a spread shows.
+    private var pageLabel: String {
+        spread && page < total ? "\(page)–\(page + 1)" : "\(page)"
     }
 
     private var pill: some View {
@@ -314,8 +340,8 @@ struct PageScrubber: View {
                     .monospacedDigit()
                     .foregroundStyle(amber.inkStrong)
             } else {
-                Text("\(page)")
-                    .font(.system(size: 30, weight: .semibold, design: .serif))
+                Text(pageLabel)
+                    .font(.system(size: spread ? 24 : 30, weight: .semibold, design: .serif))
                     .monospacedDigit()
                     .foregroundStyle(amber.inkStrong)
                 Text("of \(total)")
