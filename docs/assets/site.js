@@ -1,9 +1,11 @@
 /* Evening Reader — the lights, the glow, and what the screens show.
  *
- * Three settings, each kept between visits:
+ * Three settings:
  *   the lights   the page itself, paper or ink (the button in the header). Until the
  *                reader chooses, it follows the system's light or dark appearance.
- *   the warmth   the glow on every screen, from paper white to orange amber.
+ *   the warmth   the glow on every screen, from paper white to orange amber. Every
+ *                visit starts at Amber: the screens come on from paper white and
+ *                warm to it. This one is not kept.
  *   the screens  Paper or Night: what the devices show, whatever the lights.
  *
  * Runs in the <head>, so a remembered setting is there on the first frame rather
@@ -12,7 +14,8 @@
     "use strict";
 
     var root = document.documentElement;
-    var KEY = { theme: "evening-reader.theme", warmth: "evening-reader.warmth", screens: "evening-reader.screens" };
+    var KEY = { theme: "evening-reader.theme", screens: "evening-reader.screens" };
+    var AMBER = 0.87;
 
     function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
     function keep(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
@@ -54,8 +57,7 @@
     applyTheme(theme);
 
     // ── The warmth ──
-    var saved = parseFloat(load(KEY.warmth));
-    var warmth = isNaN(saved) ? 0.87 : clamp(saved);
+    var warmth = AMBER;
 
     // The front page comes on: its screens start at paper white and warm to the
     // reader's glow over a couple of seconds, unless they asked for less motion. The
@@ -114,11 +116,11 @@
         var animating = false;
         if (slider) {
             slider.value = Math.round((opening ? 0 : warmth) * 100);
+            applyWarmth(opening ? 0 : warmth);   // the label too, now it is on the page
             slider.addEventListener("input", function () {
                 animating = false;
                 warmth = clamp(slider.value / 100);
                 applyWarmth(warmth);
-                keep(KEY.warmth, String(warmth));
             });
         }
 
