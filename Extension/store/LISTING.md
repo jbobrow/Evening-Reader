@@ -77,10 +77,6 @@ The extension does nothing without the Mac helper, and the store can't install t
 
 > This extension saves pages into the Evening Reader iOS app's iCloud library. It needs a Mac and a native messaging helper (com.jonbobrow.eveningreader). Without the helper, saving shows a card saying "Evening Reader's helper isn't installed on this Mac". Every other part of the extension is still visible: the toolbar button, the right-click items, and the card it draws on the page.
 
-## After the first upload
+## The store's ID
 
-The store gives the item its own ID, which won't be `jchcaaglfjbkhenophbgnkopmdlibacd`, the ID the unpacked copy uses. The helper only answers the IDs listed in its `allowed_origins`. So:
-
-1. In the dashboard, open the item's **Package** tab, choose **View public key**, and copy the key that appears.
-2. Put that key in `Extension/web/manifest.json` as `"key"`, in place of the current one. The unpacked copy then has the store's ID too. The packaging script takes the key out of the zip again.
-3. Set `extension_id` in `Extension/native/install-chrome-host.sh` to the store's ID, and run the script again.
+The store gave the extension the ID `dmlokfbnjmfbnabmieklfickbjihkcag`. The unpacked copy in `Extension/web` keeps its own ID, `jchcaaglfjbkhenophbgnkopmdlibacd`, fixed by the manifest's `key`. The helper answers both: they are listed in `extension_ids` in `Extension/native/install-chrome-host.sh`, and that script writes them into the helper's `allowed_origins`.

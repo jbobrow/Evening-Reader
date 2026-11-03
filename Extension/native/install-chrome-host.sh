@@ -11,9 +11,13 @@ set -euo pipefail
 here=${0:A:h}
 repo=${here:h:h}
 name=com.jonbobrow.eveningreader
-# Fixed by the "key" in Extension/web/manifest.json, so it is the same wherever the
-# unpacked extension is loaded from.
-extension_id=jchcaaglfjbkhenophbgnkopmdlibacd
+# The extensions the helper answers: the one from the Chrome Web Store, and the unpacked
+# copy in Extension/web, whose ID the "key" in its manifest fixes wherever it is loaded
+# from.
+extension_ids=(
+    dmlokfbnjmfbnabmieklfickbjihkcag  # Chrome Web Store
+    jchcaaglfjbkhenophbgnkopmdlibacd  # unpacked
+)
 
 # The extension reads a page with the scripts the app reads one with. Copied rather than
 # linked: Chrome won't load an extension file that resolves outside the extension's
@@ -32,13 +36,16 @@ swiftc -O -o "$binary" \
     "$here/LibraryDrop.swift" \
     "$here/chrome-host/main.swift"
 
+origins=()
+for id in $extension_ids; do origins+=("\"chrome-extension://$id/\""); done
+origins=${(j:, :)origins}
 manifest=$(cat <<EOF
 {
   "name": "$name",
   "description": "Saves pages to the Evening Reader library in iCloud",
   "path": "$binary",
   "type": "stdio",
-  "allowed_origins": ["chrome-extension://$extension_id/"]
+  "allowed_origins": [$origins]
 }
 EOF
 )

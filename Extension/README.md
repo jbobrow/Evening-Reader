@@ -23,7 +23,7 @@ A browser extension can't write files outside its own sandbox, so each browser h
 1. `Extension/native/install-chrome-host.sh`: copies the app's extraction scripts into `Extension/web`, builds the helper into `~/Library/Application Support/Evening Reader/`, and registers it with every Chromium browser it finds. Run it again after the app's extraction scripts, `Shared/` or `Extension/native` change, then reload the extension.
 2. `chrome://extensions` → Developer mode → **Load unpacked** → choose `Extension/web`.
 
-The manifest's `key` fixes the extension ID at `jchcaaglfjbkhenophbgnkopmdlibacd`, so it matches the host's `allowed_origins` wherever the folder is loaded from.
+The manifest's `key` fixes the unpacked extension's ID at `jchcaaglfjbkhenophbgnkopmdlibacd` wherever the folder is loaded from. The copy from the Chrome Web Store has the ID `dmlokfbnjmfbnabmieklfickbjihkcag`. The helper's `allowed_origins` lists both, so either copy can save.
 
 ## Safari
 
