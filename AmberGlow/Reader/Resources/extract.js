@@ -139,7 +139,9 @@
     // are its paragraphs.
     function textsOf(scope, without) {
       var found = [].slice.call(scope.querySelectorAll("[data-testid='tweetText']"));
-      if (!found.length) {
+      // Signed in, a post with no words has none: every scrap of type on that page keeps
+      // its line breaks, down to the dot between a name and a date.
+      if (!found.length && !document.querySelector("[data-testid='tweet']")) {
         found = [].slice.call(scope.querySelectorAll("div,span,p")).filter(function (el) {
           var ws = window.getComputedStyle(el).whiteSpace;
           return (ws === "pre-wrap" || ws === "pre-line" || ws === "break-spaces") && !el.closest("a,button");
@@ -183,6 +185,21 @@
         var said = txt(a);
         if (said && said.charAt(0) !== "@") { name = said; break; }
       }
+      // Signed in, a quoted post is one link as a whole, with none inside it: the handle
+      // is in its avatar's test id, and the name is the first thing under User-Name.
+      if (!handle) {
+        var avatar = scope.querySelector("[data-testid^='UserAvatar-Container-']");
+        if (avatar && outside(avatar, without)) {
+          handle = attr(avatar, "data-testid").replace("UserAvatar-Container-", "");
+        }
+      }
+      if (!name) {
+        var names = scope.querySelector("[data-testid='User-Name']");
+        if (names && outside(names, without)) {
+          name = ((names.innerText || "").split("\n").map(function (l) { return l.trim(); })
+            .filter(function (l) { return l && l.charAt(0) !== "@" && l !== "\u00b7"; })[0]) || "";
+        }
+      }
       return { handle: handle, name: name || handle };
     }
 
@@ -194,6 +211,29 @@
         if (m && (!handle || m[1].toLowerCase() === handle.toLowerCase())) return m[2];
       }
       return "";
+    }
+
+    // A link's words as the page shows them. Signed in, the rest of its address is in
+    // the link too, set too small to see: "https://", and what comes after the "…".
+    function shownText(a) {
+      var out = "";
+      var walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT, null);
+      while (walker.nextNode()) {
+        var holder = walker.currentNode.parentElement;
+        if (parseFloat(window.getComputedStyle(holder).fontSize) >= 1) out += walker.currentNode.nodeValue;
+      }
+      return out;
+    }
+
+    // Where a link really goes, as against X's own redirect, which works but says
+    // nothing. Signed out, the address is the link's title. Signed in, it is the link's
+    // whole text, seen and unseen.
+    function destination(a) {
+      var title = attr(a, "title");
+      if (/^https?:\/\//i.test(title)) return title;
+      var whole = (a.textContent || "").trim().replace(/\u2026$/, "");
+      if (/^https?:\/\/\S+$/i.test(whole)) return whole;
+      return a.href;
     }
 
     // The words as runs of text, each run knowing whether it is bold, italic or a
@@ -228,13 +268,9 @@
           var cs = window.getComputedStyle(c);
           if (cs.display === "none") continue;
           if (c.tagName === "A") {
-            var label = (c.innerText || c.textContent || "").replace(/\s+/g, " ").trim();
+            var label = shownText(c).replace(/\s+/g, " ").trim();
             if (!label || /^show more$/i.test(label)) continue;
-            // Signed out, a link says where it really goes in its title; its address
-            // is X's own redirect, which works but says nothing.
-            var title = attr(c, "title");
-            var href = /^https?:\/\//i.test(title) ? title : c.href;
-            runs.push({ text: label, href: href, bold: bold, italic: italic });
+            runs.push({ text: label, href: destination(c), bold: bold, italic: italic });
             continue;
           }
           walk(c,
@@ -382,6 +418,11 @@
           else words.push(l);
         });
         if (!words.length) continue;
+        // A large card sets only its title over its picture, and names the site in its label.
+        if (!domain) {
+          var named = attr(a, "aria-label").match(/^([a-z0-9-]+(?:\.[a-z0-9-]+)+)\s/i);
+          if (named) domain = named[1];
+        }
         return "<p><a href=\"" + esc(a.href) + "\">" + esc(words[0]) + "</a>" +
           (domain ? " — " + esc(domain) : "") + "</p>";
       }
@@ -402,11 +443,11 @@
     function quoteHTML(quote) {
       var who = authorOf(quote.post, null);
       var id = statusOf(quote.whole, null, who.handle);
-      var head = "<strong>" + esc(who.name) + "</strong>" +
-        (who.handle && who.handle !== who.name ? " @" + esc(who.handle) : "");
-      var link = id ? "https://x.com/" + who.handle + "/status/" + id : "";
+      var head = who.name ? "<strong>" + esc(who.name) + "</strong>" +
+        (who.handle && who.handle !== who.name ? " @" + esc(who.handle) : "") : "";
+      var link = id && who.handle ? "https://x.com/" + who.handle + "/status/" + id : "";
       if (link) head = "<a href=\"" + esc(link) + "\">" + head + "</a>";
-      return "<blockquote><p>" + head + "</p>" + render(quote.post, null, link || location.href, 0) + "</blockquote>";
+      return "<blockquote>" + (head ? "<p>" + head + "</p>" : "") + render(quote.post, null, link || location.href, 0) + "</blockquote>";
     }
 
     // The post the address names, and the author's own posts on either side of it: the
@@ -471,9 +512,11 @@
       if (!title) title = author.name + " on X";
     }
 
-    var stamp = thread[0].querySelector("time[datetime]");
-    var published = (stamp && outside(stamp, firstQuote && firstQuote.whole) && attr(stamp, "datetime")) ||
-      meta(["article:published_time"]);
+    // The post's own date. Signed in, its quoted post's comes first on the page.
+    var stamps = [].slice.call(thread[0].querySelectorAll("time[datetime]")).filter(function (t) {
+      return outside(t, firstQuote && firstQuote.whole);
+    });
+    var published = (stamps[0] && attr(stamps[0], "datetime")) || meta(["article:published_time"]);
 
     // For the Defuddle pass, which writes the Markdown note from this same reading
     // rather than from its own.
