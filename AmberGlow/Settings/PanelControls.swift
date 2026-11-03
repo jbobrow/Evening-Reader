@@ -6,7 +6,8 @@ import SwiftUI
 /// half fits the glass. The light leads with the one choice that changes everything —
 /// paper or night — then the three that set the light itself, warmth, brightness and
 /// contrast, and the glows kept from them; the panel's texture is folded away under
-/// Advanced. The type leads with a sample of the page, so every change below it is seen.
+/// Advanced. The type leads with the face, then a sample of the page the sliders below
+/// it are read against.
 struct PanelControls: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
@@ -195,6 +196,11 @@ struct PanelControls: View {
 
     @ViewBuilder
     private var type: some View {
+        group("Typeface") {
+            HStack(spacing: 8) {
+                ForEach(DisplaySettings.Typeface.allCases) { faceTile($0) }
+            }
+        }
         specimen
         labelled("Size", value: String(format: "%.0f pt", settings.bodyPointSize)) {
             AmberSlider(value: Binding(get: { settings.textScale },
@@ -217,11 +223,6 @@ struct PanelControls: View {
                                            set: { settings.measure = $0 }),
                             leadingSymbol: "arrow.right.and.line.vertical.and.arrow.left",
                             trailingSymbol: "arrow.left.and.line.vertical.and.arrow.right")
-            }
-        }
-        group("Typeface") {
-            HStack(spacing: 8) {
-                ForEach(DisplaySettings.Typeface.allCases) { faceTile($0) }
             }
         }
     }
