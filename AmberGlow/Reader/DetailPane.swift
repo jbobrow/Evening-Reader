@@ -462,6 +462,7 @@ struct DetailPane: View {
                     Text(article.sourceLabel)
                         .font(.system(size: 10, weight: .medium))
                         .tracking(0.5)
+                        .lineLimit(1)
                         .foregroundStyle(amber.inkFaint)
                 }
                 .padding(.leading, controlsTrailing || controlsRailed ? 4 : 6)

@@ -355,8 +355,16 @@ struct AmberButtonStyle: ButtonStyle {
 }
 
 /// Icon-only control for the reader chrome.
+extension EnvironmentValues {
+    /// How big an icon button is, glyph and target. A bar's buttons sit in a row of
+    /// others and share its height; the camera band's rail stands them alone down the
+    /// edge of the glass, under a thumb, and gives each a finger's worth of room.
+    @Entry var amberIconButtonFrame = CGSize(width: 38, height: 34)
+}
+
 struct AmberIconButton: View {
     @Environment(\.amber) private var amber
+    @Environment(\.amberIconButtonFrame) private var frame
     let symbol: String
     var isActive: Bool = false
     var size: Double = 17
@@ -365,11 +373,11 @@ struct AmberIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: size, weight: .medium))
-                .frame(width: 38, height: 34)
+                .font(.system(size: size * max(1, frame.height / 34 * 0.86), weight: .medium))
+                .frame(width: frame.width, height: frame.height)
                 .foregroundStyle(isActive ? amber.color(0.93) : amber.ink)
                 .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    RoundedRectangle(cornerRadius: frame.height > 34 ? 14 : 9, style: .continuous)
                         .fill(isActive ? amber.color(0.16) : .clear)
                 )
                 .contentShape(Rectangle())

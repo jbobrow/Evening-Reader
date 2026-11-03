@@ -23,6 +23,11 @@ struct PageCover<Page: View>: ViewModifier {
     @Binding var isPresented: Bool
     /// Whether the page first comes up short. See above.
     var short: Bool = false
+    /// Whether the page's content runs the glass's full width, past the side bands of
+    /// the safe area — the display settings on the iPhone Duo folded shut, which would
+    /// otherwise stop short of the camera band and leave a strip of nothing beside
+    /// them. The page keeps its own controls clear of the camera.
+    var fullWidth: Bool = false
     @ViewBuilder var page: () -> Page
 
     @Environment(\.amber) private var amber
@@ -134,6 +139,7 @@ struct PageCover<Page: View>: ViewModifier {
                                startPoint: .top, endPoint: .bottom)
                     .frame(height: 14)
                     .offset(y: travel - top - 14)
+                    .ignoresSafeArea(.container, edges: .horizontal)
                     .allowsHitTesting(false)
             }
             page()
@@ -146,6 +152,7 @@ struct PageCover<Page: View>: ViewModifier {
                     withAnimation(.drawer) { shortHeight = h }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea(.container, edges: fullWidth ? .horizontal : [])
                 .contentShape(Rectangle())
                 .offset(y: travel - (top - contentTop))
                 // The ground of the page; a slider or a scroll inside takes its own drags

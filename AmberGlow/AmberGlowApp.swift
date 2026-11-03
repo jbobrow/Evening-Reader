@@ -226,6 +226,7 @@ struct RootView: View {
             .environment(\.duoPose, glassPose)
             .environment(\.cameraStrip, strip)
             .environment(\.toggleCameraStrip, toggleCameraStrip)
+            .barButtonsSized(for: strip)
             .onChange(of: glassPose, initial: true) { _, now in pose = now }
             .onChange(of: strip, initial: true) { _, now in cameraStripNow = now }
         }
@@ -254,7 +255,7 @@ struct RootView: View {
         // for the card a wide panel gets.
         .modifier(PageCover(isPresented: Binding(
             get: { isCompact && glowPanel != nil },
-            set: { if !$0 { glowPanel = nil } }), short: true) {
+            set: { if !$0 { glowPanel = nil } }), short: true, fullWidth: true) {
             GlowPanelOverlay(isCompact: true, size: .zero) { glowPanel = nil }
         })
         .modifier(PageCover(isPresented: $showOnboarding) {
@@ -285,11 +286,18 @@ struct RootView: View {
             .environment(\.duoPose, pose)
             .environment(\.cameraStrip, cameraStripNow)
             .environment(\.toggleCameraStrip, toggleCameraStrip)
+            .barButtonsSized(for: cameraStripNow)
             // What the cover's own container shows where the browser does not reach —
             // the corners swept as the glass turns — is black rather than the system's
             // white.
             .presentationBackground(.black)
         }
+        // The pages that come up over everything above — the display settings, the
+        // highlights, About — sit outside the view the pose and the camera band are
+        // handed to, and are told here instead.
+        .environment(\.duoPose, pose)
+        .environment(\.cameraStrip, cameraStripNow)
+        .environment(\.toggleCameraStrip, toggleCameraStrip)
         .onOpenURL(perform: handle)
         // Whatever moved the drawer, any drag that was in flight is finished with. A
         // gesture that is interrupted rather than ended keeps its travel, and that travel

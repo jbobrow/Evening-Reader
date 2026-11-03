@@ -16,6 +16,7 @@ struct GlowPanelOverlay: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
     @Environment(\.pageIsShort) private var pageIsShort
+    @Environment(\.cameraStrip) private var cameraStrip
 
     var isCompact: Bool
     /// Which corner the card hangs from, on a wide panel: under the button that opened it.
@@ -55,7 +56,9 @@ struct GlowPanelOverlay: View {
                 AmberIconButton(symbol: "xmark", action: onClose)
             }
             .padding(.leading, 22)
-            .padding(.trailing, 14)
+            // The page runs the full width of the Duo's outer screen, and the camera is
+            // at the top of the band: the way out stands beside it, not under it.
+            .padding(.trailing, 14 + (cameraStrip?.width ?? 0))
             .padding(.top, 12)
             .padding(.bottom, 14)
 

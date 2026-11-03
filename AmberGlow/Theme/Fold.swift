@@ -66,6 +66,21 @@ extension EnvironmentValues {
     var controlsRailed: Bool { cameraStrip?.rails == true }
 }
 
+extension CameraStrip {
+    /// The size of an icon button in the bars, the page expanded: a finger's height,
+    /// and a little wider than a phone's, for glass held and worked in one hand.
+    static let barButtonFrame = CGSize(width: 42, height: 44)
+}
+
+extension View {
+    /// Sizes the bars' buttons for the camera band, when the page has expanded under it.
+    func barButtonsSized(for strip: CameraStrip?) -> some View {
+        transformEnvironment(\.amberIconButtonFrame) { frame in
+            if strip?.expanded == true { frame = CameraStrip.barButtonFrame }
+        }
+    }
+}
+
 /// The rail: a screen's buttons, down the camera band, below the camera. At its foot,
 /// the way to expand the page over it.
 struct CameraStripRail<Buttons: View>: View {
@@ -77,14 +92,17 @@ struct CameraStripRail<Buttons: View>: View {
     @ViewBuilder var buttons: Buttons
 
     var body: some View {
-        VStack(spacing: 6) {
+        // Each button a finger's width and more, with a gap between them that a
+        // thumb feeling its way down the edge of the glass will not cross by accident.
+        VStack(spacing: 12) {
             buttons
-            Spacer(minLength: 12)
+            Spacer(minLength: 16)
             AmberIconButton(symbol: "arrow.up.left.and.arrow.down.right", action: toggle)
                 .accessibilityLabel("Use the full width")
         }
-        .padding(.top, max(strip.occluded.height + 10, clearance + 16))
-        .padding(.bottom, 14)
+        .environment(\.amberIconButtonFrame, CGSize(width: min(60, strip.width - 12), height: 50))
+        .padding(.top, max(strip.occluded.height + 12, clearance + 18))
+        .padding(.bottom, 12)
         .frame(width: strip.width)
         .frame(maxHeight: .infinity, alignment: .top)
     }
