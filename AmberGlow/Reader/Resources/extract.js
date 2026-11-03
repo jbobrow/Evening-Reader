@@ -76,6 +76,7 @@
   // differently and found by their test ids.
   var X_HOST = /(^|\.)(x|twitter)\.com$/i;
   var X_STATUS = /^\/([A-Za-z0-9_]{1,15})\/status(?:es)?\/(\d+)/;
+  var X_ARTICLE = /^\/(?:[A-Za-z0-9_]{1,15})\/article\/(\d+)/;
   var X_RESERVED = /^(i|home|explore|search|notifications|messages|settings|compose|hashtag|intent|login|signup|tos|privacy)$/i;
   // The pictures a post carries: its photographs, and the stills of its videos and GIFs.
   // Not the avatars, the emoji, or a link card's thumbnail.
@@ -88,7 +89,7 @@
   function readPostOnX() {
     if (!X_HOST.test(location.hostname)) return null;
     var here = location.pathname.match(X_STATUS);
-    if (!here) return null;
+    if (!here && !X_ARTICLE.test(location.pathname)) return null;
 
     function answer(fields) {
       var out = {
@@ -100,11 +101,11 @@
       return JSON.stringify(out);
     }
 
-    // A long-form X Article is a document, with its own headings and lists, and
-    // Defuddle has a reader made for it. Not ready, as far as this pass goes.
-    if (document.querySelector("[data-testid='twitterArticleReadView']")) {
-      return answer({ reason: "x-article" });
-    }
+    // A long-form X Article has a body of its own, and is read as the document it is.
+    // Signed out the body is plain markup, and signed in it is an editor's blocks.
+    var articleBody = document.querySelector("[data-article-part='body'],[data-testid='twitterArticleRichTextView']");
+    var articleComing = !articleBody && document.querySelector("[data-testid='twitterArticleReadView']");
+    if (articleComing) return answer({ reason: "x-not-ready" });
 
     function shown(el) { return el.getClientRects().length > 0; }
     function outside(el, without) { return !without || !without.contains(el); }
@@ -122,7 +123,7 @@
     });
     // Signed in, the posts arrive after the page does. Not yet, rather than a reading
     // of the empty shell around them: the host tries again, and then asks Defuddle.
-    if (!posts.length) return answer({ reason: "x-not-ready" });
+    if (!posts.length && !articleBody) return answer({ reason: "x-not-ready" });
 
     function innerQuote(post) {
       var inner = post.querySelector("article");
@@ -270,7 +271,11 @@
           if (c.tagName === "A") {
             var label = shownText(c).replace(/\s+/g, " ").trim();
             if (!label || /^show more$/i.test(label)) continue;
-            runs.push({ text: label, href: destination(c), bold: bold, italic: italic });
+            // Its type is set on what is inside it, not on the link.
+            var inner = window.getComputedStyle(c.querySelector("span,em,i,strong,b") || c);
+            runs.push({ text: label, href: destination(c),
+                        bold: bold || (!baseBold && parseInt(inner.fontWeight, 10) >= 600),
+                        italic: italic || (!baseItalic && inner.fontStyle === "italic") });
             continue;
           }
           walk(c,
@@ -298,14 +303,21 @@
       return line.map(function (run) { return run.text; }).join("");
     }
 
+    // Emphasis wraps a whole stretch of runs at once, links among them. Wrapped one run at
+    // a time, "*a**b*" in the note says something else in Markdown.
     function inline(line) {
-      return line.map(function (run) {
-        var h = esc(run.text);
-        if (run.href) h = "<a href=\"" + esc(run.href) + "\">" + h + "</a>";
-        if (run.italic) h = "<em>" + h + "</em>";
-        if (run.bold) h = "<strong>" + h + "</strong>";
-        return h;
-      }).join("");
+      var out = "";
+      for (var i = 0; i < line.length;) {
+        var bold = !!line[i].bold, italic = !!line[i].italic, h = "";
+        for (; i < line.length && !!line[i].bold === bold && !!line[i].italic === italic; i++) {
+          var words = esc(line[i].text);
+          h += line[i].href ? "<a href=\"" + esc(line[i].href) + "\">" + words + "</a>" : words;
+        }
+        if (italic) h = "<em>" + h + "</em>";
+        if (bold) h = "<strong>" + h + "</strong>";
+        out += h;
+      }
+      return out;
     }
 
     // A post written with a list or a quotation in it, as plain text — "1." and "-" at
@@ -367,11 +379,12 @@
 
     // A video's still, rather than a photograph. The page puts a player in place of the
     // still only after a while, and before that it is a bare picture like any other —
-    // except that a photograph, on either page, is a link to its own "/photo/1".
+    // except that a photograph, on either page, is a link to its own "/photo/1", or in
+    // an Article to its "/media/".
     function isVideoStill(el, src) {
       if (el.tagName === "VIDEO" || /video_thumb\//.test(src)) return true;
       if (el.closest("[data-testid='videoPlayer'],[data-testid='videoComponent']")) return true;
-      return !el.closest("a[href*='/photo/']");
+      return !el.closest("a[href*='/photo/'],a[href*='/media/']");
     }
 
     function mediaOf(scope, without, link) {
@@ -390,11 +403,12 @@
         if (!video && /\/media\//.test(src)) {
           try {
             var large = new URL(src);
-            if (large.searchParams.has("name")) { large.searchParams.set("name", "large"); src = large.href; }
+            large.searchParams.set("name", "large");
+            src = large.href;
           } catch (e) {}
         }
         var alt = el.tagName === "IMG" ? attr(el, "alt") : "";
-        if (/^(image|embedded video)$/i.test(alt)) alt = "";
+        if (/^(image|embedded video|article cover image)$/i.test(alt)) alt = "";
         var img = "<img src=\"" + esc(src) + "\"" + (alt ? " alt=\"" + esc(alt) + "\"" : "") + ">";
         // A video cannot be kept, but its still can, and a way back to it.
         html += video
@@ -450,6 +464,110 @@
       return "<blockquote>" + (head ? "<p>" + head + "</p>" : "") + render(quote.post, null, link || location.href, 0) + "</blockquote>";
     }
 
+    // What a post or an Article comes to, once its words are in hand.
+    function finished(title, byline, published, html) {
+      // Read back as text with a space at every block's end, so a list's items, and the
+      // paragraph before it, do not run together into one word for the excerpt and count.
+      var holder = document.createElement("div");
+      holder.innerHTML = html.replace(/(<br>|<\/(p|li|blockquote|h[1-6]|pre)>)/g, "$1 ");
+      [].slice.call(holder.querySelectorAll("figcaption")).forEach(function (c) { c.remove(); });
+      var said = txt(holder);
+      var picture = holder.querySelector("img");
+      if (!said && !picture) return answer({ reason: "x-not-ready" });
+
+      // For the Defuddle pass, which writes the Markdown note from this same reading
+      // rather than from its own.
+      window.__agPostOnX = html;
+
+      return answer({
+        ok: true,
+        title: title,
+        byline: byline,
+        published: published,
+        excerpt: said.slice(0, 320),
+        leadImage: picture ? picture.getAttribute("src") : "",
+        wordCount: said ? said.split(/\s+/).length : 0,
+        length: said.length,
+        html: html
+      });
+    }
+
+    function articleLine(el) {
+      return linesOf(runsOf(el)).filter(function (line) { return plain(line).trim(); }).map(inline).join("<br>");
+    }
+
+    // A block that is not words: a picture and its caption, an embedded post, some code.
+    // Signed in, all three are a <section>; signed out, a picture is a <figure>.
+    function articleAttachment(el) {
+      var code = el.tagName === "PRE" ? el : el.querySelector("pre");
+      if (code) return "<pre><code>" + esc(code.textContent || "") + "</code></pre>";
+      var post = el.tagName === "ARTICLE" ? el : el.querySelector("article,[data-testid='simpleTweet']");
+      if (post) return quoteHTML({ post: post, whole: el });
+      var html = mediaOf(el, null, location.href);
+      var caption = el.querySelector("figcaption,[id^='caption-']");
+      var words = caption ? articleLine(caption) : "";
+      if (words && html) {
+        var end = html.lastIndexOf("</figure>");
+        html = html.slice(0, end) + "<figcaption>" + words + "</figcaption>" + html.slice(end);
+      }
+      return html;
+    }
+
+    function articleBlocks(node) {
+      var html = "";
+      [].slice.call(node.children).forEach(function (el) {
+        var tag = el.tagName;
+        if (/^(STYLE|SCRIPT|TEMPLATE|NOSCRIPT|BUTTON)$/.test(tag)) return;
+        if (window.getComputedStyle(el).display === "none") return;
+        var heading = tag.match(/^H([1-6])$/);
+        if (heading) {
+          // The same heading is an <h2> signed in and an <h3> signed out. The signed-out
+          // numbering is kept, since the title above them is the page's only <h1> there.
+          var level = Math.min(parseInt(heading[1], 10) + (el.className && /longform-/.test(el.className) ? 1 : 0), 6);
+          var words = articleLine(el);
+          if (words) html += "<h" + level + ">" + words + "</h" + level + ">";
+        } else if (tag === "UL" || tag === "OL") {
+          var items = [].slice.call(el.children).map(articleLine).filter(Boolean);
+          if (items.length) {
+            html += "<" + tag.toLowerCase() + ">" + items.map(function (item) {
+              return "<li>" + item + "</li>";
+            }).join("") + "</" + tag.toLowerCase() + ">";
+          }
+        } else if (tag === "BLOCKQUOTE") {
+          // Italic already, in the reader, so its own italics are not said twice.
+          var quoted = linesOf(runsOf(el).map(function (run) {
+            return { text: run.text, href: run.href, bold: run.bold, italic: false };
+          })).filter(function (line) { return plain(line).trim(); }).map(inline).join("<br>");
+          if (quoted) html += "<blockquote><p>" + quoted + "</p></blockquote>";
+        } else if (tag === "HR") {
+          html += "<hr>";
+        } else if (/^(FIGURE|SECTION|PRE|ARTICLE)$/.test(tag) || el.matches("[data-testid='markdown-code-block'],[data-testid='simpleTweet']")) {
+          html += articleAttachment(el);
+        } else if (tag === "P" || !el.querySelector("p,h1,h2,h3,h4,h5,h6,ul,ol,blockquote,pre,figure,section,hr,article,[data-block]")) {
+          var line = articleLine(el);
+          if (line) html += "<p>" + line + "</p>";
+        } else {
+          html += articleBlocks(el);
+        }
+      });
+      return html;
+    }
+
+    function readArticle() {
+      // Signed in, the name and the date are in a post of their own beside the reading view.
+      var frame = document.querySelector("article[data-testid='tweet']") || articleBody.closest("article") || document.body;
+      var titled = document.querySelector("[data-article-part='title'],[data-testid='twitter-article-title']");
+      var title = titled ? txt(titled) : "";
+      var cover = document.querySelector("[data-article-part='cover'],[data-testid='twitterArticleReadView'] a[href*='/media/']");
+      var html = (cover && !articleBody.contains(cover) ? mediaOf(cover, null, location.href) : "") + articleBlocks(articleBody);
+      var author = authorOf(frame, articleBody);
+      var stamp = frame.querySelector("time[datetime]");
+      return finished(title || (author.name + " on X"), author.name,
+                      (stamp && attr(stamp, "datetime")) || meta(["article:published_time"]), html);
+    }
+
+    if (articleBody) return readArticle();
+
     // The post the address names, and the author's own posts on either side of it: the
     // thread it belongs to, up to the first reply from anyone else. Until the named post
     // is on the page, nothing else on it is any use — the next post down, read in its
@@ -493,15 +611,6 @@
       if (quote) html += quoteHTML(quote);
     });
 
-    // Read back as text with a space at every block's end, so a list's items, and the
-    // paragraph before it, do not run together into one word for the excerpt and count.
-    var holder = document.createElement("div");
-    holder.innerHTML = html.replace(/(<br>|<\/(p|li|blockquote)>)/g, "$1 ");
-    [].slice.call(holder.querySelectorAll("figcaption")).forEach(function (c) { c.remove(); });
-    var said = txt(holder);
-    var picture = holder.querySelector("img");
-    if (!said && !picture) return answer({ reason: "x-not-ready" });
-
     // Otherwise the opening sentence, which is what a post is known by — from its first
     // line alone, so a list that follows cannot lend it its "1."
     if (!title) {
@@ -518,21 +627,7 @@
     });
     var published = (stamps[0] && attr(stamps[0], "datetime")) || meta(["article:published_time"]);
 
-    // For the Defuddle pass, which writes the Markdown note from this same reading
-    // rather than from its own.
-    window.__agPostOnX = html;
-
-    return answer({
-      ok: true,
-      title: title,
-      byline: author.name,
-      published: published,
-      excerpt: said.slice(0, 320),
-      leadImage: picture ? picture.getAttribute("src") : "",
-      wordCount: said ? said.split(/\s+/).length : 0,
-      length: said.length,
-      html: html
-    });
+    return finished(title, author.name, published, html);
   }
 
   var onX = readPostOnX();

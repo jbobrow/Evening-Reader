@@ -89,7 +89,9 @@ final class ArticleExtractor: NSObject {
         defer { teardown(web) }
 
         try await load(url, in: web)
+        await settleXPage(in: web)
         await wakeLazyContent(in: web)
+        await settleXPage(in: web)
 
         // Give client-side renderers a beat, then try; retry once for slow hydration.
         // The last answer is kept even when it failed, for its reason and whatever
@@ -237,6 +239,32 @@ final class ArticleExtractor: NSObject {
             images().forEach(i => { i.loading = 'eager'; });
             window.scrollTo(0, 0);
             await new Promise(r => setTimeout(r, 250));
+            return true;
+            """
+        _ = try? await web.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page)
+    }
+
+    /// A signed-in page on X arrives in stages after the load has finished: the named post
+    /// first, then its pictures and the rest of its thread. Nothing marks the last stage —
+    /// a post may simply have no thread — so the page is watched until it has stopped
+    /// changing for a moment. Bounded, for a page that never does.
+    private func settleXPage(in web: WKWebView) async {
+        guard let host = web.url?.host?.lowercased(),
+              host == "x.com" || host.hasSuffix(".x.com") ||
+              host == "twitter.com" || host.hasSuffix(".twitter.com") else { return }
+        let script = """
+            const state = () => [document.querySelectorAll('article').length,
+                                 document.querySelectorAll('article img, article video').length,
+                                 document.querySelectorAll('[data-article-part="body"], [data-testid="twitterArticleRichTextView"]').length,
+                                 document.querySelectorAll('[role="progressbar"]').length].join();
+            const started = Date.now();
+            let last = state(), since = Date.now();
+            while (Date.now() - started < 6000) {
+              await new Promise(r => setTimeout(r, 150));
+              const now = state();
+              if (now !== last) { last = now; since = Date.now(); }
+              if (Date.now() - since >= 1000 && document.querySelector('article')) break;
+            }
             return true;
             """
         _ = try? await web.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page)
