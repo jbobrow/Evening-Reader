@@ -213,7 +213,7 @@ function normalize(raw) {
 function explain(error) {
   const message = String(error?.message ?? error);
   if (/native messaging host not found|not found/i.test(message)) {
-    return "The Evening Reader helper isn't installed — run Extension/native/install-chrome-host.sh.";
+    return "Evening Reader's helper isn't installed on this Mac, so the page can't be saved yet.";
   }
   return message;
 }

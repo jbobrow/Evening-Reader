@@ -4,6 +4,8 @@
   "short_name": "Evening Reader",
   "version": "1.0",
   "description": "Saves the page you're reading to your Evening Reader library in iCloud.",
+  "homepage_url": "https://eveningreader.jonbobrow.com",
+  "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvWP+TvrId83EeE3rQAPBaT9T+zkZssxW8JTPy4Lnx4JbnsS558/sqZweQRhSuPLxO4/lEM//2iDcMtB/b0mVmfuPD+sSqa1haBVH01hf+m1ccoXmU0Ayukzc24va7YhJdDffGwNzmcN5ysRVF21laDMUOlxhZWEYEJzDyFxOGuuZFPAmGjY6iU2hd3aIu1D/qjDoHMzqS50iHOeSBEs9hPbXlzlNPgBrj4Ml/cigL8+OEWMjh/UsBbNrPn2ziVDp4Fd78I+lLrJNoXTDELJR8A8W7PGLMOSrxSJod8f67lhDduu9KH3WQQ6nCjIzoRtNJWwRMhRhW28KgOavMqtbuwIDAQAB",
   "permissions": ["activeTab", "contextMenus", "nativeMessaging", "scripting"],
   "background": {

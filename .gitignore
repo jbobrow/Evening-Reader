@@ -26,3 +26,6 @@ Extension/web/extract.js
 Extension/web/defuddle.js
 Extension/web/defuddle-run.js
 Extension/web/defuddle-LICENSE.txt
+
+# Packaged extensions, made by Extension/package-chrome.sh.
+Extension/dist/

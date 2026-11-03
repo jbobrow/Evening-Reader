@@ -35,3 +35,7 @@ If Safari doesn't list it, turn on Develop → Developer Settings → **Allow un
 ## Trying the host without touching the library
 
 `EVENING_READER_LIBRARY=/some/folder` makes `LibraryDrop` write there instead of iCloud.
+
+## The Chrome Web Store
+
+`Extension/package-chrome.sh` builds the upload, `Extension/dist/save-to-evening-reader-<version>.zip`, without the manifest's `key`. `Extension/store/render.sh` renders the screenshots and promo tile into `Extension/dist/store/`. Everything the dashboard asks for, including permission justifications, privacy answers and what to do after the first upload, is in [store/LISTING.md](store/LISTING.md).
