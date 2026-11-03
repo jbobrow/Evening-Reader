@@ -221,7 +221,16 @@ struct BrowseScreen: View {
                     // Run to the physical bottom of the glass; otherwise the page stops at
                     // the home-indicator inset and leaves a ledge. A video in fullscreen
                     // has the whole of the glass.
-                    .ignoresSafeArea(.container, edges: model.videoFullscreen ? .all : .bottom)
+                    //
+                    // And under the keyboard, as in Safari. Made to stand aside for it, the
+                    // view is shrunk in an animation, but the page inside is laid out once,
+                    // at the final size — so a bar pinned to the foot of the page leapt
+                    // up to where the keyboard would end, and the page showed through the
+                    // gap below it while the keyboard rose to meet it. Left the whole
+                    // glass, the web view moves the field into view itself, in step with
+                    // the keyboard.
+                    .ignoresSafeArea([.container, .keyboard],
+                                     edges: model.videoFullscreen ? .all : .bottom)
 
                 if model.pageCount > 1 && !model.videoFullscreen {
                     PageScrubber(page: model.page,
