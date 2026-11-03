@@ -94,9 +94,10 @@ struct RootView: View {
     @State private var launchName = false
     /// How an iPhone Duo is being held, as its hinge reports — `.none` on anything else.
     @State private var hingePose: DuoPose = .none
-    /// The pose the glass is in, for the views outside the window's own tree — the
-    /// browser's cover — which inherit nothing from it.
+    /// The pose the glass is in, and the camera band, for the views outside the
+    /// window's own tree — the browser's cover — which inherit nothing from it.
     @State private var pose: DuoPose = .none
+    @State private var cameraStripNow: CameraStrip?
 
     enum PanelAnchor { case library, reader }
 
@@ -134,13 +135,18 @@ struct RootView: View {
             // means glass that folds, and that it is open: shut, the crease is not
             // on the screen that is lit.
             let glassPose = hingePose == .none && crease != nil ? DuoPose.open : hingePose
-            let drawerWidth = isCompact ? geo.size.width
+            // Shut, the band down the right-hand edge — see `CameraStrip`. Expanded,
+            // the whole tree below ignores that edge of the safe area, so the page runs
+            // under the band; the drawer, too, is then the whole glass wide.
+            let strip = cameraStrip(glassPose, in: geo)
+            let expanded = strip?.expanded == true ? strip!.width : 0
+            let drawerWidth = isCompact ? geo.size.width + expanded
                 : spineWidth(crease, in: geo.size) ?? min(380, geo.size.width * 0.86)
             // How far the drawer goes to be out of sight. A full-width drawer's paper runs
             // on into the band past the safe area on its right — where the iPhone Duo's
             // outer camera sits, closed, or a landscape iPhone's Dynamic Island — so it
             // has that much further to go before none of it is left on the glass.
-            let drawerTravel = drawerWidth + (isCompact ? geo.safeAreaInsets.trailing : 0)
+            let drawerTravel = drawerWidth + (isCompact ? geo.safeAreaInsets.trailing - expanded : 0)
             // -drawerTravel is fully closed, 0 is fully open; the drag rides in between.
             let offset = min(0, max(-drawerTravel,
                                     (showLibrary ? 0 : -drawerTravel) + drawerDrag))
@@ -216,8 +222,12 @@ struct RootView: View {
                         .zIndex(5)
                 }
             }
+            .ignoresSafeArea(.container, edges: expanded > 0 ? .trailing : [])
             .environment(\.duoPose, glassPose)
+            .environment(\.cameraStrip, strip)
+            .environment(\.toggleCameraStrip, toggleCameraStrip)
             .onChange(of: glassPose, initial: true) { _, now in pose = now }
+            .onChange(of: strip, initial: true) { _, now in cameraStripNow = now }
         }
         .readsDuoPose($hingePose)
         .statusBarHidden(true)
@@ -273,6 +283,8 @@ struct RootView: View {
             .environment(settings)
             .environment(sites)
             .environment(\.duoPose, pose)
+            .environment(\.cameraStrip, cameraStripNow)
+            .environment(\.toggleCameraStrip, toggleCameraStrip)
             // What the cover's own container shows where the browser does not reach —
             // the corners swept as the glass turns — is black rather than the system's
             // white.
@@ -394,6 +406,27 @@ struct RootView: View {
         library.noteOpened(article)
         guard isCompact else { return }
         withAnimation(.drawer) { showLibrary = false }
+    }
+
+    // MARK: - The camera band
+
+    /// The band down the right-hand edge of the Duo's outer screen, folded shut: the
+    /// trailing safe-area inset, and what in it is really taken. Nil in any other pose,
+    /// and on any glass whose trailing inset is a mere bezel rather than a band.
+    private func cameraStrip(_ pose: DuoPose, in geo: GeometryProxy) -> CameraStrip? {
+        guard pose == .closed, geo.safeAreaInsets.trailing >= 60 else { return nil }
+        let width = geo.safeAreaInsets.trailing
+        let band = CGRect(x: geo.size.width, y: 0, width: width, height: geo.size.height)
+        // The camera and its plateau: the occlusions that fall in the band, taken
+        // together — or, with none reported, a guess at the top of it.
+        let taken = geo.occlusions.filter { $0.intersects(band) }
+            .reduce(CGRect.null) { $0.union($1) }
+        let occluded = taken.isNull ? CGRect(x: geo.size.width, y: 0, width: width, height: 82) : taken
+        return CameraStrip(width: width, occluded: occluded, expanded: settings.fullWidthShut)
+    }
+
+    private func toggleCameraStrip() {
+        withAnimation(.drawer) { settings.fullWidthShut.toggle() }
     }
 
     // MARK: - Drawer

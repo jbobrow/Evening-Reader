@@ -28,14 +28,134 @@ enum DuoPose: Equatable {
     case open
 }
 
+/// The band down the right-hand edge of the iPhone Duo's outer screen, folded shut.
+///
+/// The system keeps it out of the safe area for the whole height of the glass, though
+/// only its top is taken — the camera, and the plateau it sits on. The rest is glass
+/// with nothing on it, under the thumb that holds the phone. So the app uses it: the
+/// buttons of whatever is on the glass stand in a rail down the band, below the camera,
+/// and the page keeps to the safe area beside them. Or, expanded, the page runs the full
+/// width under the band, the rail goes, and the buttons go back into the bar — which
+/// keeps clear of the band, since the camera is there.
+struct CameraStrip: Equatable {
+    /// How wide the band is.
+    var width: CGFloat
+    /// What is really taken, in the safe area's own space: the camera and its plateau,
+    /// at the top of the band.
+    var occluded: CGRect
+    /// The page runs the full width, and the rail is away.
+    var expanded: Bool
+
+    /// The band holds the buttons.
+    var rails: Bool { !expanded }
+}
+
 extension EnvironmentValues {
     @Entry var duoPose: DuoPose = .none
+    /// The camera band, on the Duo's outer screen; nil on every other screen.
+    @Entry var cameraStrip: CameraStrip? = nil
+    /// Expands the page under the band, or brings the rail back.
+    @Entry var toggleCameraStrip: () -> Void = {}
 
-    /// Whether a bar's buttons all gather at its trailing edge. Folded shut, the Duo is
-    /// a wide phone held in one hand, and the thumb that holds it rests along the
-    /// right-hand edge: a button on the far left of the bar is a reach across the
-    /// glass, so every one of them moves over to where the thumb already is.
-    var controlsTrailing: Bool { duoPose == .closed }
+    /// Whether a bar's buttons all gather at its trailing end: the page expanded under
+    /// the camera band on glass held in one hand, where the thumb rests along the
+    /// right-hand edge and a button on the far left of the bar is a reach across the
+    /// glass. (With the rail up, the bar has no buttons at all.)
+    var controlsTrailing: Bool { cameraStrip?.expanded == true }
+    /// Whether the buttons stand in the rail, and the bar holds only its title.
+    var controlsRailed: Bool { cameraStrip?.rails == true }
+}
+
+/// The rail: a screen's buttons, down the camera band, below the camera. At its foot,
+/// the way to expand the page over it.
+struct CameraStripRail<Buttons: View>: View {
+    @Environment(\.toggleCameraStrip) private var toggle
+    let strip: CameraStrip
+    @ViewBuilder var buttons: Buttons
+
+    var body: some View {
+        VStack(spacing: 6) {
+            buttons
+            Spacer(minLength: 12)
+            AmberIconButton(symbol: "arrow.up.left.and.arrow.down.right", action: toggle)
+                .accessibilityLabel("Use the full width")
+        }
+        .padding(.top, strip.occluded.height + 10)
+        .padding(.bottom, 14)
+        .frame(width: strip.width)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// The way back from the expanded page: the rail, and the page beside it.
+struct CameraStripCollapse: View {
+    @Environment(\.toggleCameraStrip) private var toggle
+
+    var body: some View {
+        AmberIconButton(symbol: "arrow.down.right.and.arrow.up.left", action: toggle)
+            .accessibilityLabel("Keep the page beside the camera")
+    }
+}
+
+extension View {
+    /// Stands these buttons in the camera band beside this view, while the band holds
+    /// the rail. This view keeps to the safe area; the rail is laid just past its
+    /// trailing edge, which is where the band begins.
+    func cameraStripRail<Buttons: View>(@ViewBuilder buttons: @escaping () -> Buttons) -> some View {
+        modifier(CameraStripRailed(buttons: buttons))
+    }
+
+    /// Keeps a bar's contents out of the camera band when the page has expanded under
+    /// it: the bar runs the full width, but nothing on it goes under the camera.
+    func clearOfCameraStrip(_ strip: CameraStrip?) -> some View {
+        padding(.trailing, strip?.expanded == true ? strip!.width : 0)
+    }
+
+    /// Cuts the camera's corner out of a page expanded under the band, softly, so what
+    /// shows there is the paper rather than text under a lens.
+    func cutAroundCamera(_ strip: CameraStrip?) -> some View {
+        mask {
+            ZStack(alignment: .topTrailing) {
+                Color.black
+                CameraCutout(strip: strip)
+            }
+            .compositingGroup()
+        }
+    }
+}
+
+/// The camera's corner, for a mask: black where the page shows, cut away under the
+/// lens. Composed into a mask with `.destinationOut`, so it can join a mask that
+/// already has a shape of its own — see `DetailPane.pageMask`.
+struct CameraCutout: View {
+    var strip: CameraStrip?
+
+    var body: some View {
+        if let strip, strip.expanded {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.black)
+                .frame(width: strip.width + 6, height: strip.occluded.height + 6)
+                .padding(.top, -12)
+                .padding(.trailing, -12)
+                .blur(radius: 5)
+                .blendMode(.destinationOut)
+        }
+    }
+}
+
+private struct CameraStripRailed<Buttons: View>: ViewModifier {
+    @Environment(\.cameraStrip) private var strip
+    let buttons: () -> Buttons
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .topTrailing) {
+            if let strip, strip.rails {
+                CameraStripRail(strip: strip, buttons: buttons)
+                    .offset(x: strip.width)
+                    .transition(.opacity)
+            }
+        }
+    }
 }
 
 extension View {
@@ -79,6 +199,17 @@ extension GeometryProxy {
         }
         #endif
         return nil
+    }
+
+    /// What is taken out of this view by the glass itself — the Duo's outer camera and
+    /// its plateau, on the screen folded shut — in this view's space. Empty elsewhere.
+    var occlusions: [CGRect] {
+        #if canImport(SwiftUI, _version: 8.0.85)
+        if #available(iOS 27.1, *) {
+            return reservedRegions(kind: .occlusion, options: .includeInactive).map(\.frame)
+        }
+        #endif
+        return []
     }
 
     /// Where the crease crosses this view, bent or flat. The glass opened flat still has

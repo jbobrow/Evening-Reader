@@ -8,6 +8,8 @@ struct DetailPane: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.duoPose) private var pose
     @Environment(\.controlsTrailing) private var controlsTrailing
+    @Environment(\.controlsRailed) private var controlsRailed
+    @Environment(\.cameraStrip) private var cameraStrip
 
     let article: SavedArticle?
     @Binding var showLibrary: Bool
@@ -130,6 +132,12 @@ struct DetailPane: View {
         // An article opens to the page alone; a tap brings the bar.
         .onAppear { if article != nil { chromeVisible = false } }
         .preference(key: PageHasSelection.self, value: selection != nil || gripping)
+        // Folded shut, the buttons stand in the camera band beside the page, the way
+        // to the drawer first — see `CameraStrip`.
+        .cameraStripRail {
+            drawerButton
+            if let article { actions(for: article) }
+        }
         // A novel's text is not kept around once nothing is reading it.
         //
         // Closing the page, or the library coming over it, is the pause after a reading.
@@ -436,7 +444,7 @@ struct DetailPane: View {
     /// — or last, with the rest, on glass held in one hand (`controlsTrailing`), where
     /// it points at the drawer rather than back along the way to it.
     private var drawerButton: some View {
-        AmberIconButton(symbol: controlsTrailing ? "sidebar.left" : drawerSymbol) {
+        AmberIconButton(symbol: controlsTrailing || controlsRailed ? "sidebar.left" : drawerSymbol) {
             withAnimation(.drawer) { showLibrary = true }
         }
     }
@@ -444,7 +452,7 @@ struct DetailPane: View {
     private func chrome(for article: SavedArticle) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                if !controlsTrailing { drawerButton }
+                if !controlsTrailing && !controlsRailed { drawerButton }
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(article.displayTitle)
@@ -456,31 +464,19 @@ struct DetailPane: View {
                         .tracking(0.5)
                         .foregroundStyle(amber.inkFaint)
                 }
-                .padding(.leading, controlsTrailing ? 4 : 6)
+                .padding(.leading, controlsTrailing || controlsRailed ? 4 : 6)
 
                 Spacer(minLength: 12)
 
-                AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
-                // What you kept out of this one, where you are reading it. Only once
-                // there is something to keep: an always-present button that opens an
-                // empty list is a button that says nothing about the page you are on.
-                if highlights.count(for: article) > 0 {
-                    AmberIconButton(symbol: "highlighter") { showHighlights = true }
+                // With the rail up the bar is the title alone; the buttons are in the
+                // band beside the page — see `CameraStrip`.
+                if !controlsRailed { actions(for: article) }
+                if controlsTrailing {
+                    drawerButton
+                    CameraStripCollapse()
                 }
-                // A book has no page of its own to open in the browser — what the globe
-                // button opens for everything else — so it gets the one piece of chrome
-                // that means something instead: its contents.
-                if article.isBook {
-                    AmberIconButton(symbol: "list.bullet") { showContents = true }
-                } else {
-                    AmberIconButton(symbol: "globe") { onOpenLink(article.url) }
-                }
-                AmberIconButton(symbol: article.isArchived ? "tray.and.arrow.up" : "archivebox") {
-                    library.setArchived(article, !article.isArchived)
-                    if !article.isArchived { onDismissArticle() }
-                }
-                if controlsTrailing { drawerButton }
             }
+            .clearOfCameraStrip(cameraStrip)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
@@ -492,6 +488,30 @@ struct DetailPane: View {
                     .animation(.linear(duration: 0.12), value: liveProgress)
             }
             .frame(height: 2)
+        }
+    }
+
+    /// What can be done with the article, on the bar or in the rail.
+    @ViewBuilder
+    private func actions(for article: SavedArticle) -> some View {
+        AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
+        // What you kept out of this one, where you are reading it. Only once
+        // there is something to keep: an always-present button that opens an
+        // empty list is a button that says nothing about the page you are on.
+        if highlights.count(for: article) > 0 {
+            AmberIconButton(symbol: "highlighter") { showHighlights = true }
+        }
+        // A book has no page of its own to open in the browser — what the globe
+        // button opens for everything else — so it gets the one piece of chrome
+        // that means something instead: its contents.
+        if article.isBook {
+            AmberIconButton(symbol: "list.bullet") { showContents = true }
+        } else {
+            AmberIconButton(symbol: "globe") { onOpenLink(article.url) }
+        }
+        AmberIconButton(symbol: article.isArchived ? "tray.and.arrow.up" : "archivebox") {
+            library.setArchived(article, !article.isArchived)
+            if !article.isArchived { onDismissArticle() }
         }
     }
 
@@ -756,7 +776,15 @@ struct DetailPane: View {
             }
             // The page runs under the island and fades out there rather than stopping
             // at a hard edge, and when the bar is down it fades out beneath that.
-            .mask { topFade }
+            .mask {
+                ZStack(alignment: .topTrailing) {
+                    topFade
+                    // Expanded under the camera band, the page keeps a soft corner
+                    // clear of the lens.
+                    CameraCutout(strip: cameraStrip)
+                }
+                .compositingGroup()
+            }
             // The web view is otherwise inset by the home-indicator safe area, which
             // left a visible ledge where the document's fill stopped — and at the top it
             // stopped short of the island.
@@ -814,9 +842,11 @@ struct DetailPane: View {
         VStack(spacing: 0) {
             HStack {
                 if controlsTrailing { Spacer() }
-                drawerButton
+                if !controlsRailed { drawerButton }
                 if !controlsTrailing { Spacer() }
+                if controlsTrailing { CameraStripCollapse() }
             }
+            .clearOfCameraStrip(cameraStrip)
             .padding(12)
 
             Spacer()

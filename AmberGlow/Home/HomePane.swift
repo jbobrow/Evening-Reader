@@ -10,6 +10,9 @@ struct HomePane: View {
     @Environment(Sites.self) private var sites
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
+    @Environment(\.cameraStrip) private var cameraStrip
+    @Environment(\.controlsRailed) private var controlsRailed
+    @Environment(\.controlsTrailing) private var controlsTrailing
 
     @Binding var scope: Library.Scope
     @Binding var search: String
@@ -114,6 +117,11 @@ struct HomePane: View {
         }
         .coordinateSpace(name: "homePane")
         .overlay { tileMenuOverlay }
+        // Folded shut, the buttons stand in the camera band — see `CameraStrip`.
+        .cameraStripRail {
+            AmberIconButton(symbol: "highlighter", action: onHighlights)
+            AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
+        }
     }
 
     private let signatureCentered = false
@@ -134,12 +142,16 @@ struct HomePane: View {
                 .lineLimit(1)
                 .foregroundStyle(amber.inkStrong)
             Spacer()
-            AmberIconButton(symbol: "highlighter", action: onHighlights)
-            AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
+            if !controlsRailed {
+                AmberIconButton(symbol: "highlighter", action: onHighlights)
+                AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
+            }
             if let onClose {
                 AmberIconButton(symbol: "sidebar.left", action: onClose)
             }
+            if controlsTrailing { CameraStripCollapse() }
         }
+        .clearOfCameraStrip(cameraStrip)
         .padding(.leading, 16)
         .padding(.trailing, 8)
         .padding(.top, 10)

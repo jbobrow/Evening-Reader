@@ -6,6 +6,8 @@ struct LibraryPane: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
     @Environment(\.controlsTrailing) private var controlsTrailing
+    @Environment(\.controlsRailed) private var controlsRailed
+    @Environment(\.cameraStrip) private var cameraStrip
 
     @Binding var scope: Library.Scope
     @Binding var search: String
@@ -35,6 +37,11 @@ struct LibraryPane: View {
         }
         .coordinateSpace(name: "libraryPane")
         .overlay { rowMenuOverlay }
+        // Folded shut, the buttons stand in the camera band — see `CameraStrip`.
+        .cameraStripRail {
+            AmberIconButton(symbol: "chevron.left", action: onBack)
+            AmberIconButton(symbol: "plus", action: onAdd)
+        }
         .modifier(AmberFullScreenPresentation(isPresented: $showSavingGuide) {
             OnboardingSheet(savingOnly: true)
         })
@@ -47,7 +54,7 @@ struct LibraryPane: View {
         HStack(spacing: 2) {
             // Back is first, where the front page is — or last, beside the other
             // button, on glass held in one hand (`controlsTrailing`).
-            if !controlsTrailing { AmberIconButton(symbol: "chevron.left", action: onBack) }
+            if !controlsTrailing && !controlsRailed { AmberIconButton(symbol: "chevron.left", action: onBack) }
             VStack(alignment: .leading, spacing: 1) {
                 Text("Library")
                     .font(.system(size: 22, weight: .semibold, design: .serif))
@@ -57,11 +64,15 @@ struct LibraryPane: View {
                     .tracking(0.6)
                     .foregroundStyle(amber.inkFaint)
             }
-            .padding(.leading, controlsTrailing ? 10 : 4)
+            .padding(.leading, controlsTrailing || controlsRailed ? 10 : 4)
             Spacer()
-            AmberIconButton(symbol: "plus", action: onAdd)
-            if controlsTrailing { AmberIconButton(symbol: "chevron.left", action: onBack) }
+            if !controlsRailed { AmberIconButton(symbol: "plus", action: onAdd) }
+            if controlsTrailing {
+                AmberIconButton(symbol: "chevron.left", action: onBack)
+                CameraStripCollapse()
+            }
         }
+        .clearOfCameraStrip(cameraStrip)
         .padding(.leading, 6)
         .padding(.trailing, 8)
         .padding(.top, 10)

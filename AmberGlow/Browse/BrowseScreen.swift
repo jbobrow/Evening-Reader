@@ -10,6 +10,8 @@ struct BrowseScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.controlsTrailing) private var controlsTrailing
+    @Environment(\.controlsRailed) private var controlsRailed
+    @Environment(\.cameraStrip) private var cameraStrip
 
     let initialURL: URL?
     /// Leaving for the drawer: the browser goes, and the front page is what is left.
@@ -162,6 +164,9 @@ struct BrowseScreen: View {
                     .contrast(tintSign * (1 - tintFloor))
                     .brightness(tintFloor / 2)
                     .colorMultiply(tintColor)
+                    // Expanded under the camera band, the page keeps a soft corner clear
+                    // of the lens — the paper shows there instead.
+                    .cutAroundCamera(cameraStrip)
                     // The page is opaque and covers the panel's own surface, so the lamp is
                     // painted back on over the top — otherwise browsing is a flat field
                     // while everything else in the app is lit.
@@ -233,6 +238,30 @@ struct BrowseScreen: View {
             }
             .background { HeightReader(height: $pageHeight) }
             .onPreferenceChange(ScrubberFootprint.self) { scrubberHeight = $0 }
+        }
+        // Folded shut, the page expanded runs under the camera band, and otherwise
+        // the buttons stand in the band beside it — see `CameraStrip`.
+        .ignoresSafeArea(.container, edges: cameraStrip?.expanded == true ? .trailing : [])
+        .cameraStripRail { railButtons }
+    }
+
+    /// The bar's buttons, for the rail down the camera band: the way out first, then
+    /// travel, the lamp, and — on a page worth keeping — Save and Read as glyphs.
+    @ViewBuilder
+    private var railButtons: some View {
+        if showsAppBar { drawerButton } else { closeButton }
+        backButton
+        forwardButton
+        glowButton
+        if model.isSaveable {
+            AmberIconButton(symbol: savedFlash ? "checkmark" : "square.and.arrow.down") {
+                save(openReader: false)
+            }
+            .disabled(model.currentURL == nil)
+            .accessibilityLabel("Save")
+            AmberIconButton(symbol: "doc.plaintext") { save(openReader: true) }
+                .disabled(model.currentURL == nil)
+                .accessibilityLabel("Read")
         }
     }
 
@@ -346,6 +375,11 @@ struct BrowseScreen: View {
     private var bar: some View {
         if showsAppBar {
             appBar
+        } else if controlsRailed {
+            // The buttons are in the rail down the camera band; the bar is the address.
+            addressField
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
         } else if isCompact {
             // Held in one hand (`controlsTrailing`), every button keeps to the
             // right-hand end of its row, under the thumb; the address takes the rest.
@@ -354,7 +388,10 @@ struct BrowseScreen: View {
                     if !controlsTrailing { closeButton }
                     addressField
                     glowButton
-                    if controlsTrailing { closeButton }
+                    if controlsTrailing {
+                        closeButton
+                        CameraStripCollapse()
+                    }
                 }
                 HStack(spacing: 8) {
                     if !controlsTrailing {
@@ -372,6 +409,7 @@ struct BrowseScreen: View {
                     }
                 }
             }
+            .clearOfCameraStrip(cameraStrip)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .animation(.easeOut(duration: 0.22), value: model.isSaveable)
@@ -409,7 +447,7 @@ struct BrowseScreen: View {
     /// not a page you are done with.
     private var appBar: some View {
         HStack(spacing: 4) {
-            if !controlsTrailing {
+            if !controlsTrailing && !controlsRailed {
                 drawerButton
                 backButton
                 forwardButton
@@ -435,18 +473,22 @@ struct BrowseScreen: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            if model.isSaveable {
-                saveButton
-                readButton
-                    .padding(.trailing, 2)
+            if !controlsRailed {
+                if model.isSaveable {
+                    saveButton
+                    readButton
+                        .padding(.trailing, 2)
+                }
+                glowButton
             }
-            glowButton
             if controlsTrailing {
                 backButton
                 forwardButton
                 drawerButton
+                CameraStripCollapse()
             }
         }
+        .clearOfCameraStrip(cameraStrip)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .animation(.easeOut(duration: 0.22), value: model.isSaveable)

@@ -92,6 +92,10 @@ final class DisplaySettings {
     /// crease for its gutter, and turns rather than scrolls. Off, it scrolls as a
     /// column, as it does everywhere else. Nothing on any other device reads this.
     var bookView: Bool { didSet { write(bookView, "bookView") } }
+    /// On an iPhone Duo folded shut, the page runs the full width of the outer screen,
+    /// under the camera band, rather than keeping beside it with the buttons in a rail
+    /// down the band — see `CameraStrip`. Nothing on any other device reads this.
+    var fullWidthShut: Bool { didSet { write(fullWidthShut, "fullWidthShut") } }
 
     /// Glows the user has kept, most recent first.
     var presets: [GlowPreset] { didSet { writePresets() } }
@@ -145,6 +149,7 @@ final class DisplaySettings {
             rawValue: defaults.string(forKey: Self.prefix + "progressStyle") ?? ""
         ) ?? .percent
         bookView = defaults.object(forKey: Self.prefix + "bookView") as? Bool ?? true
+        fullWidthShut = defaults.object(forKey: Self.prefix + "fullWidthShut") as? Bool ?? false
         presets = defaults.data(forKey: Self.prefix + "presets").map(Self.decodePresets) ?? []
     }
 
@@ -197,6 +202,7 @@ final class DisplaySettings {
         showBloom = restored.showBloom
         progressStyle = restored.progressStyle
         bookView = restored.bookView
+        fullWidthShut = restored.fullWidthShut
 
         let lost = (old[Self.prefix + "presets"] as? Data).map(Self.decodePresets) ?? []
         let missing = lost.filter { preset in
