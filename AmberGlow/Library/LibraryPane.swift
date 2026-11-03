@@ -22,6 +22,8 @@ struct LibraryPane: View {
     @State private var rowMenu: (article: SavedArticle, y: CGFloat)?
     @State private var rowFrames: [SavedArticle.ID: CGRect] = [:]
     @State private var searchFocused = false
+    /// How far down the header and the controls reach.
+    @State private var furniture: CGFloat = 0
     /// The saving half of the tour, asked for from the empty shelf.
     @State private var showSavingGuide = false
 
@@ -29,16 +31,20 @@ struct LibraryPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Hairline()
-            controls
-            Hairline()
+            // Measured: the rail down the camera band starts below their rules.
+            VStack(spacing: 0) {
+                header
+                Hairline()
+                controls
+                Hairline()
+            }
+            .background { HeightReader(height: $furniture) }
             list
         }
         .coordinateSpace(name: "libraryPane")
         .overlay { rowMenuOverlay }
         // Folded shut, the buttons stand in the camera band — see `CameraStrip`.
-        .cameraStripRail {
+        .cameraStripRail(clearance: furniture) {
             AmberIconButton(symbol: "chevron.left", action: onBack)
             AmberIconButton(symbol: "plus", action: onAdd)
         }

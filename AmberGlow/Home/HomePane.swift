@@ -90,15 +90,18 @@ struct HomePane: View {
 
     private var front: some View {
         VStack(spacing: 0) {
-            header
-            Hairline()
-            if searching {
-                searchBar
+            // The header and the field, measured: the rail down the camera band starts
+            // below their rules.
+            VStack(spacing: 0) {
+                header
                 Hairline()
+                if searching { searchBar } else { fieldFacade }
+                Hairline()
+            }
+            .background { HeightReader(height: $furniture) }
+            if searching {
                 results
             } else {
-                fieldFacade
-                Hairline()
                 GeometryReader { proxy in
                     ScrollView {
                         // At least the pane's height, so the signature can rest at its
@@ -118,13 +121,16 @@ struct HomePane: View {
         .coordinateSpace(name: "homePane")
         .overlay { tileMenuOverlay }
         // Folded shut, the buttons stand in the camera band — see `CameraStrip`.
-        .cameraStripRail {
+        .cameraStripRail(clearance: furniture) {
             AmberIconButton(symbol: "highlighter", action: onHighlights)
             AmberIconButton(symbol: "sun.max", isActive: panelOpen, action: onGlow)
         }
     }
 
     private let signatureCentered = false
+
+    /// How far down the header and the field reach.
+    @State private var furniture: CGFloat = 0
 
     /// Jon's signature, quieter than anything on the page above it. Opens About.
     private var signature: some View {

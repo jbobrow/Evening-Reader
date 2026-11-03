@@ -89,6 +89,12 @@ struct PageCover<Page: View>: ViewModifier {
         let dim = dimFrom > 0 ? 0.28 * max(0, 1 - travel / dimFrom) : 0
         // A short page's content starts at its edge; a full one keeps clear of the island.
         let contentTop = rest == .full || !short ? top : 0
+        // The glass's width, bands and all. The page's content keeps to the safe area,
+        // but its lamp and its ground run to the edges — on the iPhone Duo folded shut
+        // that is the camera band, where the rail beneath would otherwise show beside
+        // the page, and could be used under it.
+        let side = geo.safeAreaInsets.leading + geo.safeAreaInsets.trailing
+        let shift = (geo.safeAreaInsets.trailing - geo.safeAreaInsets.leading) / 2
 
         ZStack(alignment: .top) {
             if !leaving {
@@ -101,6 +107,7 @@ struct PageCover<Page: View>: ViewModifier {
                 Color.clear
                     .contentShape(Rectangle())
                     .frame(height: max(0, travel - top))
+                    .ignoresSafeArea(.container, edges: .horizontal)
                     .onTapGesture { isPresented = false }
             }
             GlowSurface()
@@ -108,9 +115,18 @@ struct PageCover<Page: View>: ViewModifier {
                 // it draws to every edge; the edge is measured from the top of the glass,
                 // and the window runs the whole glass below it.
                 .mask(alignment: .top) {
-                    Rectangle().frame(height: glass).offset(y: travel - top)
+                    Rectangle()
+                        .frame(width: geo.size.width + side, height: glass)
+                        .offset(x: shift, y: travel - top)
                 }
                 .allowsHitTesting(false)
+            // The ground under the page, bands included: nothing beneath is reached
+            // through it.
+            Color.clear
+                .contentShape(Rectangle())
+                .frame(height: max(0, glass - travel))
+                .offset(y: travel - top)
+                .ignoresSafeArea(.container, edges: .horizontal)
             // The edge. Above the page, on the page it is coming over.
             if !leaving {
                 LinearGradient(colors: [amber.color(0.0, opacity: 0),

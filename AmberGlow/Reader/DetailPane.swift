@@ -134,7 +134,7 @@ struct DetailPane: View {
         .preference(key: PageHasSelection.self, value: selection != nil || gripping)
         // Folded shut, the buttons stand in the camera band beside the page, the way
         // to the drawer first — see `CameraStrip`.
-        .cameraStripRail {
+        .cameraStripRail(clearance: chromeVisible ? barHeight : 0) {
             drawerButton
             if let article { actions(for: article) }
         }

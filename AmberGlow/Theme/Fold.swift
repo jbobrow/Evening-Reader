@@ -71,6 +71,9 @@ extension EnvironmentValues {
 struct CameraStripRail<Buttons: View>: View {
     @Environment(\.toggleCameraStrip) private var toggle
     let strip: CameraStrip
+    /// How far down the screen's own furniture reaches — its bar, a field under it —
+    /// whose rules run on across the band. The rail starts below them.
+    var clearance: CGFloat = 0
     @ViewBuilder var buttons: Buttons
 
     var body: some View {
@@ -80,7 +83,7 @@ struct CameraStripRail<Buttons: View>: View {
             AmberIconButton(symbol: "arrow.up.left.and.arrow.down.right", action: toggle)
                 .accessibilityLabel("Use the full width")
         }
-        .padding(.top, strip.occluded.height + 10)
+        .padding(.top, max(strip.occluded.height + 10, clearance + 16))
         .padding(.bottom, 14)
         .frame(width: strip.width)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -101,8 +104,9 @@ extension View {
     /// Stands these buttons in the camera band beside this view, while the band holds
     /// the rail. This view keeps to the safe area; the rail is laid just past its
     /// trailing edge, which is where the band begins.
-    func cameraStripRail<Buttons: View>(@ViewBuilder buttons: @escaping () -> Buttons) -> some View {
-        modifier(CameraStripRailed(buttons: buttons))
+    func cameraStripRail<Buttons: View>(clearance: CGFloat = 0,
+                                        @ViewBuilder buttons: @escaping () -> Buttons) -> some View {
+        modifier(CameraStripRailed(clearance: clearance, buttons: buttons))
     }
 
     /// Keeps a bar's contents out of the camera band when the page has expanded under
@@ -145,12 +149,13 @@ struct CameraCutout: View {
 
 private struct CameraStripRailed<Buttons: View>: ViewModifier {
     @Environment(\.cameraStrip) private var strip
+    let clearance: CGFloat
     let buttons: () -> Buttons
 
     func body(content: Content) -> some View {
         content.overlay(alignment: .topTrailing) {
             if let strip, strip.rails {
-                CameraStripRail(strip: strip, buttons: buttons)
+                CameraStripRail(strip: strip, clearance: clearance, buttons: buttons)
                     .offset(x: strip.width)
                     .transition(.opacity)
             }
