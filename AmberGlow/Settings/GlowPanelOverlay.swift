@@ -15,6 +15,7 @@ import SwiftUI
 struct GlowPanelOverlay: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
+    @Environment(\.pageIsShort) private var pageIsShort
 
     var isCompact: Bool
     /// Which corner the card hangs from, on a wide panel: under the button that opened it.
@@ -32,7 +33,19 @@ struct GlowPanelOverlay: View {
         }
     }
 
+    @ViewBuilder
     private var fullScreen: some View {
+        // First short, over the page; then, opened the rest of the way, the whole panel.
+        if pageIsShort {
+            QuickPanel()
+                .transition(.opacity)
+        } else {
+            wholePage
+                .transition(.opacity)
+        }
+    }
+
+    private var wholePage: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Display settings")

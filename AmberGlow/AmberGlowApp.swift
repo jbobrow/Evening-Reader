@@ -230,7 +230,7 @@ struct RootView: View {
         // for the card a wide panel gets.
         .modifier(PageCover(isPresented: Binding(
             get: { isCompact && glowPanel != nil },
-            set: { if !$0 { glowPanel = nil } })) {
+            set: { if !$0 { glowPanel = nil } }), short: true) {
             GlowPanelOverlay(isCompact: true, size: .zero) { glowPanel = nil }
         })
         .modifier(PageCover(isPresented: $showOnboarding) {

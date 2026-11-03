@@ -1,12 +1,26 @@
 import SwiftUI
 
-/// The panel. Everything about the light first — warmth, glow, contrast, polarity, the
-/// lattice and the bloom, and the glows kept from them — then, past a rule, the type the
-/// page is set in.
+/// The panel, in two halves: the light the page is lit by, and the type it is set in.
+///
+/// One long column had both, a dozen controls with the type below the fold. Split, each
+/// half fits the glass. The light leads with the one choice that changes everything —
+/// paper or night — then the three that set the light itself, warmth, brightness and
+/// contrast, and the glows kept from them; the panel's texture is folded away under
+/// Advanced. The type leads with a sample of the page, so every change below it is seen.
 struct PanelControls: View {
     @Environment(DisplaySettings.self) private var settings
     @Environment(\.amber) private var amber
     @Environment(\.horizontalSizeClass) private var sizeClass
+
+    enum Tab: String, CaseIterable, Identifiable {
+        case light, type
+        var id: String { rawValue }
+        var label: String { self == .light ? "Light" : "Type" }
+    }
+
+    /// The half last looked at, so the panel opens on it again.
+    @AppStorage("panel.tab") private var tab: Tab = .light
+    @State private var showAdvanced = false
 
     /// Which line is in the window. Starts somewhere different each time the panel is
     /// opened, then walks the list in order, so "Show another" always gives another and
@@ -19,129 +33,226 @@ struct PanelControls: View {
     private var showsColumn: Bool { sizeClass != .compact }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                ramp
+        VStack(spacing: 0) {
+            AmberSegmented(selection: $tab, options: Tab.allCases, label: \.label)
+                .padding(.horizontal, 22)
+                .padding(.top, 18)
+                .padding(.bottom, 4)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    switch tab {
+                    case .light: light
+                    case .type: type
+                    }
+                }
+                .padding(22)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
 
-                group("Glow") {
-                    labelled("Warmth",
-                             value: settings.palette.warmthName) {
-                        AmberSlider(value: Binding(get: { settings.warmth },
-                                                   set: { settings.warmth = $0 }),
-                                    leadingSymbol: "lightbulb",
-                                    trailingSymbol: "flame",
-                                    trackGradient: warmthTrack)
-                    }
-                    labelled("Brightness", value: percent(settings.glow)) {
-                        AmberSlider(value: Binding(get: { settings.glow },
-                                                   set: { settings.glow = $0 }),
-                                    range: 0.05...1,
-                                    leadingSymbol: "sun.min",
-                                    trailingSymbol: "sun.max")
-                    }
-                    labelled("Contrast", value: percent(settings.contrast)) {
-                        AmberSlider(value: Binding(get: { settings.contrast },
-                                                   set: { settings.contrast = $0 }),
-                                    leadingSymbol: "circle.righthalf.filled",
-                                    trailingSymbol: "circle.hexagongrid")
-                    }
-                    AmberSegmented(selection: Binding(get: { settings.polarity },
-                                                      set: { settings.polarity = $0 }),
-                                   options: AmberPalette.Polarity.allCases,
-                                   label: \.label,
-                                   symbol: { $0.symbol })
+    // MARK: - Light
 
-                    // The lattice and the bloom are part of what the panel is lit like,
-                    // not a category of their own — under their own "Panel" heading they
-                    // read as a third thing the app does.
+    @ViewBuilder
+    private var light: some View {
+        HStack(spacing: 10) {
+            ForEach(AmberPalette.Polarity.allCases) { polarityTile($0) }
+        }
+        labelled("Warmth", value: settings.palette.warmthName) {
+            AmberSlider(value: Binding(get: { settings.warmth },
+                                       set: { settings.warmth = $0 }),
+                        leadingSymbol: "lightbulb",
+                        trailingSymbol: "flame",
+                        trackGradient: Self.warmthTrack(settings))
+        }
+        labelled("Brightness", value: percent(settings.glow)) {
+            AmberSlider(value: Binding(get: { settings.glow },
+                                       set: { settings.glow = $0 }),
+                        range: 0.05...1,
+                        leadingSymbol: "sun.min",
+                        trailingSymbol: "sun.max")
+        }
+        labelled("Contrast", value: percent(settings.contrast)) {
+            AmberSlider(value: Binding(get: { settings.contrast },
+                                       set: { settings.contrast = $0 }),
+                        leadingSymbol: "circle.righthalf.filled",
+                        trailingSymbol: "circle.hexagongrid")
+        }
+
+        group("Saved glows") {
+            if settings.presets.isEmpty {
+                Text("Keep a glow you like and it will wait here.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(amber.inkFaint)
+            } else {
+                FlowLayout(spacing: 8, lineSpacing: 8) {
+                    ForEach(settings.presets) { preset in
+                        PresetChip(preset: preset,
+                                   isActive: settings.matches(preset),
+                                   apply: { withAnimation(.easeOut(duration: 0.18)) {
+                                       settings.apply(preset)
+                                   } },
+                                   remove: { withAnimation(.easeOut(duration: 0.18)) {
+                                       settings.delete(preset)
+                                   } })
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button(settings.currentIsSaved ? "Saved" : "Save this glow") {
+                    withAnimation(.easeOut(duration: 0.18)) { settings.savePreset() }
+                }
+                .buttonStyle(AmberButtonStyle(kind: .outline, size: 13))
+                .disabled(settings.currentIsSaved)
+
+                Spacer()
+
+                AmberIconButton(symbol: "arrow.counterclockwise") {
+                    withAnimation(.easeOut(duration: 0.18)) { settings.resetPanel() }
+                }
+                .opacity(settings.isDefaultPanel ? 0.35 : 1)
+                .disabled(settings.isDefaultPanel)
+                .accessibilityLabel("Reset to default")
+            }
+        }
+
+        advanced
+    }
+
+    /// Paper or night, each drawn in its own colours: the choice shown rather than named.
+    private func polarityTile(_ polarity: AmberPalette.Polarity) -> some View {
+        var probe = settings.palette
+        probe.polarity = polarity
+        let chosen = settings.polarity == polarity
+        return Button {
+            withAnimation(.easeOut(duration: 0.25)) { settings.polarity = polarity }
+        } label: {
+            VStack(spacing: 7) {
+                Image(systemName: polarity.symbol)
+                    .font(.system(size: 20, weight: .medium))
+                Text(polarity.label)
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(probe.ink)
+            .frame(maxWidth: .infinity)
+            .frame(height: 78)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(probe.page))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(chosen ? amber.inkStrong : amber.rule, lineWidth: chosen ? 2 : 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(chosen ? .isSelected : [])
+    }
+
+    /// What is set once and rarely again — the panel's texture — folded away under one row.
+    @ViewBuilder
+    private var advanced: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { showAdvanced.toggle() }
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Advanced")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(amber.ink)
+                        Text("Pixel grid, backlight bloom")
+                            .font(.system(size: 12))
+                            .foregroundStyle(amber.inkFaint)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(amber.inkFaint)
+                        .rotationEffect(.degrees(showAdvanced ? 90 : 0))
+                }
+                .padding(.top, 14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .overlay(alignment: .top) { Hairline() }
+
+            if showAdvanced {
+                VStack(alignment: .leading, spacing: 18) {
                     AmberToggle(isOn: Binding(get: { settings.showTexture },
                                               set: { settings.showTexture = $0 }),
                                 title: "Pixel grid")
                     AmberToggle(isOn: Binding(get: { settings.showBloom },
                                               set: { settings.showBloom = $0 }),
                                 title: "Backlight bloom")
+                    ramp
                 }
-
-                group("Saved glows") {
-                    if settings.presets.isEmpty {
-                        Text("Keep a glow you like and it will wait here.")
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(amber.inkFaint)
-                    } else {
-                        FlowLayout(spacing: 8, lineSpacing: 8) {
-                            ForEach(settings.presets) { preset in
-                                PresetChip(preset: preset,
-                                           isActive: settings.matches(preset),
-                                           apply: { withAnimation(.easeOut(duration: 0.18)) {
-                                               settings.apply(preset)
-                                           } },
-                                           remove: { withAnimation(.easeOut(duration: 0.18)) {
-                                               settings.delete(preset)
-                                           } })
-                            }
-                        }
-                    }
-
-                    HStack(spacing: 10) {
-                        Button(settings.currentIsSaved ? "Saved" : "Save this glow") {
-                            withAnimation(.easeOut(duration: 0.18)) { settings.savePreset() }
-                        }
-                        .buttonStyle(AmberButtonStyle(kind: .outline, size: 13))
-                        .disabled(settings.currentIsSaved)
-
-                        Spacer()
-
-                        AmberIconButton(symbol: "arrow.counterclockwise") {
-                            withAnimation(.easeOut(duration: 0.18)) { settings.resetPanel() }
-                        }
-                        .opacity(settings.isDefaultPanel ? 0.35 : 1)
-                        .disabled(settings.isDefaultPanel)
-                        .accessibilityLabel("Reset to default")
-                    }
-                }
-
-                // The one division worth drawing. Everything above is the glow — the
-                // lamp, its texture, and the glows kept from it; below is what the page
-                // is set in. A rule and a wider gap say that, where four evenly spaced
-                // headings said only that there were four of them.
-                Hairline()
-                    .padding(.vertical, 8)
-
-                group("Type") {
-                    labelled("Size", value: String(format: "%.0f pt", settings.bodyPointSize)) {
-                        AmberSlider(value: Binding(get: { settings.textScale },
-                                                   set: { settings.textScale = $0 }),
-                                    range: 0.8...1.9,
-                                    ticks: 7,
-                                    leadingSymbol: "textformat.size.smaller",
-                                    trailingSymbol: "textformat.size.larger")
-                    }
-                    labelled("Leading", value: String(format: "%.2f", settings.lineHeight)) {
-                        AmberSlider(value: Binding(get: { settings.lineHeight },
-                                                   set: { settings.lineHeight = $0 }),
-                                    range: 1.25...2.05,
-                                    leadingSymbol: "arrow.up.and.down.text.horizontal",
-                                    trailingSymbol: "arrow.up.and.down")
-                    }
-                    if showsColumn {
-                        labelled("Column", value: String(format: "%.0f pt", settings.readerColumnPoints)) {
-                            AmberSlider(value: Binding(get: { settings.measure },
-                                                       set: { settings.measure = $0 }),
-                                        leadingSymbol: "arrow.right.and.line.vertical.and.arrow.left",
-                                        trailingSymbol: "arrow.left.and.line.vertical.and.arrow.right")
-                        }
-                    }
-                    AmberSegmented(selection: Binding(get: { settings.typeface },
-                                                      set: { settings.typeface = $0 }),
-                                   options: DisplaySettings.Typeface.allCases,
-                                   label: \.label)
-
-                    specimen
-                }
+                .transition(.opacity)
             }
-            .padding(22)
         }
-        .scrollIndicators(.hidden)
+    }
+
+    // MARK: - Type
+
+    @ViewBuilder
+    private var type: some View {
+        specimen
+        labelled("Size", value: String(format: "%.0f pt", settings.bodyPointSize)) {
+            AmberSlider(value: Binding(get: { settings.textScale },
+                                       set: { settings.textScale = $0 }),
+                        range: 0.8...1.9,
+                        ticks: 7,
+                        leadingSymbol: "textformat.size.smaller",
+                        trailingSymbol: "textformat.size.larger")
+        }
+        labelled("Leading", value: String(format: "%.2f", settings.lineHeight)) {
+            AmberSlider(value: Binding(get: { settings.lineHeight },
+                                       set: { settings.lineHeight = $0 }),
+                        range: 1.25...2.05,
+                        leadingSymbol: "arrow.up.and.down.text.horizontal",
+                        trailingSymbol: "arrow.up.and.down")
+        }
+        if showsColumn {
+            labelled("Column", value: String(format: "%.0f pt", settings.readerColumnPoints)) {
+                AmberSlider(value: Binding(get: { settings.measure },
+                                           set: { settings.measure = $0 }),
+                            leadingSymbol: "arrow.right.and.line.vertical.and.arrow.left",
+                            trailingSymbol: "arrow.left.and.line.vertical.and.arrow.right")
+            }
+        }
+        group("Typeface") {
+            HStack(spacing: 8) {
+                ForEach(DisplaySettings.Typeface.allCases) { faceTile($0) }
+            }
+        }
+    }
+
+    /// Each face shown in itself.
+    private func faceTile(_ face: DisplaySettings.Typeface) -> some View {
+        let chosen = settings.typeface == face
+        return Button {
+            withAnimation(.easeOut(duration: 0.18)) { settings.typeface = face }
+        } label: {
+            VStack(spacing: 2) {
+                Text("Ag")
+                    .font(.system(size: 24, design: face.design))
+                Text(face.label)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(amber.ink)
+            .frame(maxWidth: .infinity)
+            .frame(height: 64)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(chosen ? amber.color(0.93, opacity: 0.6) : .clear)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(chosen ? amber.inkStrong : amber.rule, lineWidth: chosen ? 2 : 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 
     // MARK: - Pieces
@@ -256,12 +367,15 @@ struct PanelControls: View {
         }
     }
 
-    private var warmthTrack: LinearGradient {
-        // Show the choice itself: the same page level rendered across the warmth range.
+    static func warmthTrack(_ settings: DisplaySettings) -> LinearGradient {
+        // Show the choice itself: the glow rendered across the warmth range. The glow is
+        // the page on paper and the type at night — at night the page is near black at
+        // every warmth, and a track drawn from it was a black bar with nothing to choose.
+        let level = settings.polarity == .night ? 0.0 : 0.86
         let stops = stride(from: 0.0, through: 1.0, by: 0.1).map { t -> Color in
             var probe = settings.palette
             probe.warmth = t
-            return probe.color(0.86)
+            return probe.color(level)
         }
         return LinearGradient(colors: stops, startPoint: .leading, endPoint: .trailing)
     }

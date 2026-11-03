@@ -71,7 +71,7 @@ struct BrowseScreen: View {
             // On a phone the display settings are a page of their own, up over this one.
             .modifier(PageCover(isPresented: Binding(
                 get: { isCompact && glowOpen },
-                set: { if !$0 { glowOpen = false } })) {
+                set: { if !$0 { glowOpen = false } }), short: true) {
                 GlowPanelOverlay(isCompact: true, size: .zero) { glowOpen = false }
             })
             .statusBarHidden(true)
