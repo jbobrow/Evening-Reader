@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(UIKit)
-import UIKit
-#endif
+import ImageIO
 
 /// Pulls an article's pictures onto the device so a saved page reads the same on a plane
 /// as it does on wifi.
@@ -103,9 +101,12 @@ enum OfflineAssets {
     /// engraving saved as JPEG carries ringing artifacts across the whole histogram and
     /// measures much like a photograph. Ink on paper is mostly ink or mostly paper; a
     /// photograph lives in the greys.
+    ///
+    /// Decoded with ImageIO rather than UIKit, so it reads the same on the Mac, where the
+    /// browser extensions save pictures too.
     static func classify(_ data: Data) -> String? {
-        #if canImport(UIKit)
-        guard let cg = UIImage(data: data)?.cgImage else { return nil }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cg = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         let w = max(1, min(96, cg.width))
         let h = max(1, min(96, cg.height))
         var buffer = [UInt8](repeating: 0, count: w * h * 4)
@@ -132,9 +133,6 @@ enum OfflineAssets {
         }
         guard total > 0 else { return nil }
         return (Double(mid) / Double(total) < 0.30 || distinct <= 16) ? "ag-line" : "ag-photo"
-        #else
-        return nil
-        #endif
     }
 
     // MARK: - Tag surgery

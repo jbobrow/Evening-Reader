@@ -19,3 +19,10 @@ Packages/
 # App Store screenshots: rendered output, tens of megabytes, remade with
 # AppStore/seed-library.py and a simulator whenever the app changes.
 AppStore/screenshots/
+
+# The app's extraction scripts, copied into the Chrome extension by
+# Extension/native/install-chrome-host.sh. The originals are in AmberGlow/Reader/Resources.
+Extension/web/extract.js
+Extension/web/defuddle.js
+Extension/web/defuddle-run.js
+Extension/web/defuddle-LICENSE.txt

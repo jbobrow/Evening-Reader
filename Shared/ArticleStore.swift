@@ -140,6 +140,30 @@ final class ArticleStore {
         }
     }
 
+    /// A library opened where it already is, by something that is not the app: the Mac's
+    /// browser extensions, writing into the library in iCloud from outside it.
+    ///
+    /// Nothing is moved, migrated or adopted, and nothing local is kept — no app group,
+    /// no Documents, no index cache worth reading. The folder is the library, as it is.
+    /// With no device of its own, a scan never clears a folder whose note is missing:
+    /// that is the app's call, made where the reader is.
+    init(libraryAt root: URL) {
+        self.root = root
+        localRoot = root
+        deviceRoot = nil
+        usesAppGroup = false
+        isCloud = root.path.contains("/Mobile Documents/")
+        legacyIndexURL = root.appendingPathComponent("index.json")
+        legacyBodiesDir = root.appendingPathComponent("Bodies", isDirectory: true)
+        legacyAssetsDir = root.appendingPathComponent("Assets", isDirectory: true)
+    }
+
+    /// Waits for every write queued before it. For a writer whose process ends as soon
+    /// as it has saved, before a queued write would otherwise have run.
+    func flush() async {
+        await onQueue {}
+    }
+
     /// Runs `work` on the store's own queue and hands back what it returns, without
     /// holding whichever thread asked. Everything that scans or moves the library goes
     /// through here rather than `queue.sync`: with the library in iCloud, a read can
