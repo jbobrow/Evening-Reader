@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Evening Reader App Store frame</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
+<style>
+  /* One App Store screenshot. render.py opens this page once per frame with
+     ?frame=N&size=phone|pad and captures the window: 1320 × 2868 for the 6.9" iPhone,
+     2064 × 2752 for the 13" iPad.
+
+     As on the site, the ground is paper or ink and the amber lives only on the glass:
+     the screens are the warmest thing on the page, and each throws its light onto the
+     paper around it, as the panel would on a desk at night. The type is the site's:
+     Bricolage Grotesque, heavy and tight. */
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --font: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+    --W: 1320px;
+    --H: 2868px;
+  }
+
+  html, body {
+    margin: 0;
+    width: var(--W);
+    height: var(--H);
+    overflow: hidden;
+  }
+
+  body {
+    position: relative;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The lamp: a soft light behind the device, as the panel's own bloom lights a page. */
+  body::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: var(--glow-top, 1500px);
+    width: 1700px;
+    height: 1700px;
+    margin: -850px 0 0 -850px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, var(--glow), transparent);
+    pointer-events: none;
+  }
+
+  .copy {
+    position: relative;
+    z-index: 2;
+    padding: 196px 100px 0;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 138px;
+    font-weight: 800;
+    letter-spacing: -.034em;
+    line-height: .96;
+  }
+
+  p {
+    margin: 40px 0 0;
+    max-width: 1080px;
+    font-size: 58px;
+    font-weight: 500;
+    letter-spacing: -.012em;
+    line-height: 1.22;
+    opacity: .78;
+  }
+
+  /* ─── Hero: icon over name ─── */
+
+  .hero .copy { padding-top: 168px; text-align: center; }
+  .lockup { display: flex; flex-direction: column; align-items: center; }
+  .lockup img {
+    width: 260px;
+    height: 260px;
+    border-radius: 22.5%;
+    box-shadow: 0 16px 50px var(--shadow);
+  }
+  .lockup h1 { margin-top: 56px; font-size: 156px; white-space: nowrap; }
+  .hero p { margin: 34px auto 0; max-width: 1000px; }
+
+  /* ─── Device ─── */
+
+  .device {
+    position: absolute;
+    z-index: 1;
+    left: 50%;
+    top: var(--device-top, 900px);
+    width: var(--device-w);
+    padding: var(--bezel);
+    margin-left: calc(var(--device-w) / -2);
+    transform: rotate(var(--tilt, 0deg));
+    transform-origin: 50% 0;
+    border-radius: var(--outer-r);
+    background: #1C1D22;
+    box-shadow:
+      0 0 0 3px rgba(255, 255, 255, .08) inset,
+      0 50px 130px var(--shadow);
+  }
+
+  .screen {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--inner-r);
+    background: #000;
+  }
+  .screen img { display: block; width: 100%; }
+
+  /* The Dynamic Island. Screen captures leave it out; the simulator only draws it
+     over the top. The iPhone 18 Pro's, scaled to the 1000-pixel screen. */
+  .phone .screen::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 35px;
+    width: 236px;
+    height: 90px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: #000;
+  }
+
+  .phone { --device-w: 1060px; --bezel: 30px; --outer-r: 156px; --inner-r: 128px; }
+
+  /* ─── iPad: a wider canvas, the copy over a tablet ─── */
+
+  .pad {
+    --W: 2064px;
+    --H: 2752px;
+  }
+  .pad .copy { padding: 190px 160px 0; text-align: center; }
+  .pad h1 { font-size: 150px; }
+  .pad p { margin: 40px auto 0; max-width: 1500px; font-size: 62px; }
+  .pad .lockup h1 { font-size: 170px; }
+  .pad .device { --device-w: 1700px; --bezel: 40px; --outer-r: 96px; --inner-r: 60px; }
+</style>
+</head>
+<body>
+<script>
+  // The site's two grounds, lights on and lights off.
+  const PAPER = '#F4F3F1';
+  const INK = '#16171B';
+  const NIGHT = { bg: '#0E0E10', text: '#EDEBE7', glow: 'rgba(255, 140, 50, .30)', shadow: 'rgba(0, 0, 0, .7)' };
+
+  const FRAMES = [
+    {
+      hero: true, bg: PAPER,
+      body: 'Soft on the eyes, warmth for the soul.',
+      phone: 'front.png', pad: 'pad-front.png', tilt: 0,
+    },
+    {
+      bg: PAPER,
+      title: 'Just the\nwords.',
+      body: 'Save from Safari or any app. The page comes clean, pictures and all.',
+      phone: 'reader.png', pad: 'pad-reader.png', tilt: -2,
+    },
+    {
+      bg: PAPER,
+      title: 'Set the glow\nyourself.',
+      body: 'Warmth and brightness, right over the page you’re reading.',
+      phone: 'display.png', pad: 'pad-display.png', tilt: 2,
+    },
+    {
+      bg: PAPER,
+      title: 'Keep the\nbest lines.',
+      body: 'Highlights and notes, gathered on one page.',
+      phone: 'highlight.png', pad: 'pad-highlight.png', tilt: -2,
+    },
+    {
+      ...NIGHT,
+      title: 'The rest of the\ninternet, calmer.',
+      body: 'Video and social sites, in one color like everything else.',
+      phone: 'browser.png', pad: 'pad-browser.png', tilt: 2,
+    },
+    {
+      bg: PAPER,
+      title: 'Books and\nPDFs, too.',
+      body: 'EPUBs and PDFs, kept whole and read offline.',
+      phone: 'book.png', pad: 'pad-book.png', tilt: -2,
+    },
+    {
+      bg: PAPER,
+      title: 'Saved to read,\nyours to keep.',
+      body: 'A Markdown note per article, in your own iCloud folder.',
+      phone: 'library.png', pad: 'pad-library.png', tilt: 2,
+    },
+    {
+      ...NIGHT,
+      title: 'Lights out.',
+      body: 'Night turns the page dark, still in amber. No blue light, anywhere.',
+      phone: 'night.png', pad: 'pad-night.png', tilt: -2,
+    },
+  ];
+
+  const params = new URLSearchParams(location.search);
+  const n = Number(params.get('frame') || 1);
+  const size = params.get('size') || 'phone';
+  const f = FRAMES[n - 1];
+  const root = document.documentElement;
+
+  if (size === 'pad') root.classList.add('pad');
+  root.style.setProperty('--bg', f.bg);
+  root.style.setProperty('--text', f.text || INK);
+  root.style.setProperty('--glow', f.glow || 'rgba(255, 160, 86, .42)');
+  root.style.setProperty('--shadow', f.shadow || 'rgba(110, 50, 10, .30)');
+  if (f.hero) document.body.classList.add('hero');
+
+  const copy = document.createElement('div');
+  copy.className = 'copy';
+
+  if (f.hero) {
+    const lockup = document.createElement('div');
+    lockup.className = 'lockup';
+    const icon = document.createElement('img');
+    icon.src = '../../docs/assets/icon.png';
+    const h1 = document.createElement('h1');
+    h1.textContent = 'Evening Reader';
+    lockup.append(icon, h1);
+    copy.append(lockup);
+  } else {
+    const h1 = document.createElement('h1');
+    f.title.split('\n').forEach((line, i) => {
+      if (i) h1.append(document.createElement('br'));
+      h1.append(line);
+    });
+    copy.append(h1);
+  }
+
+  const body = document.createElement('p');
+  body.textContent = f.body;
+  copy.append(body);
+  document.body.append(copy);
+
+  const device = document.createElement('div');
+  device.className = 'device ' + size;
+  device.style.setProperty('--tilt', (size === 'pad' ? f.tilt / 2 : f.tilt) + 'deg');
+  const screen = document.createElement('div');
+  screen.className = 'screen';
+  const shot = document.createElement('img');
+  shot.src = 'captures/' + (size === 'pad' ? f.pad : f.phone);
+  screen.append(shot);
+  device.append(screen);
+  document.body.append(device);
+
+  // The device starts a set gap below the copy, however many lines it wraps to, and
+  // the lamp sits behind its upper half.
+  document.fonts.ready.then(() => {
+    const top = copy.getBoundingClientRect().bottom + (f.hero ? 120 : 130);
+    root.style.setProperty('--device-top', top + 'px');
+    root.style.setProperty('--glow-top', (top + 500) + 'px');
+  });
+</script>
+</body>
+</html>
