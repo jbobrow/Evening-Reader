@@ -28,6 +28,23 @@ struct WhatsNew: Identifiable {
     /// Every version with something to show, newest first. A version with no entry shows
     /// nothing.
     static let releases: [WhatsNew] = [
+        WhatsNew(version: "1.2", items: [
+            Item(symbol: "sun.max",
+                 title: "The glow, over the page",
+                 body: "Display settings come up short over the page you're reading, so a change is seen on the real thing. Pull up for everything, now in two tabs, Light and Type."),
+            Item(symbol: "folder",
+                 title: "Your library as notes",
+                 body: "Each article is a Markdown note with its pictures and highlights beside it, so the library opens as an Obsidian vault."),
+            Item(symbol: "keyboard",
+                 title: "Accents and dictation",
+                 body: "Hold a key for its accents, and tap the mic to speak instead of type."),
+            Item(symbol: "play.rectangle",
+                 title: "Video, full screen",
+                 body: "A video fills the glass in either orientation, with simple controls of its own."),
+            Item(symbol: "book",
+                 title: "iPhone Duo",
+                 body: "Opened sideways, an article is set as a two-page spread. Folded shut, the buttons stand beside the camera, or the page takes the whole width."),
+        ]),
         WhatsNew(version: "1.1.1", offersTour: true, items: [
             Item(symbol: "book.pages",
                  title: "A tour of Evening Reader",
