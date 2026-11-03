@@ -447,7 +447,11 @@ struct ReaderRenderer {
             var keep = window.__ag.progress();
             relaying = true;
             root.classList.toggle("ag-paged", on);
-            if (on) { window.__ag.fitPages(); } else { root.style.width = ""; }
+            // Off, the body is let go along with the document — left at the spread's
+            // width, the column would be centred somewhere off past the right-hand
+            // edge of the glass — and the page brought back across to its left edge.
+            window.__ag.fitPages();
+            if (!on) { window.scrollTo(0, window.scrollY); }
             window.__ag.restore(keep);
             requestAnimationFrame(function () { relaying = false; });
           },
@@ -457,8 +461,7 @@ struct ReaderRenderer {
           // the document does: columns past the document's width still lay out, so
           // the document is never narrowed to be measured — narrowed, the scroll view
           // clamps the reader's place to the narrower document before it is widened
-          // again. Rounding can leave one column past the edge; measured again, the
-          // document takes it in.
+          // again.
           fitPages: function () {
             var root = document.documentElement, body = document.body;
             if (!window.__ag.paged()) {
@@ -476,8 +479,17 @@ struct ReaderRenderer {
               body.style.width = (screens * w) + "px";
             };
             fit();
-            var again = range.getBoundingClientRect().right + window.scrollX;
-            if (again > screens * w + 1) { screens += 1; fit(); }
+            // Measured again at the width it was given, until the two agree. Either
+            // way: rounding can leave a column past the edge, and a measure taken
+            // while the glass is still turning — the spread set at the old width,
+            // poured again at the new — runs long, and would leave a blank page or
+            // more at the end that a last turn lands on.
+            for (var tries = 0; tries < 3; tries++) {
+              var again = range.getBoundingClientRect().right + window.scrollX;
+              var need = Math.max(1, Math.ceil((again + 1) / w));
+              if (need === screens) break;
+              screens = need; fit();
+            }
             // Back on the page the reader was on, if the fitting moved it.
             var span = Math.max(0, screens * w - w);
             var page = Math.min(span, Math.round(x / w) * w);
@@ -554,7 +566,12 @@ struct ReaderRenderer {
         // The glass turned, or the panel changed size: a spread is poured again into
         // pages of the new size, and opened at the page the reader was on.
         window.addEventListener("resize", function () {
-          if (!window.__ag.paged()) return;
+          if (!window.__ag.paged()) {
+            // A column left with a spread's width, should the glass turn before the
+            // page is told it is no longer one.
+            if (document.body.style.width) { window.__ag.fitPages(); window.__ag.restore(anchored); }
+            return;
+          }
           relaying = true;
           var keep = anchored;
           requestAnimationFrame(function () {
