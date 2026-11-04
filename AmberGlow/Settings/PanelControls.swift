@@ -50,6 +50,7 @@ struct PanelControls: View {
                 .padding(22)
             }
             .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
         }
     }
 

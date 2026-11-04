@@ -79,30 +79,51 @@ struct GlowPanelOverlay: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: onClose)
 
-            PanelControls()
-                .frame(width: width)
-                // As tall as the glass allows, so the panel is not cut mid-control
-                // when there is room to show the whole thing.
-                .frame(maxHeight: max(320, size.height - top - 24))
-                .background {
-                    ZStack {
-                        amber.color(0.93)
-                        if settings.showTexture { PixelGrid() }
-                    }
+            // As tall as what is in it, so tall glass gets no empty card under the
+            // controls; past what the glass allows, the controls scroll.
+            FitsContents(limit: max(320, size.height - top - 24)) {
+                PanelControls()
+                    .frame(width: width)
+            }
+            .background {
+                ZStack {
+                    amber.color(0.93)
+                    if settings.showTexture { PixelGrid() }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(amber.color(0.62, opacity: 0.5), lineWidth: 1)
-                }
-                .shadow(color: amber.color(0.0, opacity: 0.22), radius: 26, y: 10)
-                .padding(.top, top)
-                .padding(.horizontal, 12)
-                .transition(
-                    .scale(scale: 0.96, anchor: alignment == .topLeading ? .topLeading : .topTrailing)
-                    .combined(with: .opacity)
-                )
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(amber.color(0.62, opacity: 0.5), lineWidth: 1)
+            }
+            .shadow(color: amber.color(0.0, opacity: 0.22), radius: 26, y: 10)
+            .padding(.top, top)
+            .padding(.horizontal, 12)
+            .transition(
+                .scale(scale: 0.96, anchor: alignment == .topLeading ? .topLeading : .topTrailing)
+                .combined(with: .opacity)
+            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Its content's own height, up to a limit.
+///
+/// `frame(maxHeight:)` will not do: it takes the limit whether the content needs it or
+/// not. And being a layout rather than a measurement kept in state, the height moves in
+/// the same animation as whatever changed it — Advanced opening, the tabs changing.
+private struct FitsContents: Layout {
+    var limit: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let content = subviews.first else { return .zero }
+        let ideal = content.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: ideal.width, height: min(ideal.height, limit))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize,
+                       subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 }

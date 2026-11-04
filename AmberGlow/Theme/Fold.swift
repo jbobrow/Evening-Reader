@@ -97,7 +97,8 @@ struct CameraStripRail<Buttons: View>: View {
         VStack(spacing: 12) {
             buttons
             Spacer(minLength: 16)
-            AmberIconButton(symbol: "arrow.up.left.and.arrow.down.right", action: toggle)
+            // The way the page goes: out to the edge of the glass, over the band.
+            AmberIconButton(symbol: "arrow.right.to.line", action: toggle)
                 .accessibilityLabel("Use the full width")
         }
         .environment(\.amberIconButtonFrame, CGSize(width: min(60, strip.width - 12), height: 50))
@@ -113,7 +114,8 @@ struct CameraStripCollapse: View {
     @Environment(\.toggleCameraStrip) private var toggle
 
     var body: some View {
-        AmberIconButton(symbol: "arrow.down.right.and.arrow.up.left", action: toggle)
+        // The way the page goes: in from the edge of the glass, off the band.
+        AmberIconButton(symbol: "arrow.left.to.line", action: toggle)
             .accessibilityLabel("Keep the page beside the camera")
     }
 }
