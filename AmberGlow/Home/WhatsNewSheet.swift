@@ -117,6 +117,9 @@ private struct WhatsNewPage: View {
 
     private var isCompact: Bool { sizeClass == .compact }
 
+    /// How deep the page fades away above the footer.
+    private let footFade: CGFloat = 36
+
     var body: some View {
         ZStack {
             if takingTour {
@@ -153,10 +156,19 @@ private struct WhatsNewPage: View {
                 .frame(maxWidth: 460, alignment: .leading)
                 .padding(.horizontal, isCompact ? 26 : 32)
                 .padding(.top, isCompact ? 46 : 80)
-                .padding(.bottom, 16)
+                // As deep as the fade, so the last line comes clear of it at the end.
+                .padding(.bottom, footFade)
                 .frame(maxWidth: .infinity)
             }
             .scrollBounceBehavior(.basedOnSize)
+            // What is still to come goes soft above the button, rather than being cut off.
+            .mask {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: footFade)
+                }
+            }
 
             footer
         }

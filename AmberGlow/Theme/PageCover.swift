@@ -126,10 +126,13 @@ struct PageCover<Page: View>: ViewModifier {
                 }
                 .allowsHitTesting(false)
             // The ground under the page, bands included: nothing beneath is reached
-            // through it.
+            // through it. Taller than this stack is laid out, and kept from saying so: the
+            // stack would take that height and hand it to the page, and whatever the page
+            // stands at its foot would go off the bottom of the glass.
             Color.clear
                 .contentShape(Rectangle())
                 .frame(height: max(0, glass - travel))
+                .frame(height: geo.size.height, alignment: .top)
                 .offset(y: travel - top)
                 .ignoresSafeArea(.container, edges: .horizontal)
             // The edge. Above the page, on the page it is coming over.
