@@ -8,8 +8,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
 <style>
   /* One App Store screenshot. render.py opens this page once per frame with
-     ?frame=N&size=phone|pad and captures the window: 1320 × 2868 for the 6.9" iPhone,
-     2064 × 2752 for the 13" iPad.
+     ?frame=N&size=phone|pad|duo-outer|duo-inner and captures the window: 1320 × 2868 for
+     the 6.9" iPhone, 2064 × 2752 for the 13" iPad, and for the iPhone Duo 1398 × 2034
+     folded shut and 2853 × 2007 opened sideways.
 
      As on the site, the ground is paper or ink and the amber lives only on the glass:
      the screens are the warmest thing on the page, and each throws its light onto the
@@ -46,9 +47,9 @@
     position: absolute;
     left: 50%;
     top: var(--glow-top, 1500px);
-    width: 1700px;
-    height: 1700px;
-    margin: -850px 0 0 -850px;
+    width: var(--glow-size, 1700px);
+    height: var(--glow-size, 1700px);
+    margin: calc(var(--glow-size, 1700px) / -2) 0 0 calc(var(--glow-size, 1700px) / -2);
     border-radius: 50%;
     background: radial-gradient(closest-side, var(--glow), transparent);
     pointer-events: none;
@@ -145,6 +146,49 @@
   .pad p { margin: 40px auto 0; max-width: 1500px; font-size: 62px; }
   .pad .lockup h1 { font-size: 170px; }
   .pad .device { --device-w: 1700px; --bezel: 40px; --outer-r: 96px; --inner-r: 60px; }
+
+  /* ─── iPhone Duo, folded shut: nearly as wide as it is tall, so the copy is smaller
+     and the device runs off the foot. The lens, which captures leave out like the
+     island: 37 points at (399.7, 29.3), on the 466 × 678 point screen. ─── */
+
+  .duo-outer .screen::after {
+    content: "";
+    position: absolute;
+    left: 85.77%;
+    top: 4.32%;
+    width: 7.94%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: #000;
+  }
+
+  .duo-outer {
+    --W: 1398px;
+    --H: 2034px;
+    --glow-size: 1500px;
+  }
+  .duo-outer .copy { padding: 110px 90px 0; }
+  .duo-outer h1 { font-size: 104px; }
+  .duo-outer p { margin-top: 26px; max-width: 1180px; font-size: 44px; }
+  .duo-outer .lockup img { width: 150px; height: 150px; }
+  .duo-outer .lockup h1 { margin-top: 30px; font-size: 118px; }
+  .duo-outer .device { --device-w: 1180px; --bezel: 26px; --outer-r: 112px; --inner-r: 90px; }
+
+  /* ─── iPhone Duo, opened sideways: a wide canvas for the two-page spread, the copy
+     on one line over it. ─── */
+
+  .duo-inner {
+    --W: 2853px;
+    --H: 2007px;
+    --glow-size: 2800px;
+  }
+  .duo-inner .copy { padding: 110px 180px 0; text-align: center; }
+  .duo-inner h1 { font-size: 118px; }
+  .duo-inner p { margin: 24px auto 0; max-width: 2300px; font-size: 54px; }
+  .duo-inner .lockup { flex-direction: row; justify-content: center; gap: 44px; }
+  .duo-inner .lockup img { width: 130px; height: 130px; }
+  .duo-inner .lockup h1 { margin-top: 0; font-size: 130px; }
+  .duo-inner .device { --device-w: 2420px; --bezel: 34px; --outer-r: 92px; --inner-r: 62px; }
 </style>
 </head>
 <body>
@@ -210,7 +254,8 @@
   const f = FRAMES[n - 1];
   const root = document.documentElement;
 
-  if (size === 'pad') root.classList.add('pad');
+  if (size !== 'phone') root.classList.add(size);
+  const wide = size !== 'phone';
   root.style.setProperty('--bg', f.bg);
   root.style.setProperty('--text', f.text || INK);
   root.style.setProperty('--glow', f.glow || 'rgba(255, 160, 86, .42)');
@@ -219,6 +264,9 @@
 
   const copy = document.createElement('div');
   copy.className = 'copy';
+
+  // Opened sideways, the title's two lines are one.
+  const titleLines = f.title && size === 'duo-inner' ? [f.title.replace('\n', ' ')] : f.title?.split('\n');
 
   if (f.hero) {
     const lockup = document.createElement('div');
@@ -231,7 +279,7 @@
     copy.append(lockup);
   } else {
     const h1 = document.createElement('h1');
-    f.title.split('\n').forEach((line, i) => {
+    titleLines.forEach((line, i) => {
       if (i) h1.append(document.createElement('br'));
       h1.append(line);
     });
@@ -245,11 +293,11 @@
 
   const device = document.createElement('div');
   device.className = 'device ' + size;
-  device.style.setProperty('--tilt', (size === 'pad' ? f.tilt / 2 : f.tilt) + 'deg');
+  device.style.setProperty('--tilt', (wide ? f.tilt / 2 : f.tilt) + 'deg');
   const screen = document.createElement('div');
   screen.className = 'screen';
   const shot = document.createElement('img');
-  shot.src = 'captures/' + (size === 'pad' ? f.pad : f.phone);
+  shot.src = 'captures/' + (size === 'pad' ? f.pad : size === 'phone' ? f.phone : size + '-' + f.phone);
   screen.append(shot);
   device.append(screen);
   document.body.append(device);
@@ -257,7 +305,8 @@
   // The device starts a set gap below the copy, however many lines it wraps to, and
   // the lamp sits behind its upper half.
   document.fonts.ready.then(() => {
-    const top = copy.getBoundingClientRect().bottom + (f.hero ? 120 : 130);
+    const gap = size.startsWith('duo') ? 76 : f.hero ? 120 : 130;
+    const top = copy.getBoundingClientRect().bottom + gap;
     root.style.setProperty('--device-top', top + 'px');
     root.style.setProperty('--glow-top', (top + 500) + 'px');
   });
