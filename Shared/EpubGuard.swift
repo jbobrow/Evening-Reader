@@ -17,25 +17,20 @@ enum EpubGuard {
 
         var title: String {
             switch self {
-            case .locked: return "This book is locked by its publisher."
-            case .fulfillmentFile: return "That's a loan ticket, not a book."
-            case .notAnEpub: return "That doesn't look like a book."
+            case .locked: return String(localized: "This book is locked by its publisher.")
+            case .fulfillmentFile: return String(localized: "That's a loan ticket, not a book.")
+            case .notAnEpub: return String(localized: "That doesn't look like a book.")
             }
         }
 
         var detail: String {
             switch self {
             case .locked:
-                return "Library loans and most store purchases carry Adobe or LCP "
-                    + "protection, which only their own app can open — Libby keeps its "
-                    + "loans inside Libby. Evening Reader reads books that aren't locked: "
-                    + "Standard Ebooks, Project Gutenberg, and DRM-free purchases from the "
-                    + "stores that offer them."
+                return String(localized: "Library loans and most store purchases carry Adobe or LCP protection, which only their own app can open — Libby keeps its loans inside Libby. Evening Reader reads books that aren't locked: Standard Ebooks, Project Gutenberg, and DRM-free purchases from the stores that offer them.")
             case .fulfillmentFile:
-                return "An .acsm file is a note telling Adobe's software which book to "
-                    + "fetch and lock to your account. There is no book inside it to read."
+                return String(localized: "An .acsm file is a note telling Adobe's software which book to fetch and lock to your account. There is no book inside it to read.")
             case .notAnEpub:
-                return "This file isn't something Evening Reader knows how to open as a book."
+                return String(localized: "This file isn't something Evening Reader knows how to open as a book.")
             }
         }
     }

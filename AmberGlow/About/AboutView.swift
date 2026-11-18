@@ -143,11 +143,11 @@ struct AboutView<AppRows: View>: View {
         appRows
         if let appStore = app.appStore {
             ShareLink(item: appStore, preview: SharePreview(app.name, image: app.icon)) {
-                AboutRowLabel(title: "Share this app", systemImage: "square.and.arrow.up")
+                AboutRowLabel(title: String(localized: "Share this app"), systemImage: "square.and.arrow.up")
             }
             if let review = URL(string: appStore.absoluteString + "?action=write-review") {
                 Link(destination: review) {
-                    AboutRowLabel(title: "Rate this app", systemImage: "star")
+                    AboutRowLabel(title: String(localized: "Rate this app"), systemImage: "star")
                 }
             }
         }
@@ -155,13 +155,13 @@ struct AboutView<AppRows: View>: View {
 
     @ViewBuilder private var webRows: some View {
         if let website = app.website {
-            AboutLink(title: "Website", systemImage: "safari", url: website)
+            AboutLink(title: String(localized: "Website"), systemImage: "safari", url: website)
         }
         if let support = app.support {
-            AboutLink(title: "Support", systemImage: "questionmark.bubble", url: support)
+            AboutLink(title: String(localized: "Support"), systemImage: "questionmark.bubble", url: support)
         }
         if let privacy = app.privacy {
-            AboutLink(title: "Privacy policy", systemImage: "hand.raised", url: privacy)
+            AboutLink(title: String(localized: "Privacy policy"), systemImage: "hand.raised", url: privacy)
         }
     }
 
@@ -219,7 +219,7 @@ struct AboutView<AppRows: View>: View {
         let info = Bundle.main.infoDictionary
         guard let short = info?["CFBundleShortVersionString"] as? String else { return nil }
         let build = info?["CFBundleVersion"] as? String
-        return "Version \(short)" + (build.map { " (\($0))" } ?? "")
+        return String(localized: "Version \(short)") + (build.map { " (\($0))" } ?? "")
     }
 }
 

@@ -59,33 +59,33 @@ private struct OnboardingPages: View {
 
     private static let saving: [Step] = [
         Step(art: .litPage,
-             caption: "Welcome",
-             title: "Save it now, read it tonight",
-             body: "Evening Reader keeps the articles you come across during the day, stripped down to the words and lit warm for reading after dark."),
+             caption: String(localized: "Welcome"),
+             title: String(localized: "Save it now, read it tonight"),
+             body: String(localized: "Evening Reader keeps the articles you come across during the day, stripped down to the words and lit warm for reading after dark.")),
         Step(art: .shareButton,
-             caption: "Step one",
-             title: "Tap Share",
-             body: "In Safari — or any app with a link in it — tap the Share button on the page you want to keep."),
+             caption: String(localized: "Step one"),
+             title: String(localized: "Tap Share"),
+             body: String(localized: "In Safari — or any app with a link in it — tap the Share button on the page you want to keep.")),
         Step(art: .shareSheet,
-             caption: "Step two",
-             title: "Choose Save to Evening Reader",
-             body: "Pick Evening Reader from the row of apps in the share sheet.",
-             note: "Not there? Scroll the row of apps to the end and tap More, then Edit, and add Evening Reader to your favorites so it stays up front."),
+             caption: String(localized: "Step two"),
+             title: String(localized: "Choose Save to Evening Reader"),
+             body: String(localized: "Pick Evening Reader from the row of apps in the share sheet."),
+             note: String(localized: "Not there? Scroll the row of apps to the end and tap More, then Edit, and add Evening Reader to your favorites so it stays up front.")),
         Step(art: .library,
-             caption: "Step three",
-             title: "It's waiting here",
-             body: "The article lands in your library, ready to read — and it's kept on this device, so it's there even with no connection."),
+             caption: String(localized: "Step three"),
+             title: String(localized: "It's waiting here"),
+             body: String(localized: "The article lands in your library, ready to read — and it's kept on this device, so it's there even with no connection.")),
     ]
 
     private static let reading: [Step] = [
         Step(art: .glow,
-             caption: "The glow",
-             title: "Set it the way you like it",
-             body: "Tap the sun to make the glow warmer or cooler, brighter or dimmer, or to turn the page to night. Keep a glow you like and switch back to it in a tap."),
+             caption: String(localized: "The glow"),
+             title: String(localized: "Set it the way you like it"),
+             body: String(localized: "Tap the sun to make the glow warmer or cooler, brighter or dimmer, or to turn the page to night. Keep a glow you like and switch back to it in a tap.")),
         Step(art: .highlight,
-             caption: "Highlights",
-             title: "Keep a passage",
-             body: "Select a few words to highlight them, add a note, or look one up. Every highlight is gathered on one page, and each one takes you back to where it was."),
+             caption: String(localized: "Highlights"),
+             title: String(localized: "Keep a passage"),
+             body: String(localized: "Select a few words to highlight them, add a note, or look one up. Every highlight is gathered on one page, and each one takes you back to where it was.")),
     ]
 
     private var isLast: Bool { page == steps.count - 1 }
@@ -324,7 +324,7 @@ private struct ShareSheetIllustration: View {
                     otherApp("message.fill")
                     otherApp("envelope.fill")
                     ours
-                    otherApp("ellipsis", label: "More")
+                    otherApp("ellipsis", label: String(localized: "More"))
                 }
             }
             .padding(18)
@@ -342,7 +342,7 @@ private struct ShareSheetIllustration: View {
                     .fill(amber.fillActive))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(amber.inkStrong, lineWidth: 2).padding(-5))
-            Text("Evening Reader")
+            Text(verbatim: "Evening Reader")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(amber.inkStrong)
                 .multilineTextAlignment(.center)

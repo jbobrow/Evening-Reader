@@ -90,9 +90,9 @@ struct NewSiteSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                AmberCaption(text: "Name")
+                AmberCaption(text: String(localized: "Name"))
                 field(text: $name, focused: $nameFocused, placeholder: "Libby",
-                      showsDotCom: false, goLabel: "Next", monospaced: false) {
+                      showsDotCom: false, goLabel: String(localized: "Next"), monospaced: false) {
                     // A beat after the name field has let go, so the two are never
                     // asking for the keyboard in the same turn.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { addressFocused = true }
@@ -100,9 +100,9 @@ struct NewSiteSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                AmberCaption(text: "Address")
+                AmberCaption(text: String(localized: "Address"))
                 field(text: $address, focused: $addressFocused, placeholder: "libbyapp.com",
-                      showsDotCom: true, goLabel: "Done", monospaced: true) {
+                      showsDotCom: true, goLabel: String(localized: "Done"), monospaced: true) {
                     fetchIcon()
                 }
                 if let problem {
@@ -113,7 +113,7 @@ struct NewSiteSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                AmberCaption(text: "Icon")
+                AmberCaption(text: String(localized: "Icon"))
                 ownIconRow
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5),
                           spacing: 10) {
@@ -238,7 +238,7 @@ struct NewSiteSheet: View {
 
     private func commit() {
         guard let url = BrowserModel.url(from: address) else {
-            problem = "That doesn't look like a web address."
+            problem = String(localized: "That doesn't look like a web address.")
             return
         }
         var site = draft.existing ?? Site(name: "", url: url)

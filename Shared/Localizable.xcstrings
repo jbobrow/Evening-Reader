@@ -1,0 +1,2695 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%@ of %lld": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ / %2$lld"
+          }
+        }
+      }
+    },
+    "%lld": {
+      "shouldTranslate": false
+    },
+    "%lld chapters": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 章"
+          }
+        }
+      }
+    },
+    "%lld hr": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 小時"
+          }
+        }
+      }
+    },
+    "%lld hr %lld min": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld 小時 %2$lld 分鐘"
+          }
+        }
+      }
+    },
+    "%lld hr %lld min left": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剩 %1$lld 小時 %2$lld 分鐘"
+          }
+        }
+      }
+    },
+    "%lld hr left": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剩 %lld 小時"
+          }
+        }
+      }
+    },
+    "%lld min": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 分鐘"
+          }
+        }
+      }
+    },
+    "%lld min left": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剩 %lld 分鐘"
+          }
+        }
+      }
+    },
+    "%lld pages": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 頁"
+          }
+        }
+      }
+    },
+    "%lld pages left": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剩 %lld 頁"
+          }
+        }
+      }
+    },
+    "%lld passages": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 段"
+          }
+        }
+      }
+    },
+    "%lld percent": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "百分之 %lld"
+          }
+        }
+      }
+    },
+    "%lld unread": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 篇未讀"
+          }
+        }
+      }
+    },
+    "%lld%%": {
+      "shouldTranslate": false
+    },
+    "1 chapter": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 章"
+          }
+        }
+      }
+    },
+    "1 page": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 頁"
+          }
+        }
+      }
+    },
+    "1 page left": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剩 1 頁"
+          }
+        }
+      }
+    },
+    "1 passage": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 段"
+          }
+        }
+      }
+    },
+    "A tour of Evening Reader": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evening Reader 導覽"
+          }
+        }
+      }
+    },
+    "A video fills the glass in either orientation, with simple controls of its own.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "影片無論直放或橫放都會填滿螢幕，並附有簡單的專屬控制項。"
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關於"
+          }
+        }
+      }
+    },
+    "Accents and dictation": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重音符號與聽寫"
+          }
+        }
+      }
+    },
+    "Add": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入"
+          }
+        }
+      }
+    },
+    "Add a link": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入連結"
+          }
+        }
+      }
+    },
+    "Add to Sites": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入網站"
+          }
+        }
+      }
+    },
+    "Address": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網址"
+          }
+        }
+      }
+    },
+    "Advanced": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "進階"
+          }
+        }
+      }
+    },
+    "All": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部"
+          }
+        }
+      }
+    },
+    "All settings": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有設定"
+          }
+        }
+      }
+    },
+    "Allow the microphone and speech recognition for Evening Reader in Settings.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請在「設定」中允許 Evening Reader 使用麥克風與語音辨識。"
+          }
+        }
+      }
+    },
+    "Amber": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "琥珀"
+          }
+        }
+      }
+    },
+    "An .acsm file is a note telling Adobe's software which book to fetch and lock to your account. There is no book inside it to read.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ".acsm 檔只是一張便條，告訴 Adobe 的軟體要下載哪本書並鎖定到你的帳號。檔案裡沒有可閱讀的書。"
+          }
+        }
+      }
+    },
+    "Answered on this device": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在這部裝置上回答"
+          }
+        }
+      }
+    },
+    "App by Jon Bobrow": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jon Bobrow 製作的 App"
+          }
+        }
+      }
+    },
+    "Apple Intelligence declined to answer that one.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence 拒絕回答這個問題。"
+          }
+        }
+      }
+    },
+    "Apple Intelligence is still downloading its model. Try again in a little while.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence 仍在下載模型，請稍後再試。"
+          }
+        }
+      }
+    },
+    "Apple Intelligence is turned off. Turn it on in Settings to ask about a passage.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence 已關閉。請在「設定」中開啟，才能詢問段落相關問題。"
+          }
+        }
+      }
+    },
+    "Apple Intelligence isn't available right now.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence 目前無法使用。"
+          }
+        }
+      }
+    },
+    "Apple Intelligence isn't ready yet on this device.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence 在這部裝置上尚未準備就緒。"
+          }
+        }
+      }
+    },
+    "Apps by Jon Bobrow": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jon Bobrow 製作的 App"
+          }
+        }
+      }
+    },
+    "Archive": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "封存"
+          }
+        }
+      }
+    },
+    "Ask": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "詢問"
+          }
+        }
+      }
+    },
+    "Ask AI": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "問 AI"
+          }
+        }
+      }
+    },
+    "Ask a question": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提出問題"
+          }
+        }
+      }
+    },
+    "Ask about this": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "詢問這段內容"
+          }
+        }
+      }
+    },
+    "Asking about a passage needs iOS 26 or later.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "詢問段落需要 iOS 26 或以上版本。"
+          }
+        }
+      }
+    },
+    "AutoFill": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動填寫"
+          }
+        }
+      }
+    },
+    "Backlight bloom": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背光光暈"
+          }
+        }
+      }
+    },
+    "Book": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "書籍"
+          }
+        }
+      }
+    },
+    "Brightness": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "亮度"
+          }
+        }
+      }
+    },
+    "Bringing in Safari's Reading List": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入 Safari 的閱讀列表"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        }
+      }
+    },
+    "Chapter %lld": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %lld 章"
+          }
+        }
+      }
+    },
+    "Choose Save to Evening Reader": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇「儲存到 Evening Reader」"
+          }
+        }
+      }
+    },
+    "Close": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉"
+          }
+        }
+      }
+    },
+    "Column": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "欄寬"
+          }
+        }
+      }
+    },
+    "Contents": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目錄"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "繼續"
+          }
+        }
+      }
+    },
+    "Contrast": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對比"
+          }
+        }
+      }
+    },
+    "Copied": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已拷貝"
+          }
+        }
+      }
+    },
+    "Copy": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷貝"
+          }
+        }
+      }
+    },
+    "Copy Link": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷貝連結"
+          }
+        }
+      }
+    },
+    "Couldn't find an article on that page.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在該頁面上找不到文章。"
+          }
+        }
+      }
+    },
+    "Couldn't read that file.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取該檔案。"
+          }
+        }
+      }
+    },
+    "Couldn't read that page.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取該頁面。"
+          }
+        }
+      }
+    },
+    "Couldn't save that book.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存該書。"
+          }
+        }
+      }
+    },
+    "Couldn't save this book's text.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存這本書的文字。"
+          }
+        }
+      }
+    },
+    "Cut": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剪下"
+          }
+        }
+      }
+    },
+    "Deep amber": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "深琥珀"
+          }
+        }
+      }
+    },
+    "Define": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查詢"
+          }
+        }
+      }
+    },
+    "Dictate": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聽寫"
+          }
+        }
+      }
+    },
+    "Dictation isn’t available right now.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聽寫目前無法使用。"
+          }
+        }
+      }
+    },
+    "Display settings": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示設定"
+          }
+        }
+      }
+    },
+    "Display settings come up short over the page you're reading, so a change is seen on the real thing. Pull up for everything, now in two tabs, Light and Type.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示設定會以精簡版面浮在你正在閱讀的頁面上，任何調整都能直接在內文上看見。向上拉即可看到全部設定，現在分為「光線」與「排版」兩個標籤頁。"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        }
+      }
+    },
+    "Each article is a Markdown note with its pictures and highlights beside it, so the library opens as an Obsidian vault.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每篇文章都是一則 Markdown 筆記，圖片與重點就放在旁邊，因此整個書庫可以直接當作 Obsidian 資料庫開啟。"
+          }
+        }
+      }
+    },
+    "Edit": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯"
+          }
+        }
+      }
+    },
+    "Edit site": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯網站"
+          }
+        }
+      }
+    },
+    "Evening Reader keeps the articles you come across during the day, stripped down to the words and lit warm for reading after dark.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evening Reader 會保存你白天遇到的文章，只留下文字，並以溫暖的光呈現，讓你在入夜後閱讀。"
+          }
+        }
+      }
+    },
+    "Exit full screen": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "結束全螢幕"
+          }
+        }
+      }
+    },
+    "Explain this simply": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "簡單解釋這段內容"
+          }
+        }
+      }
+    },
+    "Fetching from iCloud…": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在從 iCloud 取得…"
+          }
+        }
+      }
+    },
+    "Go": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前往"
+          }
+        }
+      }
+    },
+    "Go to %@": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前往 %@"
+          }
+        }
+      }
+    },
+    "Go to it": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前往該處"
+          }
+        }
+      }
+    },
+    "Highlight": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "劃重點"
+          }
+        }
+      }
+    },
+    "Highlights": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重點"
+          }
+        }
+      }
+    },
+    "Hold a key for its accents, and tap the mic to speak instead of type.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按住按鍵可輸入重音字母；點一下麥克風即可用說的代替打字。"
+          }
+        }
+      }
+    },
+    "How a page gets here from Safari or any other app, how to set the glow, and how to keep a passage. Shown to new readers, and any time from About.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "說明如何從 Safari 或其他 App 把頁面存到這裡、如何調整光色，以及如何保留段落。新讀者會自動看到，之後也可隨時從「關於」開啟。"
+          }
+        }
+      }
+    },
+    "How it works": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用方式"
+          }
+        }
+      }
+    },
+    "Icon": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圖像"
+          }
+        }
+      }
+    },
+    "In Safari — or any app with a link in it — tap the Share button on the page you want to keep.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Safari（或任何含有連結的 App）中，點一下你想保留的頁面上的「分享」按鈕。"
+          }
+        }
+      }
+    },
+    "In the browser, the bar stays put on anything that isn't an article, and a site you keep as an app gets a single row with its name.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在瀏覽器中，非文章頁面的工具列會固定不動；當作 App 保留的網站只會顯示一列名稱。"
+          }
+        }
+      }
+    },
+    "In the panel's ink, like a page is.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以面板的墨色呈現，就像頁面一樣。"
+          }
+        }
+      }
+    },
+    "In your library": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在你的書庫中"
+          }
+        }
+      }
+    },
+    "It's waiting here": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它就在這裡等你"
+          }
+        }
+      }
+    },
+    "Its first letter until one is found.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找到圖像前，先顯示名稱的第一個字。"
+          }
+        }
+      }
+    },
+    "Just saved": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剛剛儲存"
+          }
+        }
+      }
+    },
+    "Keep": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留"
+          }
+        }
+      }
+    },
+    "Keep a glow you like and it will wait here.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存喜歡的光色，它就會在這裡等你。"
+          }
+        }
+      }
+    },
+    "Keep a passage": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留段落"
+          }
+        }
+      }
+    },
+    "Keep the page beside the camera": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讓頁面留在相機旁邊"
+          }
+        }
+      }
+    },
+    "Larger text": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "放大文字"
+          }
+        }
+      }
+    },
+    "Leading": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "行距"
+          }
+        }
+      }
+    },
+    "Library": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "書庫"
+          }
+        }
+      }
+    },
+    "Library loans and most store purchases carry Adobe or LCP protection, which only their own app can open — Libby keeps its loans inside Libby. Evening Reader reads books that aren't locked: Standard Ebooks, Project Gutenberg, and DRM-free purchases from the stores that offer them.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圖書館借閱與大部分商店購買的書籍都帶有 Adobe 或 LCP 保護，只能用它們自己的 App 開啟，例如 Libby 的借閱書只能在 Libby 中閱讀。Evening Reader 可以閱讀未上鎖的書：Standard Ebooks、Project Gutenberg，以及提供無 DRM 版本的商店所購買的書籍。"
+          }
+        }
+      }
+    },
+    "Light": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "光線"
+          }
+        }
+      }
+    },
+    "Listening…": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在聆聽…"
+          }
+        }
+      }
+    },
+    "Look it up": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查詢"
+          }
+        }
+      }
+    },
+    "Looking for your iCloud library…": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在尋找你的 iCloud 書庫…"
+          }
+        }
+      }
+    },
+    "Mono": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等寬"
+          }
+        }
+      }
+    },
+    "More": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多"
+          }
+        }
+      }
+    },
+    "Move to Unread": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移到未讀"
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "名稱"
+          }
+        }
+      }
+    },
+    "New site": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增網站"
+          }
+        }
+      }
+    },
+    "Next": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一步"
+          }
+        }
+      }
+    },
+    "Night": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "夜間"
+          }
+        }
+      }
+    },
+    "No article text on that page.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "該頁面上沒有文章內容。"
+          }
+        }
+      }
+    },
+    "Not available here": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此處無法使用"
+          }
+        }
+      }
+    },
+    "Not in the dictionary.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字典中找不到這個字詞。"
+          }
+        }
+      }
+    },
+    "Not there? Scroll the row of apps to the end and tap More, then Edit, and add Evening Reader to your favorites so it stays up front.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒看到嗎？將 App 列捲動到最後並點一下「更多」，再點「編輯」，把 Evening Reader 加入喜好項目，它就會一直排在前面。"
+          }
+        }
+      }
+    },
+    "Note": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "附註"
+          }
+        }
+      }
+    },
+    "Note: the shared app group isn't available in this build, so the share extension can't hand items over yet.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "注意：此版本無法使用共享 App 群組，因此分享延伸功能暫時無法傳送項目。"
+          }
+        }
+      }
+    },
+    "Nothing archived yet.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚無封存項目。"
+          }
+        }
+      }
+    },
+    "Nothing marked yet.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未劃任何重點。"
+          }
+        }
+      }
+    },
+    "Nothing matches that.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有相符的結果。"
+          }
+        }
+      }
+    },
+    "Nothing to read yet.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有可閱讀的內容。"
+          }
+        }
+      }
+    },
+    "Nothing to save from here.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這裡沒有可儲存的內容。"
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
+          }
+        }
+      }
+    },
+    "On the web": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在網路上"
+          }
+        }
+      }
+    },
+    "Open in browser": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在瀏覽器中打開"
+          }
+        }
+      }
+    },
+    "Opened sideways": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "橫向展開時"
+          }
+        }
+      }
+    },
+    "Opened sideways, an article is set as a two-page spread. Folded shut, the buttons stand beside the camera, or the page takes the whole width.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "橫向展開時，文章會排成左右兩頁的跨頁。闔上時，按鈕會移到相機旁邊，或讓頁面佔滿整個寬度。"
+          }
+        }
+      }
+    },
+    "Opening the book…": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在打開書籍…"
+          }
+        }
+      }
+    },
+    "Opens app.jonbobrow.com": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打開 app.jonbobrow.com"
+          }
+        }
+      }
+    },
+    "Orange amber": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "橘琥珀"
+          }
+        }
+      }
+    },
+    "Page %lld": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %lld 頁"
+          }
+        }
+      }
+    },
+    "Page %lld of %lld": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %1$lld 頁，共 %2$lld 頁"
+          }
+        }
+      }
+    },
+    "Pages": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "頁數"
+          }
+        }
+      }
+    },
+    "Paper": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "紙張"
+          }
+        }
+      }
+    },
+    "Paste": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "貼上"
+          }
+        }
+      }
+    },
+    "Paste on a tap": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一點即貼上"
+          }
+        }
+      }
+    },
+    "Pause": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暫停"
+          }
+        }
+      }
+    },
+    "Percent": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "百分比"
+          }
+        }
+      }
+    },
+    "Pick Evening Reader from the row of apps in the share sheet.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在分享表單的 App 列中選擇 Evening Reader。"
+          }
+        }
+      }
+    },
+    "Pixel grid": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "像素格線"
+          }
+        }
+      }
+    },
+    "Pixel grid, backlight bloom": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "像素格線、背光光暈"
+          }
+        }
+      }
+    },
+    "Play": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放"
+          }
+        }
+      }
+    },
+    "Position": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位置"
+          }
+        }
+      }
+    },
+    "Privacy policy": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱私權政策"
+          }
+        }
+      }
+    },
+    "Rate this app": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "為這個 App 評分"
+          }
+        }
+      }
+    },
+    "Read": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閱讀"
+          }
+        }
+      }
+    },
+    "Read it again": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新讀取"
+          }
+        }
+      }
+    },
+    "Read it again to fetch a fresh copy.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新讀取以取得新的副本。"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        }
+      }
+    },
+    "Remove this article?": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要移除這篇文章嗎？"
+          }
+        }
+      }
+    },
+    "Reset to default": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置為預設值"
+          }
+        }
+      }
+    },
+    "Sample": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "範例"
+          }
+        }
+      }
+    },
+    "Sand": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沙色"
+          }
+        }
+      }
+    },
+    "Sans": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無襯線"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
+        }
+      }
+    },
+    "Save & read": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存並閱讀"
+          }
+        }
+      }
+    },
+    "Save articles, books and PDFs, then read them on a single warm glow you set yourself. Offline, in your own iCloud folders, for the last hour of the day.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存文章、書籍與 PDF，在你親手調整的溫暖光色下閱讀。離線可讀，存放在你自己的 iCloud 資料夾裡，陪你度過一天的最後一小時。"
+          }
+        }
+      }
+    },
+    "Save it now, read it tonight": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在儲存，今晚閱讀"
+          }
+        }
+      }
+    },
+    "Save the link on your clipboard": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存剪貼板上的連結"
+          }
+        }
+      }
+    },
+    "Save this glow": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存這個光色"
+          }
+        }
+      }
+    },
+    "Saved": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存"
+          }
+        }
+      }
+    },
+    "Saved glows": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存的光色"
+          }
+        }
+      }
+    },
+    "Saved to Evening Reader": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存到 Evening Reader"
+          }
+        }
+      }
+    },
+    "Saving…": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在儲存…"
+          }
+        }
+      }
+    },
+    "Search": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋"
+          }
+        }
+      }
+    },
+    "Search above for something to read, or open one of your sites below. To keep a page or a book from another app, tap Share there and choose Evening Reader.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在上方搜尋想讀的內容，或打開下方的網站。要保留其他 App 中的頁面或書籍，請在該 App 中點一下「分享」並選擇 Evening Reader。"
+          }
+        }
+      }
+    },
+    "Search from the front page for something to read, or tap Share in Safari or any other app and choose Evening Reader.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在首頁搜尋想讀的內容，或在 Safari 或其他 App 中點一下「分享」並選擇 Evening Reader。"
+          }
+        }
+      }
+    },
+    "Search or enter address": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋或輸入網址"
+          }
+        }
+      }
+    },
+    "Search passages and notes": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋段落與附註"
+          }
+        }
+      }
+    },
+    "Search the web": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋網路"
+          }
+        }
+      }
+    },
+    "Search the web for “%@”": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在網路上搜尋「%@」"
+          }
+        }
+      }
+    },
+    "Search your library or the web": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋書庫或網路"
+          }
+        }
+      }
+    },
+    "Select All": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全選"
+          }
+        }
+      }
+    },
+    "Select a few words to highlight them, add a note, or look one up. Every highlight is gathered on one page, and each one takes you back to where it was.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選取幾個字就能劃重點、加上附註或查詢字詞。所有重點都會集中在同一頁，點一下即可回到原文位置。"
+          }
+        }
+      }
+    },
+    "Select a passage while reading and choose Highlight. Add a note to say why it stayed with you.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閱讀時選取一段文字並選擇「劃重點」。也可以加上附註，寫下它打動你的原因。"
+          }
+        }
+      }
+    },
+    "Serif": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "襯線"
+          }
+        }
+      }
+    },
+    "Set it the way you like it": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "調成你喜歡的樣子"
+          }
+        }
+      }
+    },
+    "Setting the type…": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在排版…"
+          }
+        }
+      }
+    },
+    "Share this app": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分享這個 App"
+          }
+        }
+      }
+    },
+    "Show another": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "換一則"
+          }
+        }
+      }
+    },
+    "Show me how": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "告訴我怎麼做"
+          }
+        }
+      }
+    },
+    "Shows more info": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示更多資訊"
+          }
+        }
+      }
+    },
+    "Sites": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網站"
+          }
+        }
+      }
+    },
+    "Size": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大小"
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "略過"
+          }
+        }
+      }
+    },
+    "Smaller text": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "縮小文字"
+          }
+        }
+      }
+    },
+    "Soft on the eyes,\nwarmth for the soul.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對眼睛溫柔，\n為心靈添暖。"
+          }
+        }
+      }
+    },
+    "Some pages build their text after loading, and a few just aren't articles. You can still read it in the amber browser.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有些頁面在載入後才產生文字，也有些頁面本來就不是文章。你仍可在琥珀色瀏覽器中閱讀。"
+          }
+        }
+      }
+    },
+    "Something about this file's contents wasn't readable.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此檔案的部分內容無法讀取。"
+          }
+        }
+      }
+    },
+    "Something inside the file is too large to read.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檔案中有內容過大，無法讀取。"
+          }
+        }
+      }
+    },
+    "Start reading": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始閱讀"
+          }
+        }
+      }
+    },
+    "Starting…": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在啟動…"
+          }
+        }
+      }
+    },
+    "Steadier sites": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更穩定的網站"
+          }
+        }
+      }
+    },
+    "Step one": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第一步"
+          }
+        }
+      }
+    },
+    "Step three": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第三步"
+          }
+        }
+      }
+    },
+    "Step two": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第二步"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止"
+          }
+        }
+      }
+    },
+    "Support": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支援"
+          }
+        }
+      }
+    },
+    "Take the tour": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始導覽"
+          }
+        }
+      }
+    },
+    "Tap Share": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下「分享」"
+          }
+        }
+      }
+    },
+    "Tap into an empty field and Paste is offered right there.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下空白欄位，「貼上」就會出現在那裡。"
+          }
+        }
+      }
+    },
+    "Tap the sun to make the glow warmer or cooler, brighter or dimmer, or to turn the page to night. Keep a glow you like and switch back to it in a tap.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下太陽，即可讓光色更暖或更冷、更亮或更暗，或把頁面切換成夜間模式。保存喜歡的光色，一點就能切換回來。"
+          }
+        }
+      }
+    },
+    "That doesn't look like a book Evening Reader can open.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這看起來不像是 Evening Reader 能打開的書。"
+          }
+        }
+      }
+    },
+    "That doesn't look like a book.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這看起來不像是一本書。"
+          }
+        }
+      }
+    },
+    "That doesn't look like a web address.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這看起來不像是網址。"
+          }
+        }
+      }
+    },
+    "That's a loan ticket, not a book.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這是借閱憑證，不是書。"
+          }
+        }
+      }
+    },
+    "That's more than the on-device model can hold at once. Try a shorter passage.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "內容超過裝置上模型一次能處理的長度，請試試較短的段落。"
+          }
+        }
+      }
+    },
+    "The article lands in your library, ready to read — and it's kept on this device, so it's there even with no connection.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文章會出現在你的書庫中，隨時可讀。它保存在這部裝置上，即使沒有網路也能閱讀。"
+          }
+        }
+      }
+    },
+    "The crease is the gutter. Swipe, or tap near either edge, to turn the page.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摺痕就是書的中縫。滑動或點一下左右邊緣即可翻頁。"
+          }
+        }
+      }
+    },
+    "The file ends before it should.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檔案提前結束了。"
+          }
+        }
+      }
+    },
+    "The file is damaged.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檔案已損毀。"
+          }
+        }
+      }
+    },
+    "The file uses compression method %u, which this reader doesn't handle.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此檔案使用壓縮方式 %u，本閱讀器無法處理。"
+          }
+        }
+      }
+    },
+    "The glow": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "光色"
+          }
+        }
+      }
+    },
+    "The glow, over the page": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "光色設定，就在頁面上"
+          }
+        }
+      }
+    },
+    "The microphone couldn’t be started.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法啟動麥克風。"
+          }
+        }
+      }
+    },
+    "The page took too long to load.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "頁面載入時間過長。"
+          }
+        }
+      }
+    },
+    "The ramp": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "色階"
+          }
+        }
+      }
+    },
+    "The reader script is missing from the app bundle.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App 中缺少閱讀器程式碼。"
+          }
+        }
+      }
+    },
+    "The saved text went missing.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存的文字不見了。"
+          }
+        }
+      }
+    },
+    "The signature at the foot of the front page opens About, with the website, support, and the tour.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下首頁底部的簽名即可打開「關於」，裡面有網站、支援與導覽。"
+          }
+        }
+      }
+    },
+    "The site's own icon": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網站自己的圖像"
+          }
+        }
+      }
+    },
+    "This EPUB's manifest doesn't describe a book Evening Reader can open.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 EPUB 的資訊清單所描述的書無法用 Evening Reader 打開。"
+          }
+        }
+      }
+    },
+    "This book couldn't be opened.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法打開這本書。"
+          }
+        }
+      }
+    },
+    "This book has no chapters to read.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這本書沒有可閱讀的章節。"
+          }
+        }
+      }
+    },
+    "This book is locked by its publisher.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這本書已被出版商上鎖。"
+          }
+        }
+      }
+    },
+    "This book's file is missing.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找不到這本書的檔案。"
+          }
+        }
+      }
+    },
+    "This device doesn't run Apple Intelligence.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這部裝置不支援 Apple Intelligence。"
+          }
+        }
+      }
+    },
+    "This file isn't something Evening Reader knows how to open as a book.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evening Reader 無法將此檔案當作書籍打開。"
+          }
+        }
+      }
+    },
+    "This isn't a readable EPUB — its container is missing or damaged.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這不是可讀取的 EPUB，其容器遺失或已損毀。"
+          }
+        }
+      }
+    },
+    "This isn't a zip archive.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這不是 zip 壓縮檔。"
+          }
+        }
+      }
+    },
+    "Try Reading Again": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新讀取"
+          }
+        }
+      }
+    },
+    "Try again": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再試一次"
+          }
+        }
+      }
+    },
+    "Try sharing the page itself.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請試著分享頁面本身。"
+          }
+        }
+      }
+    },
+    "Two-page spread": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "雙頁跨頁"
+          }
+        }
+      }
+    },
+    "Type": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排版"
+          }
+        }
+      }
+    },
+    "Typeface": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字體"
+          }
+        }
+      }
+    },
+    "Unread": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未讀"
+          }
+        }
+      }
+    },
+    "Untitled": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未命名"
+          }
+        }
+      }
+    },
+    "Use the full width": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用完整寬度"
+          }
+        }
+      }
+    },
+    "Version %@": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "版本 %@"
+          }
+        }
+      }
+    },
+    "Video, full screen": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "影片全螢幕播放"
+          }
+        }
+      }
+    },
+    "Warm beige": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暖米色"
+          }
+        }
+      }
+    },
+    "Warmth": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暖度"
+          }
+        }
+      }
+    },
+    "Web address": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網址"
+          }
+        }
+      }
+    },
+    "Website": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網站"
+          }
+        }
+      }
+    },
+    "Welcome": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "歡迎"
+          }
+        }
+      }
+    },
+    "What's new": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新功能"
+          }
+        }
+      }
+    },
+    "What's new in %@": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 版的新功能"
+          }
+        }
+      }
+    },
+    "What's the context?": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這段的背景是什麼？"
+          }
+        }
+      }
+    },
+    "Why does this matter?": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "為什麼這很重要？"
+          }
+        }
+      }
+    },
+    "Why this one?": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "為什麼是這段？"
+          }
+        }
+      }
+    },
+    "Your library as notes": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "書庫即筆記"
+          }
+        }
+      }
+    },
+    "couldn't open": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法打開"
+          }
+        }
+      }
+    },
+    "glow": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "光"
+          }
+        }
+      }
+    },
+    "iOS keeps its dictionaries per language, and downloads them on demand. If this looks like an ordinary word, the dictionary for it may not be on this device yet.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS 會依語言分別保存字典，並在需要時才下載。如果這看起來是個普通字詞，可能是對應的字典尚未下載到這部裝置。"
+          }
+        }
+      }
+    },
+    "iOS keeps the Reading List private to Safari, so it can't be imported directly. In Safari, open a saved page, tap Share, and choose **Save to Evening Reader** — the article lands in this library, stripped down and lit.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS 將閱讀列表限定在 Safari 內，因此無法直接匯入。請在 Safari 中打開已儲存的頁面，點一下「分享」並選擇 **儲存到 Evening Reader**，文章就會以精簡、溫暖的樣貌出現在這個書庫中。"
+          }
+        }
+      }
+    },
+    "iPhone Duo": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone Duo"
+          }
+        }
+      }
+    },
+    "ink": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "墨"
+          }
+        }
+      }
+    },
+    "no article text": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有文章內容"
+          }
+        }
+      }
+    },
+    "of %lld": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "/ %lld"
+          }
+        }
+      }
+    },
+    "opening": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在打開"
+          }
+        }
+      }
+    },
+    "reading": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在讀取"
+          }
+        }
+      }
+    },
+    "space": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空格"
+          }
+        }
+      }
+    },
+    "·": {
+      "shouldTranslate": false
+    }
+  },
+  "version": "1.0"
+}

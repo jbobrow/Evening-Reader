@@ -166,7 +166,7 @@ enum EpubFlattener {
             // book — genuinely nothing to build a contents list from. One entry per
             // spine item beats an empty sheet.
             chapters = docs.enumerated().map { i, doc in
-                BookChapter(title: "Chapter \(i + 1)", href: doc.id, depth: 0)
+                BookChapter(title: String(localized: "Chapter \(i + 1)"), href: doc.id, depth: 0)
             }
         }
 

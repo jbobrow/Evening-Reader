@@ -616,16 +616,16 @@ struct DetailPane: View {
 
         case .failed where article.isBook:
             message(icon: "text.badge.xmark",
-                    title: "This book couldn't be opened.",
-                    detail: library.lastError ?? "Something about this file's contents wasn't readable.") {
+                    title: String(localized: "This book couldn't be opened."),
+                    detail: library.lastError ?? String(localized: "Something about this file's contents wasn't readable.")) {
                 Button("Try again") { library.retry(article) }
                     .buttonStyle(AmberButtonStyle(kind: .solid))
             }
 
         case .failed:
             message(icon: "text.badge.xmark",
-                    title: "No article text on that page.",
-                    detail: "Some pages build their text after loading, and a few just aren't articles. You can still read it in the amber browser.") {
+                    title: String(localized: "No article text on that page."),
+                    detail: String(localized: "Some pages build their text after loading, and a few just aren't articles. You can still read it in the amber browser.")) {
                 HStack(spacing: 10) {
                     Button("Try again") { library.retry(article) }
                         .buttonStyle(AmberButtonStyle(kind: .outline))
@@ -651,8 +651,8 @@ struct DetailPane: View {
                     articlePage(for: article, body: body)
                 } else {
                     message(icon: "doc.questionmark",
-                            title: "The saved text went missing.",
-                            detail: "Read it again to fetch a fresh copy.") {
+                            title: String(localized: "The saved text went missing."),
+                            detail: String(localized: "Read it again to fetch a fresh copy.")) {
                         Button("Read it again") { library.retry(article) }
                             .buttonStyle(AmberButtonStyle(kind: .solid))
                     }

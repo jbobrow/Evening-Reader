@@ -99,7 +99,7 @@ struct ReaderRenderer {
             if let publisher = article.siteName, !publisher.isEmpty { meta.append(escape(publisher)) }
             meta.append(escape(article.lengthLabel))
             if let count = article.chapterCount, count > 0 {
-                meta.append(escape(count == 1 ? "1 chapter" : "\(count) chapters"))
+                meta.append(escape(count == 1 ? String(localized: "1 chapter") : String(localized: "\(count) chapters")))
             }
         } else {
             let dateLine = (article.publishedAt ?? article.addedAt)

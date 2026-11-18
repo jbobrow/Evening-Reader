@@ -188,14 +188,14 @@ struct AddLinkSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                AmberCaption(text: "Web address")
+                AmberCaption(text: String(localized: "Web address"))
                 AmberTextField(text: $text,
                                isFocused: $focused,
                                placeholder: "example.com/article",
                                palette: settings.palette,
                                showsTexture: settings.showTexture,
                                showsDotCom: true,
-                               goLabel: "Save",
+                               goLabel: String(localized: "Save"),
                                monospaced: true,
                                onSubmit: commit)
                     .frame(height: 22)
@@ -241,7 +241,7 @@ struct AddLinkSheet: View {
             Hairline()
 
             VStack(alignment: .leading, spacing: 8) {
-                AmberCaption(text: "Bringing in Safari's Reading List")
+                AmberCaption(text: String(localized: "Bringing in Safari's Reading List"))
                 Text("iOS keeps the Reading List private to Safari, so it can't be imported directly. In Safari, open a saved page, tap Share, and choose **Save to Evening Reader** — the article lands in this library, stripped down and lit.")
                     .font(.system(size: 13))
                     .lineSpacing(3)
@@ -268,7 +268,7 @@ struct AddLinkSheet: View {
 
     private func commit() {
         guard let url = BrowserModel.url(from: text) else {
-            problem = "That doesn't look like a web address."
+            problem = String(localized: "That doesn't look like a web address.")
             return
         }
         onAdd(url)

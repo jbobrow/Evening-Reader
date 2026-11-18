@@ -18,7 +18,7 @@ struct AmberTextView: UIViewRepresentable {
     var placeholder: String
     var palette: AmberPalette
     var showsTexture: Bool
-    var goLabel: String = "Done"
+    var goLabel: String = String(localized: "Done")
     var fontSize: CGFloat = 15
     /// How tall the field stands when empty. It scrolls past this rather than growing,
     /// so the card it sits in keeps the size the reader last saw it at.

@@ -209,7 +209,7 @@ final class WebKeyboardBridge {
         AmberKeyboard(palette: palette,
                       showsTexture: showsTexture,
                       showsDotCom: false,
-                      goLabel: "Go",
+                      goLabel: String(localized: "Go"),
                       showsAutofill: focusedFieldIsLogin,
                       boardWidth: boardWidth) { [weak self] key in
             self?.handle(key)

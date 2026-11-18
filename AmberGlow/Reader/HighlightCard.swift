@@ -53,12 +53,12 @@ struct HighlightCard: View {
 
             if atSource {
                 VStack(alignment: .leading, spacing: 8) {
-                    AmberCaption(text: "Note")
+                    AmberCaption(text: String(localized: "Note"))
                     noteField
                 }
             } else if highlight.hasNote {
                 VStack(alignment: .leading, spacing: 7) {
-                    AmberCaption(text: "Note")
+                    AmberCaption(text: String(localized: "Note"))
                     Text(highlight.note ?? "")
                         .font(.system(size: 14))
                         .lineSpacing(3)
@@ -124,7 +124,7 @@ struct HighlightCard: View {
     private var noteField: some View {
         let editor = AmberTextView(text: $note,
                                    isFocused: $focused,
-                                   placeholder: "Why this one?",
+                                   placeholder: String(localized: "Why this one?"),
                                    palette: settings.palette,
                                    showsTexture: settings.showTexture,
                                    fontSize: 15,

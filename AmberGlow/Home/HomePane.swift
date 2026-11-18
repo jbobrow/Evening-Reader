@@ -142,7 +142,7 @@ struct HomePane: View {
 
     private var header: some View {
         HStack(spacing: 2) {
-            Text("EVENING READER")
+            Text(verbatim: "EVENING READER")
                 .font(.system(size: 13, weight: .bold, design: .default))
                 .tracking(2.6)
                 .lineLimit(1)
@@ -186,14 +186,14 @@ struct HomePane: View {
     private func continueBlock(_ article: SavedArticle) -> some View {
         Button { open(article) } label: {
             VStack(alignment: .leading, spacing: 10) {
-                AmberCaption(text: "Continue")
+                AmberCaption(text: String(localized: "Continue"))
                 Text(article.displayTitle)
                     .font(.system(size: 26, weight: .medium, design: .serif))
                     .lineSpacing(3)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                     .foregroundStyle(amber.inkStrong)
-                Text("\(article.sourceLabel) · \(article.remainingLabel ?? article.lengthLabel)")
+                Text(verbatim: "\(article.sourceLabel) · \(article.remainingLabel ?? article.lengthLabel)")
                     .font(.system(size: 11, weight: .medium))
                     .tracking(0.4)
                     .lineLimit(1)
@@ -217,14 +217,14 @@ struct HomePane: View {
     private func savedBlock(_ article: SavedArticle) -> some View {
         Button { open(article) } label: {
             VStack(alignment: .leading, spacing: 8) {
-                AmberCaption(text: "Just saved")
+                AmberCaption(text: String(localized: "Just saved"))
                 Text(article.displayTitle)
                     .font(.system(size: 20, weight: .medium, design: .serif))
                     .lineSpacing(2)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .foregroundStyle(amber.inkStrong)
-                Text("\(article.sourceLabel) · \(article.lengthLabel) · \(Self.when(article.addedAt))")
+                Text(verbatim: "\(article.sourceLabel) · \(article.lengthLabel) · \(Self.when(article.addedAt))")
                     .font(.system(size: 11, weight: .medium))
                     .tracking(0.4)
                     .lineLimit(1)
@@ -292,7 +292,7 @@ struct HomePane: View {
 
     private var sitesBlock: some View {
         VStack(alignment: .leading, spacing: 14) {
-            AmberCaption(text: "Sites")
+            AmberCaption(text: String(localized: "Sites"))
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5),
                       alignment: .leading, spacing: 14) {
                 ForEach(sites.sites) { site in
@@ -370,10 +370,10 @@ struct HomePane: View {
                     .foregroundStyle(amber.inkFaint)
                 AmberTextField(text: $query,
                                isFocused: $queryFocused,
-                               placeholder: "Search your library or the web",
+                               placeholder: String(localized: "Search your library or the web"),
                                palette: settings.palette,
                                showsTexture: settings.showTexture,
-                               goLabel: "Go",
+                               goLabel: String(localized: "Go"),
                                fontSize: 14,
                                onSubmit: submitQuery)
                     .frame(height: 19)
@@ -409,13 +409,13 @@ struct HomePane: View {
                 let q = trimmedQuery
                 if q.isEmpty {
                     if !sites.sites.isEmpty {
-                        sectionLabel("Sites")
+                        sectionLabel(String(localized: "Sites"))
                         ForEach(sites.sites) { site in siteRow(site) }
                     }
                 } else {
                     let found = Array(library.list(scope: .all, search: q).prefix(8))
                     if !found.isEmpty {
-                        sectionLabel("In your library")
+                        sectionLabel(String(localized: "In your library"))
                         ForEach(found) { article in articleRow(article) }
                     }
                     let matching = sites.sites.filter {
@@ -423,18 +423,18 @@ struct HomePane: View {
                             || $0.host.lowercased().contains(q.lowercased())
                     }
                     if !matching.isEmpty {
-                        sectionLabel("Sites")
+                        sectionLabel(String(localized: "Sites"))
                         ForEach(matching) { site in siteRow(site) }
                     }
                     // An address goes first, since what was typed is one; words are a
                     // search first and an address only if they could be one.
-                    sectionLabel("On the web")
+                    sectionLabel(String(localized: "On the web"))
                     if let url = BrowserModel.url(from: q) {
-                        resultRow(symbol: "globe", title: "Go to \(url.host ?? q)") {
+                        resultRow(symbol: "globe", title: String(localized: "Go to \(url.host ?? q)")) {
                             go(to: url)
                         }
                     }
-                    resultRow(symbol: "magnifyingglass", title: "Search the web for “\(q)”") {
+                    resultRow(symbol: "magnifyingglass", title: String(localized: "Search the web for “\(q)”")) {
                         go(to: BrowserModel.searchURL(for: q))
                     }
                 }
@@ -463,7 +463,7 @@ struct HomePane: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .foregroundStyle(article.readAt == nil ? amber.inkStrong : amber.inkMuted)
-                    Text("\(article.sourceLabel) · \(article.lengthLabel)")
+                    Text(verbatim: "\(article.sourceLabel) · \(article.lengthLabel)")
                         .font(.system(size: 11, weight: .medium))
                         .tracking(0.4)
                         .foregroundStyle(amber.inkFaint)
@@ -561,8 +561,8 @@ struct HomePane: View {
                     withAnimation(.easeOut(duration: 0.16)) { self.tileMenu = nil }
                 }
                 AmberMenu(items: [
-                    AmberMenuItem(title: "Edit", symbol: "pencil") { onEditSite(tileMenu.site) },
-                    AmberMenuItem(title: "Remove", symbol: "trash", isDestructive: true) {
+                    AmberMenuItem(title: String(localized: "Edit"), symbol: "pencil") { onEditSite(tileMenu.site) },
+                    AmberMenuItem(title: String(localized: "Remove"), symbol: "trash", isDestructive: true) {
                         sites.remove(tileMenu.site)
                     },
                 ]) {

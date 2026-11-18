@@ -31,14 +31,14 @@ enum ExtractionError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .badURL: return "That doesn't look like a web address."
-        case .timedOut: return "The page took too long to load."
+        case .badURL: return String(localized: "That doesn't look like a web address.")
+        case .timedOut: return String(localized: "The page took too long to load.")
         case .navigationFailed(let m): return m
-        case .scriptMissing: return "The reader script is missing from the app bundle."
+        case .scriptMissing: return String(localized: "The reader script is missing from the app bundle.")
         case .unreadable(let r):
             return r == "too-short"
-                ? "Couldn't find an article on that page."
-                : "Couldn't read that page."
+                ? String(localized: "Couldn't find an article on that page.")
+                : String(localized: "Couldn't read that page.")
         }
     }
 }

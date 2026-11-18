@@ -128,10 +128,10 @@ struct HighlightsSheet: View {
                 .foregroundStyle(amber.inkFaint)
             AmberTextField(text: $search,
                            isFocused: $searchFocused,
-                           placeholder: "Search passages and notes",
+                           placeholder: String(localized: "Search passages and notes"),
                            palette: settings.palette,
                            showsTexture: settings.showTexture,
-                           goLabel: "Done",
+                           goLabel: String(localized: "Done"),
                            fontSize: 14,
                            onSubmit: { searchFocused = false })
                 .frame(height: 19)

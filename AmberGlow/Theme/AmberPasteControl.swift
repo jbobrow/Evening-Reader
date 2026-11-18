@@ -243,13 +243,13 @@ final class FieldCallout {
 @MainActor
 enum CopiedFlash {
     /// Over a rectangle in a window's coordinates — where a callout stood.
-    static func show(over frame: CGRect, in window: UIView?, palette: AmberPalette, text: String = "Copied") {
+    static func show(over frame: CGRect, in window: UIView?, palette: AmberPalette, text: String = String(localized: "Copied")) {
         guard let window else { return }
         show(in: window, center: CGPoint(x: frame.midX, y: frame.midY), palette: palette, text: text)
     }
 
     /// Centred on a point in the given view.
-    static func show(in view: UIView, center: CGPoint, palette: AmberPalette, text: String = "Copied") {
+    static func show(in view: UIView, center: CGPoint, palette: AmberPalette, text: String = String(localized: "Copied")) {
         let host = UIHostingController(rootView: Pill(text: text).environment(\.amber, palette))
         host.view.backgroundColor = .clear
         let size = host.sizeThatFits(in: CGSize(width: 240, height: 80))

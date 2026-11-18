@@ -83,7 +83,7 @@ struct AmberConfirm: View {
     var confirmTitle: String
     /// `nil` hides the second button entirely — for a plain acknowledgement (a book that
     /// can't be opened, say) rather than a choice between two actions.
-    var cancelTitle: String? = "Keep"
+    var cancelTitle: String? = String(localized: "Keep")
     var confirm: () -> Void
     var cancel: () -> Void = {}
 

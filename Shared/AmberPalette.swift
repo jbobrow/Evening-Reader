@@ -15,7 +15,7 @@ struct AmberPalette: Equatable {
         case night
 
         var id: String { rawValue }
-        var label: String { self == .paper ? "Paper" : "Night" }
+        var label: String { self == .paper ? String(localized: "Paper") : String(localized: "Night") }
         var symbol: String { self == .paper ? "sun.max" : "moon" }
     }
 
@@ -31,11 +31,11 @@ struct AmberPalette: Equatable {
     /// saved preset can name itself the same way the slider does.
     var warmthName: String {
         switch warmth {
-        case ..<0.2: return "Warm beige"
-        case ..<0.45: return "Sand"
-        case ..<0.7: return "Amber"
-        case ..<0.88: return "Deep amber"
-        default: return "Orange amber"
+        case ..<0.2: return String(localized: "Warm beige")
+        case ..<0.45: return String(localized: "Sand")
+        case ..<0.7: return String(localized: "Amber")
+        case ..<0.88: return String(localized: "Deep amber")
+        default: return String(localized: "Orange amber")
         }
     }
 

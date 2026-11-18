@@ -22,11 +22,11 @@ struct AboutPage: View {
             header
             Hairline()
             AboutView(app: .eveningReader) {
-                AboutRow(title: "How it works", systemImage: "questionmark.circle") {
+                AboutRow(title: String(localized: "How it works"), systemImage: "questionmark.circle") {
                     showTour = true
                 }
                 if let latest = WhatsNew.latest {
-                    AboutRow(title: "What's new in \(latest.version)", systemImage: "sparkles") {
+                    AboutRow(title: String(localized: "What's new in \(latest.version)"), systemImage: "sparkles") {
                         whatsNew = latest
                     }
                 }
@@ -80,8 +80,7 @@ extension AboutApp {
     static let eveningReader = AboutApp(
         name: "Evening Reader",
         icon: Image("AppIconImage"),
-        description: "Save articles, books and PDFs, then read them on a single warm glow you "
-            + "set yourself. Offline, in your own iCloud folders, for the last hour of the day.",
+        description: String(localized: "Save articles, books and PDFs, then read them on a single warm glow you set yourself. Offline, in your own iCloud folders, for the last hour of the day."),
         website: URL(string: "https://eveningreader.jonbobrow.com"),
         support: URL(string: "https://eveningreader.jonbobrow.com/support.html"),
         privacy: URL(string: "https://eveningreader.jonbobrow.com/privacy.html"))

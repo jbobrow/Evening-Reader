@@ -93,10 +93,10 @@ struct LibraryPane: View {
                     .foregroundStyle(amber.inkFaint)
                 AmberTextField(text: $search,
                                isFocused: $searchFocused,
-                               placeholder: "Search",
+                               placeholder: String(localized: "Search"),
                                palette: settings.palette,
                                showsTexture: settings.showTexture,
-                               goLabel: "Done",
+                               goLabel: String(localized: "Done"),
                                fontSize: 14,
                                onSubmit: {})
                     .frame(height: 19)
@@ -201,27 +201,27 @@ struct LibraryPane: View {
     private func menuItems(for item: SavedArticle) -> [AmberMenuItem] {
         var items: [AmberMenuItem] = []
         if item.isArchived {
-            items.append(AmberMenuItem(title: "Move to Unread", symbol: "tray.and.arrow.up") {
+            items.append(AmberMenuItem(title: String(localized: "Move to Unread"), symbol: "tray.and.arrow.up") {
                 library.setArchived(item, false)
             })
         } else {
-            items.append(AmberMenuItem(title: "Archive", symbol: "archivebox") {
+            items.append(AmberMenuItem(title: String(localized: "Archive"), symbol: "archivebox") {
                 library.setArchived(item, true)
             })
         }
         if item.state == .failed {
-            items.append(AmberMenuItem(title: "Try Reading Again", symbol: "arrow.clockwise") {
+            items.append(AmberMenuItem(title: String(localized: "Try Reading Again"), symbol: "arrow.clockwise") {
                 library.retry(item)
             })
         }
         // A book's `url` is a synthetic identity, not an address — nothing anyone would
         // want on the clipboard.
         if !item.isBook {
-            items.append(AmberMenuItem(title: "Copy Link", symbol: "link") {
+            items.append(AmberMenuItem(title: String(localized: "Copy Link"), symbol: "link") {
                 UIPasteboard.general.url = item.url
             })
         }
-        items.append(AmberMenuItem(title: "Remove", symbol: "trash", isDestructive: true) {
+        items.append(AmberMenuItem(title: String(localized: "Remove"), symbol: "trash", isDestructive: true) {
             onRequestDelete(item)
         })
         return items
@@ -284,7 +284,7 @@ struct LibraryPane: View {
         case .cloud:
             EmptyView()
         case .searching:
-            noteRow(symbol: "icloud", text: "Looking for your iCloud library…")
+            noteRow(symbol: "icloud", text: String(localized: "Looking for your iCloud library…"))
         case .local:
             noteRow(symbol: "icloud.slash",
                     text: "iCloud isn't available, so this library stays on this device. Turn on iCloud Drive for Evening Reader in Settings to see what you saved elsewhere.")

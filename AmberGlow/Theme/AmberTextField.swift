@@ -15,7 +15,7 @@ struct AmberTextField: UIViewRepresentable {
     var showsTexture: Bool
     /// URL fields get `.com` and a dot key; a search field does not.
     var showsDotCom: Bool = false
-    var goLabel: String = "Go"
+    var goLabel: String = String(localized: "Go")
     var monospaced: Bool = false
     var fontSize: CGFloat = 16
     var onSubmit: () -> Void

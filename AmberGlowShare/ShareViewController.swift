@@ -51,7 +51,7 @@ final class ShareViewController: UIViewController {
 
     private func save() async {
         guard let shared = await resolveShared() else {
-            phase = .failed("Nothing to save from here.")
+            phase = .failed(String(localized: "Nothing to save from here."))
             finish(after: 1.5)
             return
         }
@@ -86,7 +86,7 @@ final class ShareViewController: UIViewController {
     /// share sheet, once `drainInbox()` carries this item the rest of the way over.
     private func saveBook(_ fileURL: URL) async {
         guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) else {
-            phase = .failed("Couldn't read that file.")
+            phase = .failed(String(localized: "Couldn't read that file."))
             finish(after: 1.6)
             return
         }
@@ -101,7 +101,7 @@ final class ShareViewController: UIViewController {
             let store = ArticleStore.shared
             store.append(article)
             guard store.adoptDocument(from: fileURL, for: article) else {
-                phase = .failed("Couldn't save that book.")
+                phase = .failed(String(localized: "Couldn't save that book."))
                 finish(after: 1.6)
                 return
             }
@@ -111,7 +111,7 @@ final class ShareViewController: UIViewController {
             phase = .failed(failure.problem.title, detail: failure.problem.detail)
             finish(after: 3.2)
         } catch {
-            phase = .failed("That doesn't look like a book Evening Reader can open.")
+            phase = .failed(String(localized: "That doesn't look like a book Evening Reader can open."))
             finish(after: 1.8)
         }
     }
@@ -201,8 +201,8 @@ enum SavePhase: Equatable {
 
     var headline: String {
         switch self {
-        case .working: return "Saving…"
-        case .saved: return "Saved to Evening Reader"
+        case .working: return String(localized: "Saving…")
+        case .saved: return String(localized: "Saved to Evening Reader")
         case .failed(let message, _): return message
         }
     }
@@ -211,7 +211,7 @@ enum SavePhase: Equatable {
         switch self {
         case .saved(let title): return title
         case .working: return nil
-        case .failed(_, let detail): return detail ?? "Try sharing the page itself."
+        case .failed(_, let detail): return detail ?? String(localized: "Try sharing the page itself.")
         }
     }
 }

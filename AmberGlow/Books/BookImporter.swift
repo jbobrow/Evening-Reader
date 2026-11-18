@@ -22,9 +22,9 @@ enum BookImporter {
 
         var errorDescription: String? {
             switch self {
-            case .bookFileMissing: return "This book's file is missing."
-            case .empty: return "This book has no chapters to read."
-            case .writeFailed: return "Couldn't save this book's text."
+            case .bookFileMissing: return String(localized: "This book's file is missing.")
+            case .empty: return String(localized: "This book has no chapters to read.")
+            case .writeFailed: return String(localized: "Couldn't save this book's text.")
             }
         }
     }

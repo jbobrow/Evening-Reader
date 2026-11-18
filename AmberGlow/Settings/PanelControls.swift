@@ -17,7 +17,7 @@ struct PanelControls: View {
     enum Tab: String, CaseIterable, Identifiable {
         case light, type
         var id: String { rawValue }
-        var label: String { self == .light ? "Light" : "Type" }
+        var label: String { self == .light ? String(localized: "Light") : String(localized: "Type") }
     }
 
     /// The half last looked at, so the panel opens on it again.
@@ -61,28 +61,28 @@ struct PanelControls: View {
         HStack(spacing: 10) {
             ForEach(AmberPalette.Polarity.allCases) { polarityTile($0) }
         }
-        labelled("Warmth", value: settings.palette.warmthName) {
+        labelled(String(localized: "Warmth"), value: settings.palette.warmthName) {
             AmberSlider(value: Binding(get: { settings.warmth },
                                        set: { settings.warmth = $0 }),
                         leadingSymbol: "lightbulb",
                         trailingSymbol: "flame",
                         trackGradient: Self.warmthTrack(settings))
         }
-        labelled("Brightness", value: percent(settings.glow)) {
+        labelled(String(localized: "Brightness"), value: percent(settings.glow)) {
             AmberSlider(value: Binding(get: { settings.glow },
                                        set: { settings.glow = $0 }),
                         range: 0.05...1,
                         leadingSymbol: "sun.min",
                         trailingSymbol: "sun.max")
         }
-        labelled("Contrast", value: percent(settings.contrast)) {
+        labelled(String(localized: "Contrast"), value: percent(settings.contrast)) {
             AmberSlider(value: Binding(get: { settings.contrast },
                                        set: { settings.contrast = $0 }),
                         leadingSymbol: "circle.righthalf.filled",
                         trailingSymbol: "circle.hexagongrid")
         }
 
-        group("Saved glows") {
+        group(String(localized: "Saved glows")) {
             if settings.presets.isEmpty {
                 Text("Keep a glow you like and it will wait here.")
                     .font(.system(size: 12.5))
@@ -183,10 +183,10 @@ struct PanelControls: View {
                 VStack(alignment: .leading, spacing: 18) {
                     AmberToggle(isOn: Binding(get: { settings.showTexture },
                                               set: { settings.showTexture = $0 }),
-                                title: "Pixel grid")
+                                title: String(localized: "Pixel grid"))
                     AmberToggle(isOn: Binding(get: { settings.showBloom },
                                               set: { settings.showBloom = $0 }),
-                                title: "Backlight bloom")
+                                title: String(localized: "Backlight bloom"))
                     ramp
                 }
                 .transition(.opacity)
@@ -198,13 +198,13 @@ struct PanelControls: View {
 
     @ViewBuilder
     private var type: some View {
-        group("Typeface") {
+        group(String(localized: "Typeface")) {
             HStack(spacing: 8) {
                 ForEach(DisplaySettings.Typeface.allCases) { faceTile($0) }
             }
         }
         specimen
-        labelled("Size", value: String(format: "%.0f pt", settings.bodyPointSize)) {
+        labelled(String(localized: "Size"), value: String(format: "%.0f pt", settings.bodyPointSize)) {
             AmberSlider(value: Binding(get: { settings.textScale },
                                        set: { settings.textScale = $0 }),
                         range: 0.8...1.9,
@@ -212,7 +212,7 @@ struct PanelControls: View {
                         leadingSymbol: "textformat.size.smaller",
                         trailingSymbol: "textformat.size.larger")
         }
-        labelled("Leading", value: String(format: "%.2f", settings.lineHeight)) {
+        labelled(String(localized: "Leading"), value: String(format: "%.2f", settings.lineHeight)) {
             AmberSlider(value: Binding(get: { settings.lineHeight },
                                        set: { settings.lineHeight = $0 }),
                         range: 1.25...2.05,
@@ -220,7 +220,7 @@ struct PanelControls: View {
                         trailingSymbol: "arrow.up.and.down")
         }
         if showsColumn {
-            labelled("Column", value: String(format: "%.0f pt", settings.readerColumnPoints)) {
+            labelled(String(localized: "Column"), value: String(format: "%.0f pt", settings.readerColumnPoints)) {
                 AmberSlider(value: Binding(get: { settings.measure },
                                            set: { settings.measure = $0 }),
                             leadingSymbol: "arrow.right.and.line.vertical.and.arrow.left",
@@ -230,11 +230,11 @@ struct PanelControls: View {
         // Only on glass that folds. Anywhere else there is no crease to set a gutter
         // on, and a control for it would be a promise the device cannot keep.
         if pose != .none {
-            group("Opened sideways") {
+            group(String(localized: "Opened sideways")) {
                 VStack(alignment: .leading, spacing: 8) {
                     AmberToggle(isOn: Binding(get: { settings.bookView },
                                               set: { settings.bookView = $0 }),
-                                title: "Two-page spread")
+                                title: String(localized: "Two-page spread"))
                     Text("The crease is the gutter. Swipe, or tap near either edge, to turn the page.")
                         .font(.system(size: 12.5))
                         .lineSpacing(2)
@@ -251,7 +251,7 @@ struct PanelControls: View {
             withAnimation(.easeOut(duration: 0.18)) { settings.typeface = face }
         } label: {
             VStack(spacing: 2) {
-                Text("Ag")
+                Text(verbatim: "Ag")
                     .font(.system(size: 24, design: face.design))
                 Text(face.label)
                     .font(.system(size: 11, weight: .medium))
@@ -287,7 +287,7 @@ struct PanelControls: View {
     private var specimen: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                AmberCaption(text: "Sample")
+                AmberCaption(text: String(localized: "Sample"))
                 Spacer()
                 Button("Show another") {
                     withAnimation(.easeOut(duration: 0.2)) {
@@ -360,7 +360,7 @@ struct PanelControls: View {
     /// The whole palette, end to end — the ramp every color in the app comes from.
     private var ramp: some View {
         VStack(alignment: .leading, spacing: 8) {
-            AmberCaption(text: "The ramp")
+            AmberCaption(text: String(localized: "The ramp"))
             HStack(spacing: 0) {
                 ForEach(0..<13, id: \.self) { i in
                     amber.color(Double(i) / 12.0)

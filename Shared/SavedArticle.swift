@@ -63,16 +63,16 @@ struct SavedArticle: Codable, Identifiable, Hashable {
     var lengthLabel: String {
         if isPDF {
             guard let pages = pageCount, pages > 0 else { return "PDF" }
-            return pages == 1 ? "1 page" : "\(pages) pages"
+            return pages == 1 ? String(localized: "1 page") : String(localized: "\(pages) pages")
         }
         if isBook {
             let minutes = estimatedMinutes
-            guard minutes >= 60 else { return "\(minutes) min" }
+            guard minutes >= 60 else { return String(localized: "\(minutes) min") }
             let hours = minutes / 60
             let rest = minutes % 60
-            return rest == 0 ? "\(hours) hr" : "\(hours) hr \(rest) min"
+            return rest == 0 ? String(localized: "\(hours) hr") : String(localized: "\(hours) hr \(rest) min")
         }
-        return "\(estimatedMinutes) min"
+        return String(localized: "\(estimatedMinutes) min")
     }
 
     var estimatedMinutes: Int { max(1, Int((Double(wordCount) / 235.0).rounded())) }
@@ -85,13 +85,13 @@ struct SavedArticle: Codable, Identifiable, Hashable {
         if isPDF {
             guard let pages = pageCount, pages > 0 else { return nil }
             let left = max(1, Int((Double(pages) * fraction).rounded()))
-            return left == 1 ? "1 page left" : "\(left) pages left"
+            return left == 1 ? String(localized: "1 page left") : String(localized: "\(left) pages left")
         }
         let minutes = max(1, Int((Double(estimatedMinutes) * fraction).rounded()))
-        guard minutes >= 60 else { return "\(minutes) min left" }
+        guard minutes >= 60 else { return String(localized: "\(minutes) min left") }
         let hours = minutes / 60
         let rest = minutes % 60
-        return rest == 0 ? "\(hours) hr left" : "\(hours) hr \(rest) min left"
+        return rest == 0 ? String(localized: "\(hours) hr left") : String(localized: "\(hours) hr \(rest) min left")
     }
 
     var host: String {
@@ -105,7 +105,7 @@ struct SavedArticle: Codable, Identifiable, Hashable {
     /// printing; its author is what belongs there instead.
     var sourceLabel: String {
         guard isBook else { return host }
-        return byline ?? "Book"
+        return byline ?? String(localized: "Book")
     }
 
     var displayTitle: String { title.isEmpty ? host : title }

@@ -20,7 +20,7 @@ final class AmberKeyboardInstaller {
         var palette = AmberPalette()
         var showsTexture = true
         var showsDotCom = false
-        var goLabel = "Go"
+        var goLabel = String(localized: "Go")
     }
 
     private let host: UIHostingController<AmberKeyboard>
@@ -32,7 +32,7 @@ final class AmberKeyboardInstaller {
         host = UIHostingController(rootView: AmberKeyboard(palette: AmberPalette(),
                                                            showsTexture: true,
                                                            showsDotCom: false,
-                                                           goLabel: "Go",
+                                                           goLabel: String(localized: "Go"),
                                                            boardWidth: 0,
                                                            onKey: { _ in }))
         host.view.backgroundColor = .clear

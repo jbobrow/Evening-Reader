@@ -1,0 +1,42 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSMicrophoneUsageDescription": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The mic on Evening Reader’s keyboard listens while you dictate a note or a search."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "當你用 Evening Reader 的鍵盤聽寫附註或搜尋時，麥克風會聆聽你的聲音。"
+          }
+        }
+      }
+    },
+    "NSSpeechRecognitionUsageDescription": {
+      "comment": "",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What you dictate on Evening Reader’s keyboard is turned into text, on your iPhone where it can be."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你在 Evening Reader 鍵盤上聽寫的內容會轉換成文字，並盡可能在你的 iPhone 上完成。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

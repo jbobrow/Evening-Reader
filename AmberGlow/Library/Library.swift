@@ -16,9 +16,9 @@ final class Library {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .unread: return "Unread"
-            case .all: return "All"
-            case .archive: return "Archive"
+            case .unread: return String(localized: "Unread")
+            case .all: return String(localized: "All")
+            case .archive: return String(localized: "Archive")
             }
         }
     }

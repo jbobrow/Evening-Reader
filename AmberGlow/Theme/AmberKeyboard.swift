@@ -189,12 +189,12 @@ struct AmberKeyboard: View {
                     .frame(height: 30)
             } else {
                 HStack(spacing: gap) {
-                    stripKey("Select All", .selectAll)
-                    stripKey("Cut", .cut)
-                    stripKey("Copy", .copy)
+                    stripKey(String(localized: "Select All"), .selectAll)
+                    stripKey(String(localized: "Cut"), .cut)
+                    stripKey(String(localized: "Copy"), .copy)
                     pasteKey
                     if showsAutofill {
-                        stripKey("AutoFill", symbol: "key.fill", .autofill)
+                        stripKey(String(localized: "AutoFill"), symbol: "key.fill", .autofill)
                     }
                     if AmberDictation.isOffered {
                         micKey
@@ -231,7 +231,7 @@ struct AmberKeyboard: View {
                     .background(Circle().fill(amber.color(0.30)))
                     .symbolEffect(.pulse, isActive: dictation.state == .listening)
                 Text(dictation.transcript.isEmpty
-                     ? (dictation.state == .starting ? "Starting…" : "Listening…")
+                     ? (dictation.state == .starting ? String(localized: "Starting…") : String(localized: "Listening…"))
                      : dictation.transcript)
                     .font(.system(size: 13.5, weight: dictation.transcript.isEmpty ? .medium : .regular))
                     .foregroundStyle(dictation.transcript.isEmpty ? amber.inkMuted : amber.ink)
@@ -346,7 +346,7 @@ struct AmberKeyboard: View {
                     send(.char("."))
                 }
             }
-            AmberKeyCap(label: "space", palette: amber, kind: .space) { send(.space) }
+            AmberKeyCap(label: String(localized: "space"), palette: amber, kind: .space) { send(.space) }
             if showsDotCom {
                 AmberKeyCap(label: ".com", palette: amber, kind: .modifier,
                             width: isNarrow ? 62 : 74) {

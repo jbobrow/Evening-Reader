@@ -54,7 +54,7 @@ struct EpubPackage {
 
         var package = EpubPackage(
             opfPath: opfPath, opfDirectory: opfDirectory,
-            title: opf.title.isEmpty ? "Untitled" : opf.title,
+            title: opf.title.isEmpty ? String(localized: "Untitled") : opf.title,
             creator: opf.creator, publisher: opf.publisher,
             bookDescription: opf.bookDescription, language: opf.language, date: opf.date,
             identifier: opf.identifier,
@@ -123,8 +123,8 @@ enum EpubError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notAnEpub: return "This isn't a readable EPUB — its container is missing or damaged."
-        case .malformed: return "This EPUB's manifest doesn't describe a book Evening Reader can open."
+        case .notAnEpub: return String(localized: "This isn't a readable EPUB — its container is missing or damaged.")
+        case .malformed: return String(localized: "This EPUB's manifest doesn't describe a book Evening Reader can open.")
         }
     }
 }

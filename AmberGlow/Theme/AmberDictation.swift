@@ -61,7 +61,7 @@ final class AmberDictation: ObservableObject {
         state = .starting
         Task {
             guard await Self.authorize() else {
-                refuse("Allow the microphone and speech recognition for Evening Reader in Settings.")
+                refuse(String(localized: "Allow the microphone and speech recognition for Evening Reader in Settings."))
                 return
             }
             begin(preferOnDevice: true)
@@ -104,7 +104,7 @@ final class AmberDictation: ObservableObject {
         // Stopped while the permission prompt was up.
         guard state == .starting else { return }
         guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
-            refuse("Dictation isn’t available right now.")
+            refuse(String(localized: "Dictation isn’t available right now."))
             return
         }
 
@@ -128,7 +128,7 @@ final class AmberDictation: ObservableObject {
             try engine.start()
         } catch {
             teardown()
-            refuse("The microphone couldn’t be started.")
+            refuse(String(localized: "The microphone couldn’t be started."))
             return
         }
 
@@ -151,7 +151,7 @@ final class AmberDictation: ObservableObject {
                 state = .starting
                 begin(preferOnDevice: false)
             } else {
-                refuse("Dictation isn’t available right now.")
+                refuse(String(localized: "Dictation isn’t available right now."))
             }
             return
         }

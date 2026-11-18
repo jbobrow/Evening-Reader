@@ -635,11 +635,11 @@ struct BrowseScreen: View {
             siteMark
             AmberTextField(text: $address,
                            isFocused: $addressFocused,
-                           placeholder: "Search or enter address",
+                           placeholder: String(localized: "Search or enter address"),
                            palette: settings.palette,
                            showsTexture: settings.showTexture,
                            showsDotCom: true,
-                           goLabel: "Go",
+                           goLabel: String(localized: "Go"),
                            monospaced: true,
                            fontSize: 13,
                            onSubmit: { model.submit(address) })

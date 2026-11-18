@@ -129,7 +129,7 @@ struct Signature {
 
     /// app-by-jon-bobrow.svg, for an app's own screens.
     static let appBy = Signature(
-        text: "App by Jon Bobrow",
+        text: String(localized: "App by Jon Bobrow"),
         viewBox: CGSize(width: 3087.29, height: 681.93),
         strokes: [
             "M1610.11,335.11c0,17.82,19.8,77.22,3.96,110.89",
@@ -157,7 +157,7 @@ struct Signature {
 
     /// apps-by-jon-bobrow.svg, for the link to all the apps.
     static let appsBy = Signature(
-        text: "Apps by Jon Bobrow",
+        text: String(localized: "Apps by Jon Bobrow"),
         viewBox: CGSize(width: 3072.11, height: 681.93),
         strokes: [
             "M1594.93,335.11c0,17.82,19.8,77.22,3.96,110.89",

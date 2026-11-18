@@ -238,9 +238,9 @@ struct PageScrubber: View {
     /// chooser grow leftward from exactly where the pill was, instead of shoving it aside.
     private var chooser: some View {
         HStack(spacing: 0) {
-            option("Percent", .percent)
+            option(String(localized: "Percent"), .percent)
             amber.color(0.62, opacity: 0.45).frame(width: 1, height: 18)
-            option("Pages", .pages)
+            option(String(localized: "Pages"), .pages)
         }
         .background { Capsule().fill(amber.color(0.93)) }
         .overlay { Capsule().strokeBorder(amber.color(0.62, opacity: 0.5), lineWidth: 1) }
@@ -273,7 +273,7 @@ struct PageScrubber: View {
     // MARK: - Readout
 
     private var shortLabel: String {
-        style == .percent ? "\(Int((percent * 100).rounded()))%" : "\(pageLabel) of \(total)"
+        style == .percent ? "\(Int((percent * 100).rounded()))%" : String(localized: "\(pageLabel) of \(total)")
     }
 
     /// "12", or "12–13" for the pair of pages a spread shows.

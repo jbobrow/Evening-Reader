@@ -29,7 +29,7 @@ final class DisplaySettings {
     enum ProgressStyle: String, Codable, CaseIterable, Identifiable {
         case percent, pages
         var id: String { rawValue }
-        var label: String { self == .percent ? "Percent" : "Pages" }
+        var label: String { self == .percent ? String(localized: "Percent") : String(localized: "Pages") }
     }
 
     enum Typeface: String, Codable, CaseIterable, Identifiable {
@@ -37,9 +37,9 @@ final class DisplaySettings {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .serif: return "Serif"
-            case .sans: return "Sans"
-            case .mono: return "Mono"
+            case .serif: return String(localized: "Serif")
+            case .sans: return String(localized: "Sans")
+            case .mono: return String(localized: "Mono")
             }
         }
         var design: Font.Design {
@@ -250,7 +250,7 @@ final class DisplaySettings {
     /// without the user having to type anything.
     var suggestedPresetName: String {
         var parts = [palette.warmthName, "\(Int((glow * 100).rounded()))%"]
-        if polarity == .night { parts.append("Night") }
+        if polarity == .night { parts.append(String(localized: "Night")) }
         return parts.joined(separator: " · ")
     }
 

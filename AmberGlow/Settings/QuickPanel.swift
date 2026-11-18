@@ -78,13 +78,13 @@ struct QuickPanel: View {
     /// A smaller A and a larger one, the size between them.
     private var sizeStepper: some View {
         HStack(spacing: 0) {
-            step("A", size: 13, by: -sizeStep, label: "Smaller text")
+            step("A", size: 13, by: -sizeStep, label: String(localized: "Smaller text"))
             Text(String(format: "%.0f", settings.bodyPointSize))
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(amber.inkFaint)
                 .frame(width: 26)
                 .contentTransition(.numericText())
-            step("A", size: 19, by: sizeStep, label: "Larger text")
+            step("A", size: 19, by: sizeStep, label: String(localized: "Larger text"))
         }
         .padding(4)
         .background(

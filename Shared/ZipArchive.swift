@@ -374,11 +374,11 @@ enum ZipError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notAZip: return "This isn't a zip archive."
-        case .truncated: return "The file ends before it should."
-        case .corrupt: return "The file is damaged."
-        case .unsupportedMethod(let method): return "The file uses compression method \(method), which this reader doesn't handle."
-        case .tooLarge: return "Something inside the file is too large to read."
+        case .notAZip: return String(localized: "This isn't a zip archive.")
+        case .truncated: return String(localized: "The file ends before it should.")
+        case .corrupt: return String(localized: "The file is damaged.")
+        case .unsupportedMethod(let method): return String(localized: "The file uses compression method \(method), which this reader doesn't handle.")
+        case .tooLarge: return String(localized: "Something inside the file is too large to read.")
         case .notFound(let path): return "\(path) isn't in the file."
         }
     }

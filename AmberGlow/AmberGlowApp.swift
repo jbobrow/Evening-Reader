@@ -545,9 +545,9 @@ struct RootView: View {
             ZStack {
                 AmberScrim { dismissConfirm() }
                 AmberConfirm(
-                    title: "Remove this article?",
+                    title: String(localized: "Remove this article?"),
                     message: article.displayTitle,
-                    confirmTitle: "Remove",
+                    confirmTitle: String(localized: "Remove"),
                     confirm: {
                         if selection == article.id { selection = nil }
                         library.delete(article)
@@ -573,7 +573,7 @@ struct RootView: View {
                 AmberConfirm(
                     title: problem.title,
                     message: problem.detail,
-                    confirmTitle: "OK",
+                    confirmTitle: String(localized: "OK"),
                     cancelTitle: nil,
                     confirm: { bookImportProblem = nil }
                 )

@@ -76,13 +76,13 @@ enum EditAction: Hashable {
 
     var label: String {
         switch self {
-        case .cut: return "Cut"
-        case .copy: return "Copy"
-        case .paste: return "Paste"
-        case .search: return "Search"
-        case .define: return "Define"
-        case .highlight: return "Highlight"
-        case .askAI: return "Ask AI"
+        case .cut: return String(localized: "Cut")
+        case .copy: return String(localized: "Copy")
+        case .paste: return String(localized: "Paste")
+        case .search: return String(localized: "Search")
+        case .define: return String(localized: "Define")
+        case .highlight: return String(localized: "Highlight")
+        case .askAI: return String(localized: "Ask AI")
         }
     }
 }

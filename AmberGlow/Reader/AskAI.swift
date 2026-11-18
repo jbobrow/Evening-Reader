@@ -19,19 +19,19 @@ enum AppleIntelligence {
     /// being drawn and the sheet being opened.
     static var absence: String {
         guard #available(iOS 26.0, *) else {
-            return "Asking about a passage needs iOS 26 or later."
+            return String(localized: "Asking about a passage needs iOS 26 or later.")
         }
         switch SystemLanguageModel.default.availability {
         case .available:
             return ""
         case .unavailable(.deviceNotEligible):
-            return "This device doesn't run Apple Intelligence."
+            return String(localized: "This device doesn't run Apple Intelligence.")
         case .unavailable(.appleIntelligenceNotEnabled):
-            return "Apple Intelligence is turned off. Turn it on in Settings to ask about a passage."
+            return String(localized: "Apple Intelligence is turned off. Turn it on in Settings to ask about a passage.")
         case .unavailable(.modelNotReady):
-            return "Apple Intelligence is still downloading its model. Try again in a little while."
+            return String(localized: "Apple Intelligence is still downloading its model. Try again in a little while.")
         case .unavailable:
-            return "Apple Intelligence isn't available right now."
+            return String(localized: "Apple Intelligence isn't available right now.")
         }
     }
 }
@@ -121,11 +121,11 @@ final class PassageChat {
         if let generation = error as? LanguageModelSession.GenerationError {
             switch generation {
             case .exceededContextWindowSize:
-                problem = "That's more than the on-device model can hold at once. Try a shorter passage."
+                problem = String(localized: "That's more than the on-device model can hold at once. Try a shorter passage.")
             case .guardrailViolation:
-                problem = "Apple Intelligence declined to answer that one."
+                problem = String(localized: "Apple Intelligence declined to answer that one.")
             case .assetsUnavailable:
-                problem = "Apple Intelligence isn't ready yet on this device."
+                problem = String(localized: "Apple Intelligence isn't ready yet on this device.")
             default:
                 problem = generation.localizedDescription
             }
@@ -194,9 +194,9 @@ private struct AskAIBody: View {
 
     /// Openings, for the moment before the reader knows what they want to ask. Three,
     /// because a fourth would be a menu rather than a nudge.
-    private let openings = ["Explain this simply",
-                            "What's the context?",
-                            "Why does this matter?"]
+    private let openings = [String(localized: "Explain this simply"),
+                            String(localized: "What's the context?"),
+                            String(localized: "Why does this matter?")]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -295,10 +295,10 @@ private struct AskAIBody: View {
         HStack(spacing: 10) {
             AmberTextField(text: $question,
                            isFocused: $focused,
-                           placeholder: "Ask a question",
+                           placeholder: String(localized: "Ask a question"),
                            palette: settings.palette,
                            showsTexture: settings.showTexture,
-                           goLabel: "Ask",
+                           goLabel: String(localized: "Ask"),
                            fontSize: 15,
                            onSubmit: { submit(question) })
                 .frame(height: 21)
