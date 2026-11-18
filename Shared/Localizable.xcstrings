@@ -557,6 +557,16 @@
         }
       }
     },
+    "Confirm": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認"
+          }
+        }
+      }
+    },
     "Contents": {
       "localizations": {
         "zh-Hant": {
@@ -777,6 +787,16 @@
         }
       }
     },
+    "English": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "英文"
+          }
+        }
+      }
+    },
     "Evening Reader keeps the articles you come across during the day, stripped down to the words and lit warm for reading after dark.": {
       "localizations": {
         "zh-Hant": {
@@ -813,6 +833,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在從 iCloud 取得…"
+          }
+        }
+      }
+    },
+    "Fewer Candidates": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收合候選字"
           }
         }
       }
@@ -1113,6 +1143,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "更多"
+          }
+        }
+      }
+    },
+    "More Candidates": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多候選字"
           }
         }
       }
@@ -2573,6 +2613,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "書庫即筆記"
+          }
+        }
+      }
+    },
+    "Zhuyin": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "注音"
           }
         }
       }

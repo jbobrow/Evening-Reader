@@ -61,6 +61,13 @@ struct AmberKeyboard: View {
     @State private var lastTyped: String?
     @State private var accents: AccentPopup?
     @StateObject private var dictation = AmberDictation()
+    /// Chinese typed by its sounds, in Zhuyin — see `ZhuyinComposer`. Which board is
+    /// up is kept for every field, the way a reader who types in Chinese expects to
+    /// find it where they left it.
+    @AppStorage("amberKeyboard.zhuyin") private var zhuyinOn = false
+    @StateObject private var zhuyin = ZhuyinComposer()
+    /// Whether the strip's candidates have been opened out over the keys.
+    @State private var candidatesOpen = false
 
     /// The board's own coordinate space, which the keys report their holds in and the
     /// accent popup is laid out in.
@@ -93,6 +100,38 @@ struct AmberKeyboard: View {
         return max(38, min(74, (rowWidth - 8 * gap - 7 * keyWidth) / 2))
     }
 
+    /// Whether the Zhuyin board is offered at all: to readers who read Traditional
+    /// Chinese, by the languages they have asked for or the keyboards they have added.
+    /// Simplified Chinese is typed by Pinyin, which this is not.
+    static let offersZhuyin: Bool = {
+        let languages = Locale.preferredLanguages
+            + UITextInputMode.activeInputModes.compactMap(\.primaryLanguage)
+        return languages.contains { language in
+            ["zh-Hant", "zh-TW", "zh-HK", "zh-MO"].contains { language.hasPrefix($0) }
+        }
+    }()
+
+    private var usesZhuyin: Bool {
+        zhuyinOn && Self.offersZhuyin && !ZhuyinLexicon.shared.isEmpty
+    }
+
+    /// Zhuyin has four rows of letters where English has three, so on its board the keys
+    /// are shorter and the top row runs eleven across — the same board, the same height.
+    private let zhuyinGap: CGFloat = 4
+    private let zhuyinRowGap: CGFloat = 6
+    private var zhuyinKeyWidth: CGFloat { max(0, (rowWidth - 10 * zhuyinGap) / 11) }
+    private static let zhuyinKeyHeight: CGFloat = (4 * keyHeight + 3 * 7 - 4 * 6) / 5
+    /// What the rows of keys stand in, below the strip — which the candidates take over
+    /// when they are opened out.
+    private static let keysHeight: CGFloat = 4 * keyHeight + 3 * 7
+
+    private static let zhuyinRows: [[String]] = [
+        ["ㄅ", "ㄉ", "ˇ", "ˋ", "ㄓ", "ˊ", "˙", "ㄚ", "ㄞ", "ㄢ", "ㄦ"],
+        ["ㄆ", "ㄊ", "ㄍ", "ㄐ", "ㄔ", "ㄗ", "ㄧ", "ㄛ", "ㄟ", "ㄣ"],
+        ["ㄇ", "ㄋ", "ㄎ", "ㄑ", "ㄕ", "ㄘ", "ㄨ", "ㄜ", "ㄠ", "ㄤ"],
+        ["ㄈ", "ㄌ", "ㄏ", "ㄒ", "ㄖ", "ㄙ", "ㄩ", "ㄝ", "ㄡ", "ㄥ"]
+    ]
+
     /// True where the bottom row's fixed keys would not leave the space bar room to be
     /// a space bar — every phone in portrait.
     private var isNarrow: Bool { boardWidth > 0 && boardWidth < 500 }
@@ -105,6 +144,15 @@ struct AmberKeyboard: View {
             return [["q","w","e","r","t","y","u","i","o","p"],
                     ["a","s","d","f","g","h","j","k","l"],
                     ["z","x","c","v","b","n","m"]]
+        case .numbers where usesZhuyin:
+            // Chinese is punctuated full width, the way the system's Zhuyin board does.
+            return [["1","2","3","4","5","6","7","8","9","0"],
+                    ["-","/","：","；","（","）","$","@","「","」"],
+                    ["。","，","、","？","！"]]
+        case .symbols where usesZhuyin:
+            return [["【","】","｛","｝","#","%","^","*","+","="],
+                    ["_","—","\\","｜","～","《","》","〈","〉","·"],
+                    ["…","『","』","‧","＆"]]
         case .numbers:
             return [["1","2","3","4","5","6","7","8","9","0"],
                     ["-","/",":",";","(",")","$","&","@","\""],
@@ -119,22 +167,28 @@ struct AmberKeyboard: View {
     var body: some View {
         VStack(spacing: 7) {
             editStrip
-            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                HStack(spacing: gap) {
-                    if index == 2 { leadingRowKey }
-                    ForEach(row, id: \.self) { key in
-                        AmberKeyCap(label: display(key), palette: amber,
-                                    hold: hold(for: key)) {
-                            lastTyped = display(key)
-                            send(.char(display(key)))
-                            if shifted && !capsLocked { shifted = false }
+            if candidatesOpen && !zhuyin.candidates.isEmpty {
+                candidateGrid
+            } else if usesZhuyin && plane == .letters {
+                zhuyinKeys
+            } else {
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                    HStack(spacing: gap) {
+                        if index == 2 { leadingRowKey }
+                        ForEach(row, id: \.self) { key in
+                            AmberKeyCap(label: display(key), palette: amber,
+                                        hold: hold(for: key)) {
+                                lastTyped = display(key)
+                                send(.char(display(key)))
+                                if shifted && !capsLocked { shifted = false }
+                            }
                         }
+                        if index == 2 { backspaceKey }
                     }
-                    if index == 2 { backspaceKey }
+                    .padding(.horizontal, index == 1 && plane == .letters ? 22 : 0)
                 }
-                .padding(.horizontal, index == 1 && plane == .letters ? 22 : 0)
+                bottomRow(height: Self.keyHeight)
             }
-            bottomRow
         }
         .padding(.horizontal, 6)
         .padding(.top, 8)
@@ -148,8 +202,16 @@ struct AmberKeyboard: View {
             }
         }
         .coordinateSpace(name: Self.space)
-        // Put away with the mic still open: there is no field left to type into.
-        .onDisappear { dictation.cancel() }
+        // Put away with the mic still open: there is no field left to type into. The same
+        // goes for Chinese still being composed, which has nowhere left to go.
+        .onDisappear {
+            dictation.cancel()
+            zhuyin.reset()
+            candidatesOpen = false
+        }
+        .onChange(of: zhuyin.isComposing) { _, composing in
+            if !composing { candidatesOpen = false }
+        }
         .background {
             ZStack {
                 amber.color(0.80)
@@ -167,9 +229,48 @@ struct AmberKeyboard: View {
     private func send(_ key: AmberKey) {
         switch key {
         case .shift, .plane: break
-        default: dictation.commitNow()
+        default:
+            dictation.commitNow()
+            // Any key that is not part of the Chinese being composed settles it first,
+            // as the likeliest sentence, so it lands before the key does.
+            commitComposition()
         }
         onKey(key)
+    }
+
+    private func commitComposition() {
+        guard zhuyin.isComposing, let text = zhuyin.commitAll() else { return }
+        candidatesOpen = false
+        if !text.isEmpty { onKey(.char(text)) }
+    }
+
+    private func typeZhuyin(_ symbol: String) {
+        dictation.commitNow()
+        guard let character = symbol.first else { return }
+        if let settled = zhuyin.type(character) { onKey(.char(settled)) }
+    }
+
+    private func choose(_ candidate: ZhuyinComposer.Candidate) {
+        onKey(.char(zhuyin.choose(candidate)))
+    }
+
+    private func pressSpace() {
+        if zhuyin.isComposing {
+            if let text = zhuyin.space(), !text.isEmpty { onKey(.char(text)) }
+            return
+        }
+        send(.space)
+    }
+
+    private func pressBackspace() {
+        if zhuyin.isComposing { zhuyin.backspace(); return }
+        send(.backspace)
+    }
+
+    private func pressGo() {
+        // Return settles what is being composed; a second one is the field's own.
+        if zhuyin.isComposing { commitComposition(); return }
+        send(.go)
     }
 
     /// Where Select All / Cut / Copy / Paste live, in place of the grey shortcuts bar —
@@ -178,6 +279,8 @@ struct AmberKeyboard: View {
         Group {
             if dictation.isActive {
                 listeningStrip
+            } else if zhuyin.isComposing {
+                compositionStrip
             } else if case .refused(let reason) = dictation.state {
                 Text(reason)
                     .font(.system(size: 12.5, weight: .medium))
@@ -325,41 +428,185 @@ struct AmberKeyboard: View {
 
     private var backspaceKey: some View {
         AmberKeyCap(symbol: "delete.left", palette: amber, kind: .modifier,
-                    width: modifierWidth, repeats: true) { send(.backspace) }
+                    width: modifierWidth, repeats: true) { pressBackspace() }
     }
 
-    private var bottomRow: some View {
+    private func bottomRow(height: CGFloat) -> some View {
         // On a phone the fixed keys add up to more than the row has, and the space bar is
         // what gets squeezed out. The keys that stay step down, and the one that puts the
         // keyboard away goes entirely: on a phone it is the least earned key on the board,
         // since the Go key already finishes the field and a tap outside already dismisses
         // it. What it leaves behind goes to the space bar.
         HStack(spacing: gap) {
-            AmberKeyCap(label: plane == .letters ? "123" : "ABC",
-                        palette: amber, kind: .modifier, width: modifierWidth) {
+            AmberKeyCap(label: plane == .letters ? "123" : (usesZhuyin ? "ㄅㄆㄇ" : "ABC"),
+                        palette: amber, kind: .modifier, width: modifierWidth, height: height) {
                 plane = plane == .letters ? .numbers : .letters
                 send(.plane(plane))
             }
+            if Self.offersZhuyin {
+                languageKey(height: height)
+            }
             if showsDotCom {
                 AmberKeyCap(label: ".", palette: amber, kind: .modifier,
-                            width: isNarrow ? keyWidth : 52) {
+                            width: isNarrow ? keyWidth : 52, height: height) {
                     send(.char("."))
                 }
             }
-            AmberKeyCap(label: String(localized: "space"), palette: amber, kind: .space) { send(.space) }
+            AmberKeyCap(label: String(localized: "space"), palette: amber, kind: .space,
+                        height: height) { pressSpace() }
             if showsDotCom {
                 AmberKeyCap(label: ".com", palette: amber, kind: .modifier,
-                            width: isNarrow ? 62 : 74) {
+                            width: isNarrow ? 62 : 74, height: height) {
                     send(.dotCom)
                 }
             }
-            AmberKeyCap(label: goLabel, palette: amber, kind: .go,
-                        width: isNarrow ? 72 : 92) { send(.go) }
+            AmberKeyCap(label: zhuyin.isComposing ? String(localized: "Confirm") : goLabel,
+                        palette: amber, kind: .go,
+                        width: isNarrow ? 72 : 92, height: height) { pressGo() }
             if !isNarrow {
                 AmberKeyCap(symbol: "keyboard.chevron.compact.down",
-                            palette: amber, kind: .modifier, width: 60) { send(.hide) }
+                            palette: amber, kind: .modifier, width: 60, height: height) { send(.hide) }
             }
         }
+    }
+
+    // MARK: - Zhuyin
+
+    /// The Zhuyin board, in the standard Taiwanese order: the tones sit in the top row
+    /// where the number keys would be, and the last row ends in backspace.
+    private var zhuyinKeys: some View {
+        let h = Self.zhuyinKeyHeight
+        let w = zhuyinKeyWidth
+        return VStack(spacing: zhuyinRowGap) {
+            ForEach(Array(Self.zhuyinRows.enumerated()), id: \.offset) { index, row in
+                HStack(spacing: zhuyinGap) {
+                    ForEach(row, id: \.self) { symbol in
+                        AmberKeyCap(label: symbol, palette: amber, width: w, height: h) {
+                            typeZhuyin(symbol)
+                        }
+                    }
+                    if index == 3 {
+                        AmberKeyCap(symbol: "delete.left", palette: amber, kind: .modifier,
+                                    width: w, height: h, repeats: true) { pressBackspace() }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            bottomRow(height: h)
+        }
+    }
+
+    /// The way between the English board and the Zhuyin one: 中 to go to Chinese, 英 to
+    /// come back, as Taiwanese keyboards have always marked it.
+    private func languageKey(height: CGFloat) -> some View {
+        AmberKeyCap(label: usesZhuyin ? "英" : "中", palette: amber, kind: .modifier,
+                    width: isNarrow ? 40 : 52, height: height) {
+            commitComposition()
+            zhuyinOn.toggle()
+            plane = .letters
+            shifted = false
+            capsLocked = false
+        }
+        .accessibilityLabel(usesZhuyin ? Text("English") : Text("Zhuyin"))
+    }
+
+    /// The strip while Chinese is being composed: the likeliest sentence first, with the
+    /// syllable still being spelt after it, then the other ways to write the leading
+    /// syllables. Tapping one types it in.
+    private var compositionStrip: some View {
+        HStack(spacing: gap) {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 2) {
+                        if zhuyin.candidates.isEmpty {
+                            compositionCell(text: "", trailing: zhuyin.pending.text)
+                                .id(0)
+                        }
+                        ForEach(Array(zhuyin.candidates.prefix(60).enumerated()),
+                                id: \.offset) { index, candidate in
+                            Button { choose(candidate) } label: {
+                                if index == 0 {
+                                    compositionCell(text: candidate.value,
+                                                    trailing: zhuyin.pending.text)
+                                } else {
+                                    Text(candidate.value)
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(amber.inkStrong)
+                                        .padding(.horizontal, 10)
+                                        .frame(minWidth: 36)
+                                        .frame(height: 30)
+                                        .contentShape(Rectangle())
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .id(index)
+                        }
+                    }
+                }
+                .onChange(of: zhuyin.candidates) { _, _ in
+                    proxy.scrollTo(0, anchor: .leading)
+                }
+            }
+            if zhuyin.candidates.count > 1 {
+                Button { candidatesOpen.toggle() } label: {
+                    Image(systemName: candidatesOpen ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(amber.ink)
+                        .frame(width: 40, height: 30)
+                        .background { stripKeyFace }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(candidatesOpen ? Text("Fewer Candidates")
+                                                   : Text("More Candidates"))
+            }
+        }
+    }
+
+    /// The first cell: the sentence as it would be typed in, and after it, fainter, the
+    /// syllable that is not a syllable yet.
+    private func compositionCell(text: String, trailing: String) -> some View {
+        HStack(spacing: 1) {
+            Text(text).foregroundStyle(amber.inkStrong)
+            if !trailing.isEmpty {
+                Text(trailing).foregroundStyle(amber.inkMuted)
+            }
+        }
+        .font(.system(size: 18, weight: .medium))
+        .lineLimit(1)
+        .padding(.horizontal, 10)
+        .frame(minWidth: 36)
+        .frame(height: 30)
+        .background { stripKeyFace }
+    }
+
+    /// Every candidate, opened out over the keys, for the ones the strip has no room for.
+    private var candidateGrid: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            FlowRows(spacing: 6) {
+                ForEach(Array(zhuyin.candidates.enumerated()), id: \.offset) { index, candidate in
+                    Button { choose(candidate) } label: {
+                        Text(candidate.value)
+                            .font(.system(size: 20))
+                            .foregroundStyle(index == 0 ? amber.color(0.92) : amber.inkStrong)
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .frame(minWidth: 44, maxWidth: .infinity, minHeight: 42)
+                            .background {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(amber.color(index == 0 ? 0.30 : 0.90))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                            .strokeBorder(amber.color(0.66, opacity: 0.45),
+                                                          lineWidth: 1)
+                                    }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 1)
+        }
+        .frame(height: Self.keysHeight)
     }
 
     private func display(_ key: String) -> String {
@@ -527,20 +774,24 @@ struct AmberKeyCap: View {
     /// What a long press does, for keys with accents. The tap still happens on touch
     /// down; the hold comes after it.
     var hold: KeyHold?
+    var height: CGFloat = AmberKeyboard.keyHeight
     var action: () -> Void
 
     init(label: String, palette: AmberPalette, kind: Kind = .letter, width: CGFloat? = nil,
+         height: CGFloat = AmberKeyboard.keyHeight,
          isActive: Bool = false, repeats: Bool = false, hold: KeyHold? = nil,
          action: @escaping () -> Void) {
         self.label = label; self.symbol = nil; self.palette = palette; self.kind = kind
         self.width = width; self.isActive = isActive; self.repeats = repeats; self.hold = hold
-        self.action = action
+        self.height = height; self.action = action
     }
 
     init(symbol: String, palette: AmberPalette, kind: Kind = .letter, width: CGFloat? = nil,
+         height: CGFloat = AmberKeyboard.keyHeight,
          isActive: Bool = false, repeats: Bool = false, action: @escaping () -> Void) {
         self.label = nil; self.symbol = symbol; self.palette = palette; self.kind = kind
-        self.width = width; self.isActive = isActive; self.repeats = repeats; self.action = action
+        self.width = width; self.isActive = isActive; self.repeats = repeats
+        self.height = height; self.action = action
     }
 
     @State private var pressed = false
@@ -584,7 +835,7 @@ struct AmberKeyCap: View {
         }
         .frame(width: width)
         .frame(maxWidth: width == nil ? .infinity : nil)
-        .frame(height: AmberKeyboard.keyHeight)
+        .frame(height: height)
         .contentShape(Rectangle())
         .onGeometryChange(for: CGRect.self) {
             $0.frame(in: .named(AmberKeyboard.space))
@@ -642,6 +893,59 @@ struct AmberKeyCap: View {
     private func stopRepeating() {
         repeater?.invalidate()
         repeater = nil
+    }
+}
+
+/// Lays its children out like words in a paragraph: along a row until it is full, then
+/// on to the next. The candidate grid, where a phrase can be four characters wide.
+struct FlowRows: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        let rows = arrange(subviews, in: width)
+        let height = rows.last.map { $0.y + $0.height } ?? 0
+        return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews,
+                       cache: inout ()) {
+        let rows = arrange(subviews, in: bounds.width)
+        for (number, row) in rows.enumerated() {
+            // Every row but the last is stretched to the edge, the slack shared out among
+            // its cells, so the grid reads as a block rather than a ragged list.
+            let isLast = number == rows.count - 1
+            let slack = isLast ? 0 : max(0, bounds.width - row.width) / CGFloat(row.items.count)
+            var x = bounds.minX
+            for index in row.items {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                let width = size.width + slack
+                subviews[index].place(at: CGPoint(x: x, y: bounds.minY + row.y),
+                                      proposal: ProposedViewSize(width: width, height: size.height))
+                x += width + spacing
+            }
+        }
+    }
+
+    private struct Row { var items: [Int] = []; var y: CGFloat; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(_ subviews: Subviews, in width: CGFloat) -> [Row] {
+        var rows = [Row(y: 0)]
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            var row = rows[rows.count - 1]
+            let needed = row.items.isEmpty ? size.width : row.width + spacing + size.width
+            if needed > width, !row.items.isEmpty {
+                let y = row.y + row.height + spacing
+                rows.append(Row(y: y))
+                row = rows[rows.count - 1]
+            }
+            row.width = row.items.isEmpty ? size.width : row.width + spacing + size.width
+            row.height = max(row.height, size.height)
+            row.items.append(index)
+            rows[rows.count - 1] = row
+        }
+        return rows.filter { !$0.items.isEmpty }
     }
 }
 
