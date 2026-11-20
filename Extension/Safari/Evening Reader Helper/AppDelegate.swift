@@ -1,6 +1,6 @@
 //
 //  AppDelegate.swift
-//  Evening Reader Saver
+//  Evening Reader Helper
 //
 //  Created by Jonathan Bobrow on 11/2/26.
 //

@@ -173,7 +173,7 @@ enum LibraryDrop {
         do {
             try Data().write(to: probe)
         } catch {
-            throw Failure("Evening Reader Saver can't write to \(place(root))\(reason(error)), so nothing was saved.")
+            throw Failure("Evening Reader Helper can't write to \(place(root))\(reason(error)), so nothing was saved.")
         }
         try? FileManager.default.removeItem(at: probe)
     }
@@ -187,10 +187,10 @@ enum LibraryDrop {
         guard let found = store.load().first(where: { $0.id == article.id }),
               FileManager.default.fileExists(atPath: store.folder(for: found)
                 .appendingPathComponent("state.json").path) else {
-            throw Failure("Evening Reader Saver couldn't write this page to \(place(root)), so it wasn't saved.")
+            throw Failure("Evening Reader Helper couldn't write this page to \(place(root)), so it wasn't saved.")
         }
         if article.state == .ready, found.state != .ready {
-            throw Failure("Evening Reader Saver couldn't write all of this page to \(place(root)). Try saving it again.")
+            throw Failure("Evening Reader Helper couldn't write all of this page to \(place(root)). Try saving it again.")
         }
     }
 
@@ -235,7 +235,7 @@ enum LibraryDrop {
 
         let offline = await OfflineAssets.localize(html: capture.html, article: updated, store: store)
         guard store.writeBody(offline.html, for: updated) else {
-            throw Failure("Evening Reader Saver couldn't write this page to \(place(store.root)), so it wasn't saved.")
+            throw Failure("Evening Reader Helper couldn't write this page to \(place(store.root)), so it wasn't saved.")
         }
         updated.state = .ready
         // The record before the note: a note that reaches another device before its record

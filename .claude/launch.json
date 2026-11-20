@@ -21,7 +21,7 @@
         "http.server",
         "8766",
         "--directory",
-        "Extension/Safari/Evening Reader Saver/Resources"
+        "Extension/Safari/Evening Reader Helper/Resources"
       ],
       "port": 8766
     }

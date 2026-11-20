@@ -60,7 +60,7 @@ enum ChromeHosts {
         }
         guard let helper = Bundle.main.url(forAuxiliaryExecutable: "evening-reader-host"),
               FileManager.default.isExecutableFile(atPath: helper.path) else {
-            return .failed("The helper is missing from this copy of Evening Reader Saver.")
+            return .failed("The helper is missing from this copy of Evening Reader Helper.")
         }
 
         let manifest: [String: Any] = [

@@ -1,6 +1,6 @@
 #!/bin/zsh
 # For working on the extension. People who use it get the helper from the Mac app,
-# Evening Reader Saver, which registers its own copy when opened (see ChromeHosts.swift).
+# Evening Reader Helper, which registers its own copy when opened (see ChromeHosts.swift).
 #
 # Gets the Chrome extension ready to load: copies in the app's own extraction scripts,
 # builds the helper that writes into the Evening Reader library, and tells Chrome (and

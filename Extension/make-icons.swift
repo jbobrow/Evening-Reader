@@ -67,7 +67,7 @@ for size in [16, 32, 48] {
 write(render(size: 128, margin: 16, shadow: false), to: "web/icons/icon-128.png")
 
 // The Mac app that carries the Safari extension.
-let appIcons = "Safari/Evening Reader Saver/Assets.xcassets/AppIcon.appiconset"
+let appIcons = "Safari/Evening Reader Helper/Assets.xcassets/AppIcon.appiconset"
 for points in [16, 32, 128, 256, 512] {
     for scale in [1, 2] {
         let size = points * scale
@@ -77,4 +77,4 @@ for points in [16, 32, 128, 256, 512] {
 }
 // Shown in the app's window, beside the switch-it-on instructions.
 write(render(size: 256, margin: 256 * 100 / 1024, shadow: true),
-      to: "Safari/Evening Reader Saver/Resources/Icon.png")
+      to: "Safari/Evening Reader Helper/Resources/Icon.png")

@@ -17,7 +17,7 @@ const api = globalThis.browser ?? globalThis.chrome;
 // own handler.
 const HOST = "com.jonbobrow.eveningreader";
 
-// Where to get the helper: the Mac app, Evening Reader Saver, which sets Chrome up when
+// Where to get the helper: the Mac app, Evening Reader Helper, which sets Chrome up when
 // it's opened.
 const HELPER_PAGE = "https://eveningreader.jonbobrow.com/mac.html";
 
@@ -72,19 +72,19 @@ async function save(rawURL, title, tabId, fromPage) {
     reply = await api.runtime.sendNativeMessage(HOST, { action: "save", url, title: title || null, capture });
   } catch (error) {
     reply = missingHelper(error)
-      ? { ok: false, error: "Evening Reader Saver isn't set up on this Mac yet.", help: true }
+      ? { ok: false, error: "Evening Reader Helper isn't set up on this Mac yet.", help: true }
       : { ok: false, error: String(error?.message ?? error) };
   }
   clearTimeout(slow);
   if (reply?.ok) {
-    const headline = reply.status === "resaved" ? "Already saved — back in Unread" : "Saved to Evening Reader";
+    const headline = reply.status === "resaved" ? "Already saved — back in Unread" : "Saved";
     const note = reply.captured
       ? "Ready to read, offline too."
       : "Evening Reader will fetch it the next time it opens.";
     tell(tabId, "saved", headline, reply.title ?? url, note);
   } else {
     const help = reply?.help
-      ? { note: "Get it, open it once, then save again.", link: { label: "Get Evening Reader Saver", url: HELPER_PAGE } }
+      ? { note: "Get it, open it once, then save again.", link: { label: "Get Evening Reader Helper", url: HELPER_PAGE } }
       : {};
     tell(tabId, "failed", "Couldn't save this page", reply?.error ?? "Evening Reader didn't answer.", help.note, help.link);
   }
@@ -261,14 +261,15 @@ function badge(tabId, phase, title) {
   }, phase === "failed" ? 8000 : 2500);
 }
 
-// The share sheet's card, drawn into the page: the same amber, the same serif headline,
-// the title under it, and a word on what happens next. Runs in the page, so it has to stand entirely on its own — nothing
-// from this file is in scope there. In a shadow root, so the page's styles can't reach
-// it and its styles can't reach the page.
+// The card, drawn into the page in the website's look: paper and ink, the app's icon,
+// and the amber left to the icon. It follows the reader's light or dark setting, as the
+// site does with the lights on or off. Runs in the page, so it has to stand entirely on
+// its own — nothing from this file is in scope there. In a shadow root, so the page's
+// styles can't reach it and its styles can't reach the page.
 //
-// The colors are `AmberPalette` at the share card's settings (warmth 0.62, glow 0.85,
-// paper): the card at 0.88, its edge 0.62, the headline 0.02, the detail 0.34, the
-// note 0.52.
+// The colors are the site's (docs/assets/site.css): --card, --rule, --fg, --body,
+// --muted, lights on and off. The icon is drawn rather than loaded, so a page whose
+// security policy refuses outside pictures still shows it.
 function showCard(phase, headline, detail, note, link) {
   const id = "evening-reader-save-card";
   let host = document.getElementById(id);
@@ -280,61 +281,96 @@ function showCard(phase, headline, detail, note, link) {
     root.innerHTML = `
       <style>
         .card {
-          box-sizing: border-box;
-          display: flex; flex-direction: column; align-items: center; gap: 10px;
-          min-width: 260px; max-width: 320px; padding: 22px 26px 20px;
-          background: #d1985b; color: #000;
-          border: 1px solid #8f6233; border-radius: 22px;
-          box-shadow: 0 0 30px rgba(228, 168, 106, 0.5), 0 8px 24px rgba(16, 11, 5, 0.28);
-          text-align: center; cursor: default;
+          --card: #ffffff; --rim: #dedcd7; --ink: #16171b; --body: #4a4b51; --muted: #62636a;
+          --shadow: rgba(22, 23, 27, 0.45);
+          box-sizing: border-box; width: 320px; padding: 16px 18px;
+          display: flex; gap: 14px; align-items: flex-start;
+          background: var(--card); color: var(--ink); border-radius: 22px;
+          box-shadow: 0 0 0 1px var(--rim), 0 22px 44px -24px var(--shadow);
+          font-family: "Bricolage Grotesque", -apple-system, system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased; text-align: left; cursor: default;
           opacity: 0; transform: translateY(-8px) scale(0.98);
           transition: opacity 180ms ease-out, transform 220ms ease-out;
         }
+        @media (prefers-color-scheme: dark) {
+          .card {
+            --card: #19191c; --rim: rgba(255, 255, 255, 0.12); --ink: #edebe7; --body: #bdbbb6;
+            --muted: #a9a7a2; --shadow: rgba(0, 0, 0, 0.6);
+          }
+        }
         .card.shown { opacity: 1; transform: none; }
         @media (prefers-reduced-motion: reduce) { .card { transition: opacity 120ms linear; transform: none; } }
-        svg { width: 26px; height: 26px; color: #100b05; }
-        .headline { font: 500 17px/1.25 ui-serif, "New York", Georgia, serif; }
+        .icon { width: 36px; height: 36px; flex: none; display: block; }
+        .text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+        .headline {
+          display: flex; align-items: center; gap: 6px;
+          font-size: 16px; line-height: 1.25; font-weight: 700; letter-spacing: -0.01em;
+        }
+        .headline svg { width: 16px; height: 16px; flex: none; }
         .detail {
-          font: 12px/1.35 -apple-system, system-ui, sans-serif; color: #493017;
-          display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+          font-size: 14px; line-height: 1.35; color: var(--body); overflow-wrap: anywhere;
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
         }
-        .card.failed .detail { -webkit-line-clamp: 6; }
-        .note { font: 11px/1.35 -apple-system, system-ui, sans-serif; color: #754f28; margin-top: -4px; }
+        .card.working .detail { display: block; white-space: nowrap; text-overflow: ellipsis; }
+        .card.failed .detail { -webkit-line-clamp: 6; line-height: 1.4; }
+        .note { font-size: 13px; line-height: 1.35; color: var(--muted); }
         .detail:empty, .note:empty { display: none; }
-        .link {
-          font: 600 12px/1 -apple-system, system-ui, sans-serif; color: #100b05; text-decoration: none;
-          padding: 8px 14px; border-radius: 14px; border: 1px solid #8f6233; background: #e4a86a;
-          cursor: pointer;
+        .progress { display: none; margin-top: 8px; height: 3px; border-radius: 2px; background: var(--rim); overflow: hidden; }
+        .card.working .progress { display: block; }
+        .progress span {
+          display: block; width: 38%; height: 3px; border-radius: 2px; background: var(--ink);
+          animation: slide 1.3s ease-in-out infinite;
         }
-        .link:hover { background: #ebb67f; }
+        @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(265%); } }
+        @media (prefers-reduced-motion: reduce) { .progress span { animation: none; } }
+        .link {
+          margin-top: 10px; align-self: flex-start; display: inline-flex; align-items: center;
+          min-height: 36px; padding: 0 16px; border-radius: 18px;
+          background: var(--ink); color: var(--card);
+          font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer;
+        }
+        .link:hover { opacity: 0.8; }
+        .link:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
         .link[hidden] { display: none; }
-        .spin { animation: spin 1.1s linear infinite; transform-origin: 50% 50%; }
-        @keyframes spin { to { transform: rotate(360deg); } }
       </style>
       <div class="card" role="status" aria-live="polite">
-        <span class="icon"></span>
-        <div class="headline"></div>
-        <div class="detail"></div>
-        <div class="note"></div>
-        <a class="link" target="_blank" rel="noopener" hidden></a>
+        <svg class="icon" viewBox="0 0 36 36" aria-hidden="true">
+          <defs>
+            <radialGradient id="er-page" cx="50%" cy="45%" r="70%">
+              <stop offset="0" stop-color="#ffb866"/>
+              <stop offset="1" stop-color="#e98f2c"/>
+            </radialGradient>
+          </defs>
+          <rect width="36" height="36" rx="9" fill="#120d08"/>
+          <rect x="8.5" y="8.5" width="19" height="19" rx="2.5" fill="url(#er-page)"/>
+          <path d="M11.5 14h11M11.5 17.5h11M11.5 21h7" stroke="#2b1a0b" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <div class="text">
+          <div class="headline"></div>
+          <div class="detail"></div>
+          <div class="note"></div>
+          <div class="progress"><span></span></div>
+          <a class="link" target="_blank" rel="noopener" hidden></a>
+        </div>
       </div>`;
     (document.body ?? document.documentElement).appendChild(host);
-    host.addEventListener("click", () => host.remove());
+    host.addEventListener("click", (event) => {
+      // The button opens its page; anywhere else on the card puts it away.
+      if (!event.composedPath().some((node) => node.classList?.contains("link"))) host.remove();
+    });
   }
 
   const root = host.shadowRoot;
   const card = root.querySelector(".card");
-  const stroke = 'fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"';
-  root.querySelector(".icon").innerHTML = {
-    working: `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" ${stroke} opacity="0.25"/>
-              <path class="spin" d="M13 3a10 10 0 0 1 10 10" ${stroke}/></svg>`,
-    saved: `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" ${stroke}/>
-            <path d="M8.5 13.5l3 3 6-7" ${stroke}/></svg>`,
-    failed: `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" ${stroke}/>
-             <path d="M13 8v6.5M13 18v.01" ${stroke}/></svg>`,
-  }[phase];
+  card.classList.toggle("working", phase === "working");
   card.classList.toggle("failed", phase === "failed");
-  root.querySelector(".headline").textContent = headline;
+  const title = root.querySelector(".headline");
+  title.textContent = headline;
+  if (phase === "saved") {
+    title.insertAdjacentHTML("afterbegin",
+      `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>`);
+  }
   root.querySelector(".detail").textContent = detail ?? "";
   root.querySelector(".note").textContent = note ?? "";
   const action = root.querySelector(".link");
@@ -348,6 +384,6 @@ function showCard(phase, headline, detail, note, link) {
     host.dismissal = setTimeout(() => {
       card.classList.remove("shown");
       setTimeout(() => host.remove(), 250);
-    }, link ? 15000 : phase === "failed" ? 6000 : 3200);
+    }, link ? 15000 : phase === "failed" ? 8000 : 3200);
   }
 }

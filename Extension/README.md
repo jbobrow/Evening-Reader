@@ -13,7 +13,7 @@ web/                  the extension itself, shared by both browsers
 native/LibraryDrop.swift   stores what the extension read (both browsers use it)
 native/chrome-host/   Chrome's native messaging host
 native/install-chrome-host.sh   a developer's shortcut for the Chrome helper
-Safari/               the Mac app, Evening Reader Saver: the Safari extension and the Chrome helper
+Safari/               the Mac app, Evening Reader Helper: the Safari extension and the Chrome helper
 ```
 
 A browser extension can't write files outside its own sandbox, so each browser hands the article to a small native piece that writes the files. In Chrome that piece is a native messaging host. In Safari it's the extension's own handler, sandboxed, with access to the Evening Reader iCloud folder and to the network (for pictures), and nothing else.
@@ -24,14 +24,14 @@ For everyone else, the Chrome helper comes with the Mac app: the **Evening Reade
 
 While working on the extension:
 
-1. `Extension/native/install-chrome-host.sh`: copies the app's extraction scripts into `Extension/web`, builds an unsandboxed helper into `~/Library/Application Support/Evening Reader/`, and registers it with every Chromium browser it finds. Run it again after the app's extraction scripts, `Shared/` or `Extension/native` change, then reload the extension. Opening a build of Evening Reader Saver registers that build's helper instead; whichever ran last wins.
+1. `Extension/native/install-chrome-host.sh`: copies the app's extraction scripts into `Extension/web`, builds an unsandboxed helper into `~/Library/Application Support/Evening Reader/`, and registers it with every Chromium browser it finds. Run it again after the app's extraction scripts, `Shared/` or `Extension/native` change, then reload the extension. Opening a build of Evening Reader Helper registers that build's helper instead; whichever ran last wins.
 2. `chrome://extensions` → Developer mode → **Load unpacked** → choose `Extension/web`.
 
 The manifest's `key` fixes the unpacked extension's ID at `jchcaaglfjbkhenophbgnkopmdlibacd` wherever the folder is loaded from. The copy from the Chrome Web Store has the ID `dmlokfbnjmfbnabmieklfickbjihkcag`. The helper's `allowed_origins` lists both, so either copy can save.
 
 ## Safari
 
-1. Open `Safari/Evening Reader Saver.xcodeproj`, then build and run the **Evening Reader Saver** scheme. (You can also put the built app in `~/Applications` and open it once.) The project takes the extraction scripts and `Shared/` sources straight from the app, so rebuilding picks up any changes.
+1. Open `Safari/Evening Reader Helper.xcodeproj`, then build and run the **Evening Reader Helper** scheme. (You can also put the built app in `~/Applications` and open it once.) The project takes the extraction scripts and `Shared/` sources straight from the app, so rebuilding picks up any changes.
 2. Safari → Settings → Extensions → turn on **Save to Evening Reader**, and allow it on all websites so the button works on any page.
 
 If Safari doesn't list it, turn on Develop → Developer Settings → **Allow unsigned extensions**.

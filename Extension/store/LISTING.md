@@ -71,11 +71,11 @@ Screenshot 2 uses the reader screen from the website (`docs/assets/screens/phone
 
 ## Distribution
 
-The extension does nothing without the Mac helper, and the store can't install that. The helper comes inside the Mac app, Evening Reader Saver, which sets up every Chromium browser on the Mac when it's opened. Its download is on https://eveningreader.jonbobrow.com/mac.html, and the extension's "isn't set up" card links there. Publish as **Public** once that download is live (a notarized `Evening-Reader-Saver.zip` on the repository's latest GitHub release); until then, keep it **Unlisted**.
+The extension does nothing without the Mac helper, and the store can't install that. The helper comes inside the Mac app, Evening Reader Helper, which sets up every Chromium browser on the Mac when it's opened. Its download is on https://eveningreader.jonbobrow.com/mac.html, and the extension's "isn't set up" card links there. Publish as **Public** once that download is live (a notarized `Evening-Reader-Helper.zip` on the repository's latest GitHub release); until then, keep it **Unlisted**.
 
 **Test instructions** (for the reviewer):
 
-> This extension saves pages into the Evening Reader iOS app's iCloud library. It needs a Mac and a native messaging helper (com.jonbobrow.eveningreader). Without the helper, saving shows a card saying "Evening Reader Saver isn't set up on this Mac yet", with a link to where to get it. Every other part of the extension is still visible: the toolbar button, the right-click items, and the card it draws on the page.
+> This extension saves pages into the Evening Reader iOS app's iCloud library. It needs a Mac and a native messaging helper (com.jonbobrow.eveningreader). Without the helper, saving shows a card saying "Evening Reader Helper isn't set up on this Mac yet", with a link to where to get it. Every other part of the extension is still visible: the toolbar button, the right-click items, and the card it draws on the page.
 
 ## The store's ID
 
