@@ -43,3 +43,26 @@ body.state-off :is(.state-on, .state-unknown) {
 button {
     font-size: 1em;
 }
+
+section.chrome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(var(--spacing) / 2);
+    padding-top: var(--spacing);
+    border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+section.chrome[hidden] {
+    display: none;
+}
+
+section.chrome p {
+    margin: 0;
+}
+
+section.chrome:not([data-state="ready"]) :is(.chrome-ready, .open-chrome-store),
+section.chrome:not([data-state="move"]) .chrome-move,
+section.chrome:not([data-state="failed"]) .chrome-failed {
+    display: none;
+}

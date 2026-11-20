@@ -1,4 +1,7 @@
 #!/bin/zsh
+# For working on the extension. People who use it get the helper from the Mac app,
+# Evening Reader Saver, which registers its own copy when opened (see ChromeHosts.swift).
+#
 # Gets the Chrome extension ready to load: copies in the app's own extraction scripts,
 # builds the helper that writes into the Evening Reader library, and tells Chrome (and
 # any other Chromium browser installed) where to find it.
@@ -51,8 +54,9 @@ EOF
 )
 
 installed=()
-for browser in "Google/Chrome" "Google/Chrome Beta" "Google/Chrome Canary" "Chromium" \
-               "BraveSoftware/Brave-Browser" "Microsoft Edge" "Vivaldi"; do
+# The same browsers as ChromeHosts.browsers in the Mac app.
+for browser in "Google/Chrome" "Google/Chrome Beta" "Google/Chrome Dev" "Google/Chrome Canary" \
+               "Chromium" "BraveSoftware/Brave-Browser" "Microsoft Edge" "Vivaldi" "Arc/User Data"; do
     support="$HOME/Library/Application Support/$browser"
     [[ -d $support ]] || continue
     mkdir -p "$support/NativeMessagingHosts"

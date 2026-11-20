@@ -17,6 +17,10 @@ const api = globalThis.browser ?? globalThis.chrome;
 // own handler.
 const HOST = "com.jonbobrow.eveningreader";
 
+// Where to get the helper: the Mac app, Evening Reader Saver, which sets Chrome up when
+// it's opened.
+const HELPER_PAGE = "https://eveningreader.jonbobrow.com/mac.html";
+
 api.runtime.onInstalled.addListener(async () => {
   await api.contextMenus.removeAll();
   api.contextMenus.create({
@@ -67,7 +71,9 @@ async function save(rawURL, title, tabId, fromPage) {
   try {
     reply = await api.runtime.sendNativeMessage(HOST, { action: "save", url, title: title || null, capture });
   } catch (error) {
-    reply = { ok: false, error: explain(error) };
+    reply = missingHelper(error)
+      ? { ok: false, error: "Evening Reader Saver isn't set up on this Mac yet.", help: true }
+      : { ok: false, error: String(error?.message ?? error) };
   }
   clearTimeout(slow);
   if (reply?.ok) {
@@ -77,7 +83,10 @@ async function save(rawURL, title, tabId, fromPage) {
       : "Evening Reader will fetch it the next time it opens.";
     tell(tabId, "saved", headline, reply.title ?? url, note);
   } else {
-    tell(tabId, "failed", "Couldn't save this page", reply?.error ?? "Evening Reader didn't answer.");
+    const help = reply?.help
+      ? { note: "Get it, open it once, then save again.", link: { label: "Get Evening Reader Saver", url: HELPER_PAGE } }
+      : {};
+    tell(tabId, "failed", "Couldn't save this page", reply?.error ?? "Evening Reader didn't answer.", help.note, help.link);
   }
 }
 
@@ -210,12 +219,10 @@ function normalize(raw) {
   return url.href;
 }
 
-function explain(error) {
-  const message = String(error?.message ?? error);
-  if (/native messaging host not found|not found/i.test(message)) {
-    return "Evening Reader's helper isn't installed on this Mac, so the page can't be saved yet.";
-  }
-  return message;
+// Chrome's word for a host it has no manifest for, or whose manifest names a helper that
+// has gone: the app was never opened, or was moved or deleted after it was.
+function missingHelper(error) {
+  return /native messaging host not found|not found/i.test(String(error?.message ?? error));
 }
 
 // MARK: - Saying so
@@ -223,14 +230,14 @@ function explain(error) {
 // What happened, said twice: on the toolbar button, which works on any tab, and as a
 // card on the page itself, where there is one we are allowed to draw on — not on the
 // browser's own pages or the extension store, which is what the badge is for.
-async function tell(tabId, phase, headline, detail, note) {
+async function tell(tabId, phase, headline, detail, note, link) {
   badge(tabId, phase, detail ? `${headline}: ${detail}` : headline);
   if (tabId == null) return;
   try {
     await api.scripting.executeScript({
       target: { tabId },
       func: showCard,
-      args: [phase, headline, detail, note ?? null],
+      args: [phase, headline, detail, note ?? null, link ?? null],
     });
   } catch {
     // A page we can't reach. The badge has said it.
@@ -262,7 +269,7 @@ function badge(tabId, phase, title) {
 // The colors are `AmberPalette` at the share card's settings (warmth 0.62, glow 0.85,
 // paper): the card at 0.88, its edge 0.62, the headline 0.02, the detail 0.34, the
 // note 0.52.
-function showCard(phase, headline, detail, note) {
+function showCard(phase, headline, detail, note, link) {
   const id = "evening-reader-save-card";
   let host = document.getElementById(id);
   if (!host) {
@@ -293,6 +300,13 @@ function showCard(phase, headline, detail, note) {
         }
         .note { font: 11px/1.35 -apple-system, system-ui, sans-serif; color: #754f28; margin-top: -4px; }
         .detail:empty, .note:empty { display: none; }
+        .link {
+          font: 600 12px/1 -apple-system, system-ui, sans-serif; color: #100b05; text-decoration: none;
+          padding: 8px 14px; border-radius: 14px; border: 1px solid #8f6233; background: #e4a86a;
+          cursor: pointer;
+        }
+        .link:hover { background: #ebb67f; }
+        .link[hidden] { display: none; }
         .spin { animation: spin 1.1s linear infinite; transform-origin: 50% 50%; }
         @keyframes spin { to { transform: rotate(360deg); } }
       </style>
@@ -301,6 +315,7 @@ function showCard(phase, headline, detail, note) {
         <div class="headline"></div>
         <div class="detail"></div>
         <div class="note"></div>
+        <a class="link" target="_blank" rel="noopener" hidden></a>
       </div>`;
     (document.body ?? document.documentElement).appendChild(host);
     host.addEventListener("click", () => host.remove());
@@ -320,6 +335,10 @@ function showCard(phase, headline, detail, note) {
   root.querySelector(".headline").textContent = headline;
   root.querySelector(".detail").textContent = detail ?? "";
   root.querySelector(".note").textContent = note ?? "";
+  const action = root.querySelector(".link");
+  action.hidden = !link;
+  action.textContent = link?.label ?? "";
+  if (link) action.href = link.url; else action.removeAttribute("href");
   requestAnimationFrame(() => card.classList.add("shown"));
 
   clearTimeout(host.dismissal);
@@ -327,6 +346,6 @@ function showCard(phase, headline, detail, note) {
     host.dismissal = setTimeout(() => {
       card.classList.remove("shown");
       setTimeout(() => host.remove(), 250);
-    }, phase === "failed" ? 6000 : 3200);
+    }, link ? 15000 : phase === "failed" ? 6000 : 3200);
   }
 }

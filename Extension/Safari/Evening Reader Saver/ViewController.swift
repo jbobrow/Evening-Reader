@@ -26,6 +26,8 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        showChrome(in: webView)
+
         SFSafariExtensionManager.getStateOfSafariExtension(withIdentifier: extensionBundleIdentifier) { (state, error) in
             guard let state = state, error == nil else {
                 // Insert code to inform the user that something went wrong.
@@ -42,15 +44,39 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
         }
     }
 
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        if (message.body as! String != "open-preferences") {
-            return;
+    /// What opening the app did for Chrome, said under the Safari part.
+    private func showChrome(in webView: WKWebView) {
+        let state: String
+        var detail = ""
+        switch ChromeHosts.outcome {
+        case .registered(let names):
+            state = "ready"
+            detail = ListFormatter.localizedString(byJoining: names)
+        case .noBrowser:
+            state = "none"
+        case .notInPlace:
+            state = "move"
+        case .failed(let message):
+            state = "failed"
+            detail = message
         }
+        webView.callAsyncJavaScript("showChrome(state, detail)",
+                                    arguments: ["state": state, "detail": detail],
+                                    in: nil, in: .page, completionHandler: nil)
+    }
 
-        SFSafariApplication.showPreferencesForExtension(withIdentifier: extensionBundleIdentifier) { error in
-            DispatchQueue.main.async {
-                NSApplication.shared.terminate(nil)
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        switch message.body as? String {
+        case "open-preferences":
+            SFSafariApplication.showPreferencesForExtension(withIdentifier: extensionBundleIdentifier) { error in
+                DispatchQueue.main.async {
+                    NSApplication.shared.terminate(nil)
+                }
             }
+        case "open-chrome-store":
+            NSWorkspace.shared.open(ChromeHosts.storeURL)
+        default:
+            break
         }
     }
 

@@ -12,15 +12,19 @@ When there's nothing to capture (a link saved from the context menu, a browser p
 web/                  the extension itself, shared by both browsers
 native/LibraryDrop.swift   stores what the extension read (both browsers use it)
 native/chrome-host/   Chrome's native messaging host
-native/install-chrome-host.sh
-Safari/               the Mac app that carries the Safari extension
+native/install-chrome-host.sh   a developer's shortcut for the Chrome helper
+Safari/               the Mac app, Evening Reader Saver: the Safari extension and the Chrome helper
 ```
 
 A browser extension can't write files outside its own sandbox, so each browser hands the article to a small native piece that writes the files. In Chrome that piece is a native messaging host. In Safari it's the extension's own handler, sandboxed, with access to the Evening Reader iCloud folder and to the network (for pictures), and nothing else.
 
-## Chrome (and Brave, Edge, Vivaldi, Chromium)
+## Chrome (and Brave, Edge, Vivaldi, Arc, Chromium)
 
-1. `Extension/native/install-chrome-host.sh`: copies the app's extraction scripts into `Extension/web`, builds the helper into `~/Library/Application Support/Evening Reader/`, and registers it with every Chromium browser it finds. Run it again after the app's extraction scripts, `Shared/` or `Extension/native` change, then reload the extension.
+For everyone else, the Chrome helper comes with the Mac app: the **Evening Reader Host** target builds `evening-reader-host` and the app carries it in `Contents/MacOS`. Each time the app opens, `ChromeHosts` writes the host's manifest into the `NativeMessagingHosts` folder of every Chromium browser on the Mac, pointing at that copy. Opening the app again after moving it puts the path right. The app is sandboxed and `App.entitlements` lets it write only those folders; the helper is sandboxed too and `Host.entitlements` gives it the Evening Reader iCloud folder, with network access for pictures. If the app is opened from a disk image, or from Downloads before it's moved, it registers nothing and asks to be moved to Applications, because macOS runs it from a temporary location.
+
+While working on the extension:
+
+1. `Extension/native/install-chrome-host.sh`: copies the app's extraction scripts into `Extension/web`, builds an unsandboxed helper into `~/Library/Application Support/Evening Reader/`, and registers it with every Chromium browser it finds. Run it again after the app's extraction scripts, `Shared/` or `Extension/native` change, then reload the extension. Opening a build of Evening Reader Saver registers that build's helper instead; whichever ran last wins.
 2. `chrome://extensions` → Developer mode → **Load unpacked** → choose `Extension/web`.
 
 The manifest's `key` fixes the unpacked extension's ID at `jchcaaglfjbkhenophbgnkopmdlibacd` wherever the folder is loaded from. The copy from the Chrome Web Store has the ID `dmlokfbnjmfbnabmieklfickbjihkcag`. The helper's `allowed_origins` lists both, so either copy can save.
@@ -34,7 +38,7 @@ If Safari doesn't list it, turn on Develop → Developer Settings → **Allow un
 
 ## Trying the host without touching the library
 
-`EVENING_READER_LIBRARY=/some/folder` makes `LibraryDrop` write there instead of iCloud.
+`EVENING_READER_LIBRARY=/some/folder` makes `LibraryDrop` write there instead of iCloud. That works with the helper the script builds. The sandboxed helper inside the app can only write inside `~/Library/Mobile Documents/iCloud~com~jonbobrow~AmberGlow/`, so give it a folder there whose name ends in `.nosync`, which iCloud leaves alone.
 
 ## The Chrome Web Store
 

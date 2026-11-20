@@ -11,7 +11,9 @@ import Cocoa
 class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Override point for customization after application launch.
+        // Points every Chromium browser at the helper this app carries, so the Chrome
+        // extension works once the app has been opened.
+        _ = ChromeHosts.outcome
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Only the folder each Chromium browser reads its native messaging hosts from, never
+	     the browser's own data. Must match ChromeHosts.browsers. -->
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+	<array>
+		<string>/Library/Application Support/Google/Chrome/NativeMessagingHosts/</string>
+		<string>/Library/Application Support/Google/Chrome Beta/NativeMessagingHosts/</string>
+		<string>/Library/Application Support/Google/Chrome Dev/NativeMessagingHosts/</string>
+		<string>/Library/Application Support/Google/Chrome Canary/NativeMessagingHosts/</string>
+		<string>/Library/Application Support/Chromium/NativeMessagingHosts/</string>
+		<string>/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts/</string>
+		<string>/Library/Application Support/Microsoft Edge/NativeMessagingHosts/</string>
+		<string>/Library/Application Support/Vivaldi/NativeMessagingHosts/</string>
+		<string>/Library/Application Support/Arc/User Data/NativeMessagingHosts/</string>
+	</array>
+</dict>
+</plist>

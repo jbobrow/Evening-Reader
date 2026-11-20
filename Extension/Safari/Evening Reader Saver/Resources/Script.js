@@ -15,8 +15,24 @@ function show(enabled, useSettingsInsteadOfPreferences) {
     }
 }
 
+// What opening the app did for Chrome and the other Chromium browsers: "ready", with
+// their names; "move", when it was opened from somewhere it won't stay; "failed", with
+// why; or "none", when there's no such browser and nothing to say.
+function showChrome(state, detail) {
+    const section = document.querySelector("section.chrome");
+    section.hidden = state === "none";
+    section.dataset.state = state;
+    document.querySelector(".chrome-browsers").textContent = detail;
+    document.querySelector(".chrome-error").textContent = detail;
+}
+
 function openPreferences() {
     webkit.messageHandlers.controller.postMessage("open-preferences");
 }
 
+function openChromeStore() {
+    webkit.messageHandlers.controller.postMessage("open-chrome-store");
+}
+
 document.querySelector("button.open-preferences").addEventListener("click", openPreferences);
+document.querySelector("button.open-chrome-store").addEventListener("click", openChromeStore);
