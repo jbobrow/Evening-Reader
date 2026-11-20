@@ -10,6 +10,7 @@ When there's nothing to capture (a link saved from the context menu, a browser p
 
 ```
 web/                  the extension itself, shared by both browsers
+web/fonts/            Bricolage Grotesque, the website's typeface, for the card (SIL Open Font License)
 native/LibraryDrop.swift   stores what the extension read (both browsers use it)
 native/chrome-host/   Chrome's native messaging host
 native/install-chrome-host.sh   a developer's shortcut for the Chrome helper

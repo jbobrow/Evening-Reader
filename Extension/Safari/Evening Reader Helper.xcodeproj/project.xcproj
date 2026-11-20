@@ -66,6 +66,7 @@
           "children": [
             { "path": "../../web/background.js", "target-membership": [ "Evening Reader Helper Extension/resources" ] },
             { "path": "../../web/icons", "target-membership": [ "Evening Reader Helper Extension/resources" ] },
+            { "path": "../../web/fonts", "target-membership": [ "Evening Reader Helper Extension/resources" ] },
             { "path": "../../web/manifest.json", "target-membership": [ "Evening Reader Helper Extension/resources" ] },
             { "path": "../../../AmberGlow/Reader/Resources/extract.js", "target-membership": [ "Evening Reader Helper Extension/resources" ] },
             { "path": "../../../AmberGlow/Reader/Resources/defuddle.js", "target-membership": [ "Evening Reader Helper Extension/resources" ] },

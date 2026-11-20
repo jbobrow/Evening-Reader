@@ -17,6 +17,7 @@ trap 'rm -rf "$stage"' EXIT
 
 cp "$here/web/background.js" "$stage/"
 cp -R "$here/web/icons" "$stage/icons"
+cp -R "$here/web/fonts" "$stage/fonts"
 for script in extract.js defuddle.js defuddle-run.js defuddle-LICENSE.txt; do
     cp "$repo/AmberGlow/Reader/Resources/$script" "$stage/$script"
 done

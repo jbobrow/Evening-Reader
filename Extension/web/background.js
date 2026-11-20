@@ -234,14 +234,46 @@ async function tell(tabId, phase, headline, detail, note, link) {
   badge(tabId, phase, detail ? `${headline}: ${detail}` : headline);
   if (tabId == null) return;
   try {
+    // The site's typeface goes in with the first card on a page, and only then.
+    const [had] = await api.scripting.executeScript({
+      target: { tabId },
+      func: () => Boolean(globalThis.eveningReaderFont),
+    });
+    const fonts = had?.result ? null : await typeface();
     await api.scripting.executeScript({
       target: { tabId },
       func: showCard,
-      args: [phase, headline, detail, note ?? null, link ?? null],
+      args: [phase, headline, detail, note ?? null, link ?? null, fonts],
     });
   } catch {
     // A page we can't reach. The badge has said it.
   }
+}
+
+// Bricolage Grotesque, the website's typeface, from the extension's own files: the
+// Latin subsets Google Fonts serves, variable in weight and optical size. Handed to the
+// page as bytes rather than as an address, because many pages' security policies refuse
+// fonts from anywhere but their own site, and bytes aren't fetched from anywhere.
+const FONT_FILES = [
+  { file: "fonts/bricolage-latin.woff2",
+    range: "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD" },
+  { file: "fonts/bricolage-latin-ext.woff2",
+    range: "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF" },
+];
+let typefaceLoad;
+function typeface() {
+  typefaceLoad ??= Promise.all(FONT_FILES.map(async ({ file, range }) => {
+    const bytes = new Uint8Array(await (await fetch(api.runtime.getURL(file))).arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return { data: btoa(binary), range };
+  })).catch(() => {
+    typefaceLoad = null;  // Tried again next time; the card falls back to the system's.
+    return null;
+  });
+  return typefaceLoad;
 }
 
 function badge(tabId, phase, title) {
@@ -270,7 +302,20 @@ function badge(tabId, phase, title) {
 // The colors are the site's (docs/assets/site.css): --card, --rule, --fg, --body,
 // --muted, lights on and off. The icon is drawn rather than loaded, so a page whose
 // security policy refuses outside pictures still shows it.
-function showCard(phase, headline, detail, note, link) {
+function showCard(phase, headline, detail, note, link, fonts) {
+  // The typeface, once per page, under a name of its own so the page's text never picks
+  // it up. Faces added to the document reach into the shadow root; a face declared in it
+  // wouldn't.
+  if (fonts && !globalThis.eveningReaderFont) {
+    globalThis.eveningReaderFont = true;
+    for (const { data, range } of fonts) {
+      const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+      const face = new FontFace("Evening Reader Bricolage", bytes,
+                                { weight: "200 800", unicodeRange: range });
+      document.fonts.add(face);
+      face.load().catch(() => {});
+    }
+  }
   const id = "evening-reader-save-card";
   let host = document.getElementById(id);
   if (!host) {
@@ -287,7 +332,8 @@ function showCard(phase, headline, detail, note, link) {
           display: flex; gap: 14px; align-items: flex-start;
           background: var(--card); color: var(--ink); border-radius: 22px;
           box-shadow: 0 0 0 1px var(--rim), 0 22px 44px -24px var(--shadow);
-          font-family: "Bricolage Grotesque", -apple-system, system-ui, sans-serif;
+          font-family: "Evening Reader Bricolage", -apple-system, system-ui, sans-serif;
+          font-optical-sizing: auto;
           -webkit-font-smoothing: antialiased; text-align: left; cursor: default;
           opacity: 0; transform: translateY(-8px) scale(0.98);
           transition: opacity 180ms ease-out, transform 220ms ease-out;
