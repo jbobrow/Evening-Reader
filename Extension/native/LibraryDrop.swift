@@ -87,8 +87,8 @@ enum LibraryDrop {
     /// The library's folder: the container's `Documents`, where the app keeps it.
     ///
     /// From the real home rather than `NSHomeDirectory()`, which inside Safari's sandboxed
-    /// handler is the sandbox's own container. The handler is given this one folder by
-    /// entitlement; the Chrome host is not sandboxed at all.
+    /// handler is the sandbox's own container. Safari's handler and the Chrome helper the
+    /// Mac app carries are each given this one folder by entitlement.
     static func libraryRoot() throws -> URL {
         // A stand-in library, for trying the host out without touching the real one.
         if let override = ProcessInfo.processInfo.environment["EVENING_READER_LIBRARY"] {
@@ -110,7 +110,9 @@ enum LibraryDrop {
     }
 
     static func save(url: URL, title: String?, capture: Capture?) async throws -> Outcome {
-        let store = ArticleStore(libraryAt: try libraryRoot())
+        let root = try libraryRoot()
+        try checkWritable(root)
+        let store = ArticleStore(libraryAt: root)
 
         // A page saved again is the article already there, brought back — not a second
         // copy. The same as the share extension and the app's own Add Link do.
@@ -122,12 +124,14 @@ enum LibraryDrop {
             existing.readAt = nil
             var captured = false
             if existing.state != .ready, let capture {
-                captured = await fill(&existing, from: capture, in: store, renaming: true)
+                try await fill(&existing, from: capture, in: store, renaming: true)
+                captured = true
             }
             // Saved again after it could not be fetched is asked for again.
             if !captured, existing.state == .failed { existing.state = .pending }
             store.save(existing)
             await store.flush()
+            try confirm(existing, in: store, at: root)
             return .resaved(title: existing.displayTitle, captured: captured || existing.state == .ready)
         }
 
@@ -138,19 +142,86 @@ enum LibraryDrop {
         article.state = .pending
 
         var captured = false
-        if let capture {
-            captured = await fill(&article, from: capture, in: store, renaming: false)
+        do {
+            if let capture {
+                try await fill(&article, from: capture, in: store, renaming: false)
+                captured = true
+            }
+            if !captured { store.save(article) }
+            await store.flush()
+            try confirm(article, in: store, at: root)
+        } catch {
+            // Whatever of it did land would show in the app as an article that failed.
+            store.delete(article)
+            await store.flush()
+            throw error
         }
-        if !captured { store.save(article) }
-        await store.flush()
         return .saved(title: article.displayTitle, captured: captured)
     }
 
+    // MARK: - Making sure it's there
+
+    /// `ArticleStore` writes the way the app needs it to, quietly: a write that fails is
+    /// tried again by the next save, and there is always a next save. Here there isn't, and
+    /// the reader is told "Saved" and walks away, so what this side writes is checked.
+
+    /// Writes and removes a small file in the library first, so a folder this side may not
+    /// write to — a sandbox that wasn't given it, permissions, a full disk — says so before
+    /// anything is saved, and says why. Hidden and `.nosync`, so iCloud never carries it.
+    static func checkWritable(_ root: URL) throws {
+        let probe = root.appendingPathComponent(".evening-reader-write-check-\(UUID().uuidString).nosync")
+        do {
+            try Data().write(to: probe)
+        } catch {
+            throw Failure("Evening Reader Saver can't write to \(place(root))\(reason(error)), so nothing was saved.")
+        }
+        try? FileManager.default.removeItem(at: probe)
+    }
+
+    /// Reads the library back as the app would, and fails unless the article is in it —
+    /// and ready to read, when it was saved ready. Catches whatever the check before
+    /// couldn't: a note or record that didn't land, for any reason.
+    static func confirm(_ article: SavedArticle, in store: ArticleStore, at root: URL) throws {
+        // Its note and its record, `state.json` beside its body: the app reads a note
+        // without a record as an article that failed.
+        guard let found = store.load().first(where: { $0.id == article.id }),
+              FileManager.default.fileExists(atPath: store.folder(for: found)
+                .appendingPathComponent("state.json").path) else {
+            throw Failure("Evening Reader Saver couldn't write this page to \(place(root)), so it wasn't saved.")
+        }
+        if article.state == .ready, found.state != .ready {
+            throw Failure("Evening Reader Saver couldn't write all of this page to \(place(root)). Try saving it again.")
+        }
+    }
+
+    /// The library's folder as the reader knows it: where Finder shows it, or the stand-in's
+    /// path, with the home folder as `~`.
+    static func place(_ root: URL) -> String {
+        if root.lastPathComponent == "Documents",
+           root.deletingLastPathComponent().lastPathComponent == containerFolder {
+            return "iCloud Drive › Evening Reader"
+        }
+        let home = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) } ?? NSHomeDirectory()
+        return root.path.hasPrefix(home + "/") ? "~" + root.path.dropFirst(home.count) : root.path
+    }
+
+    /// The system's own words for why a write failed, " (Operation not permitted)", from
+    /// the error underneath Foundation's, which would name the check file instead.
+    private static func reason(_ error: Error) -> String {
+        let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
+        if let underlying, underlying.domain == NSPOSIXErrorDomain,
+           let code = POSIXErrorCode(rawValue: Int32(underlying.code)) {
+            return " (\(String(cString: strerror(code.rawValue))))"
+        }
+        return ""
+    }
+
     /// `Library.extract`, from the point it has the page: the article's details, its
-    /// pictures, its body, its record and its note, in that order. False when the body
-    /// could not be written, and the article is left to be fetched by the app instead.
+    /// pictures, its body, its record and its note, in that order. Throws when the body
+    /// can't be written: the reader is told, rather than handed a queued link instead of
+    /// the page they captured.
     private static func fill(_ article: inout SavedArticle, from capture: Capture,
-                             in store: ArticleStore, renaming: Bool) async -> Bool {
+                             in store: ArticleStore, renaming: Bool) async throws {
         var updated = article
         updated.title = capture.title.isEmpty ? updated.title : capture.title
         updated.byline = capture.byline.isEmpty ? nil : capture.byline
@@ -163,7 +234,9 @@ enum LibraryDrop {
         if renaming { await store.rename(updated) }
 
         let offline = await OfflineAssets.localize(html: capture.html, article: updated, store: store)
-        guard store.writeBody(offline.html, for: updated) else { return false }
+        guard store.writeBody(offline.html, for: updated) else {
+            throw Failure("Evening Reader Saver couldn't write this page to \(place(store.root)), so it wasn't saved.")
+        }
         updated.state = .ready
         // The record before the note: a note that reaches another device before its record
         // is read there as an article that failed, until the record lands.
@@ -173,6 +246,5 @@ enum LibraryDrop {
                                         assetsPath: store.assetsLinkPath(for: updated))
         await store.writeNote(updated, body: body)
         article = updated
-        return true
     }
 }

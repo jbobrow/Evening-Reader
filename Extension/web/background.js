@@ -298,6 +298,7 @@ function showCard(phase, headline, detail, note, link) {
           font: 12px/1.35 -apple-system, system-ui, sans-serif; color: #493017;
           display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
         }
+        .card.failed .detail { -webkit-line-clamp: 6; }
         .note { font: 11px/1.35 -apple-system, system-ui, sans-serif; color: #754f28; margin-top: -4px; }
         .detail:empty, .note:empty { display: none; }
         .link {
@@ -332,6 +333,7 @@ function showCard(phase, headline, detail, note, link) {
     failed: `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" ${stroke}/>
              <path d="M13 8v6.5M13 18v.01" ${stroke}/></svg>`,
   }[phase];
+  card.classList.toggle("failed", phase === "failed");
   root.querySelector(".headline").textContent = headline;
   root.querySelector(".detail").textContent = detail ?? "";
   root.querySelector(".note").textContent = note ?? "";
