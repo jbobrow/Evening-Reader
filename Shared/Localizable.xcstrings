@@ -917,6 +917,16 @@
         }
       }
     },
+    "In Traditional Chinese": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "繁體中文介面"
+          }
+        }
+      }
+    },
     "In the browser, the bar stays put on anything that isn't an article, and a site you keep as an app gets a single row with its name.": {
       "localizations": {
         "zh-Hant": {
@@ -2543,6 +2553,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "這段的背景是什麼？"
+          }
+        }
+      }
+    },
+    "When your iPhone reads in Traditional Chinese, so does Evening Reader: every menu, panel and page of it, the tour, and Save to Evening Reader in the share sheet. What you read stays in the language it was written in.": {
+      "localizations": {
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "當你的 iPhone 使用繁體中文時，Evening Reader 也會跟著改用繁體中文：每個選單、面板與頁面、導覽，以及分享表單中的「儲存到 Evening Reader」。你閱讀的內容則保留原本的語言。"
           }
         }
       }

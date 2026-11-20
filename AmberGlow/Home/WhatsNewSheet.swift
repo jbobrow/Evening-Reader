@@ -16,18 +16,24 @@ struct WhatsNew: Identifiable {
         var id: String { title }
     }
 
-    /// A version, or just its major and minor, so that a 1.2.1 still shows what 1.2
-    /// brought.
+    /// A version, or just its major and minor, so that a 1.2.2 with no entry of its own
+    /// still shows what 1.2 brought.
     let version: String
     /// Whether this release is the one that brought the tour, so the reader is offered it.
     var offersTour = false
-    let items: [Item]
+    var items: [Item]
 
     var id: String { version }
 
     /// Every version with something to show, newest first. A version with no entry shows
-    /// nothing.
+    /// nothing. A point release's entry carries the news of the earlier releases of its
+    /// minor version; see `gathered`.
     static let releases: [WhatsNew] = [
+        WhatsNew(version: "1.2.1", items: [
+            Item(symbol: "character.book.closed.zh",
+                 title: String(localized: "In Traditional Chinese"),
+                 body: String(localized: "When your iPhone reads in Traditional Chinese, so does Evening Reader: every menu, panel and page of it, the tour, and Save to Evening Reader in the share sheet. What you read stays in the language it was written in.")),
+        ]),
         WhatsNew(version: "1.2", items: [
             Item(symbol: "sun.max",
                  title: String(localized: "The glow, over the page"),
@@ -65,21 +71,45 @@ struct WhatsNew: Identifiable {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
     }
 
-    /// This version's entry, if it has one.
-    static var current: WhatsNew? {
+    private static var currentIndex: Int? {
         guard let currentVersion else { return nil }
-        return releases.first { currentVersion == $0.version || currentVersion.hasPrefix($0.version + ".") }
+        return releases.firstIndex { currentVersion == $0.version || currentVersion.hasPrefix($0.version + ".") }
     }
 
+    /// This version's entry, if it has one.
+    static var current: WhatsNew? { currentIndex.map { gathered(from: $0) } }
+
     /// The newest entry, for About.
-    static var latest: WhatsNew? { releases.first }
+    static var latest: WhatsNew? { releases.isEmpty ? nil : gathered(from: 0) }
 
     private static let shownKey = "whatsNew.lastShown"
 
-    /// This version's entry, if this device hasn't been shown it yet.
+    /// This version's entry, if this device hasn't been shown it yet — with only what is
+    /// new since the entry it was last shown.
     static var unseen: WhatsNew? {
-        guard let current, current.version != UserDefaults.standard.string(forKey: shownKey) else { return nil }
-        return current
+        let shown = UserDefaults.standard.string(forKey: shownKey)
+        guard let currentIndex, releases[currentIndex].version != shown else { return nil }
+        return gathered(from: currentIndex, after: shown)
+    }
+
+    /// The entry at `index`, followed by the news of the earlier releases of its minor
+    /// version, back to the one last `shown`. So 1.2.1 in About still has everything 1.2
+    /// brought, and so does 1.2.1 for someone updating straight from 1.1, while someone
+    /// who already read 1.2's news is told only what came after.
+    private static func gathered(from index: Int, after shown: String? = nil) -> WhatsNew {
+        var release = releases[index]
+        for earlier in releases.dropFirst(index + 1) {
+            guard minor(of: earlier.version) == minor(of: release.version),
+                  earlier.version != shown else { break }
+            release.items += earlier.items
+            release.offersTour = release.offersTour || earlier.offersTour
+        }
+        return release
+    }
+
+    /// A version's major and minor: 1.2 for 1.2.1.
+    private static func minor(of version: String) -> String {
+        version.split(separator: ".").prefix(2).joined(separator: ".")
     }
 
     /// Marks this version's entry as shown — when it is put up, so it never comes back
