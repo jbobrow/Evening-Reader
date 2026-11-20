@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Save to Evening Reader",
   "short_name": "Evening Reader",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Saves the page you're reading to your Evening Reader library in iCloud.",
   "homepage_url": "https://eveningreader.jonbobrow.com",
   "minimum_chrome_version": "116",

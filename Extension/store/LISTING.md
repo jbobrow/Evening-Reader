@@ -4,7 +4,7 @@ Everything the developer dashboard asks for, in the order it asks. The package c
 
 ## Package
 
-Upload `Extension/dist/save-to-evening-reader-1.0.zip`.
+Upload `Extension/dist/save-to-evening-reader-<version>.zip`, the version in `Extension/web/manifest.json` (1.1 now; the store refuses a version it already has).
 
 ## Store listing
 
@@ -24,7 +24,7 @@ Upload `Extension/dist/save-to-evening-reader-1.0.zip`.
 >
 > Your library is plain files in your own iCloud Drive: a Markdown note for each article and a folder of its pictures. Nothing you save is sent to us or to anyone else.
 >
-> Requires a Mac, Evening Reader on your iPhone or iPad with iCloud Drive turned on, and Evening Reader's helper for the Mac.
+> Requires a Mac, Evening Reader on your iPhone or iPad with iCloud Drive turned on, and Evening Reader Helper, the free Mac app that writes into your library: https://eveningreader.jonbobrow.com/mac.html. Download it, open it once, and the extension works in Chrome, Brave, Edge, Vivaldi and Arc.
 
 **Category:** Productivity › Tools
 
@@ -57,7 +57,7 @@ Screenshot 2 uses the reader screen from the website (`docs/assets/screens/phone
 - **activeTab:** The extension reads only the tab the user is on, and only when the user saves it: by clicking the toolbar button, using the keyboard shortcut or choosing Save Page from the context menu. It has no host permissions and never reads a page on its own.
 - **scripting:** When the user saves a page, the extension runs Evening Reader's article extraction in that tab to read out the article's text, title, author, date and pictures. It also shows a small card on the page saying the article was saved.
 - **contextMenus:** Adds "Save Page to Evening Reader" and "Save Link to Evening Reader" to the right-click menu.
-- **nativeMessaging:** Hands the saved article to Evening Reader's helper on the user's Mac. The helper writes it into the user's Evening Reader library in their own iCloud Drive; a browser extension can't write files there itself.
+- **nativeMessaging:** Hands the saved article to Evening Reader Helper, the app on the user's Mac. It writes it into the user's Evening Reader library in their own iCloud Drive; a browser extension can't write files there itself.
 
 **Remote code:** No, I am not using remote code. Every script is in the package. `defuddle.js` is the MIT-licensed Defuddle library (its license is included), minified but not obfuscated.
 
@@ -71,11 +71,11 @@ Screenshot 2 uses the reader screen from the website (`docs/assets/screens/phone
 
 ## Distribution
 
-The extension does nothing without the Mac helper, and the store can't install that. The helper comes inside the Mac app, Evening Reader Helper, which sets up every Chromium browser on the Mac when it's opened. Its download is on https://eveningreader.jonbobrow.com/mac.html, and the extension's "isn't set up" card links there. Publish as **Public** once that download is live (a notarized `Evening-Reader-Helper.zip` on the repository's latest GitHub release); until then, keep it **Unlisted**.
+The extension does nothing without the Mac helper, and the store can't install that. The helper comes inside the Mac app, Evening Reader Helper, which sets up every Chromium browser on the Mac when it's opened. Its download is on https://eveningreader.jonbobrow.com/mac.html, and the extension's "isn't set up" card links there. That download is live (GitHub release `helper-1.0`, notarized), so the listing can be **Public**.
 
 **Test instructions** (for the reviewer):
 
-> This extension saves pages into the Evening Reader iOS app's iCloud library. It needs a Mac and a native messaging helper (com.jonbobrow.eveningreader). Without the helper, saving shows a card saying "Evening Reader Helper isn't set up on this Mac yet", with a link to where to get it. Every other part of the extension is still visible: the toolbar button, the right-click items, and the card it draws on the page.
+> This extension saves pages into the Evening Reader iOS app's iCloud library. It needs a Mac and the Evening Reader Helper app (https://eveningreader.jonbobrow.com/mac.html), which installs the native messaging host com.jonbobrow.eveningreader when opened. Without the helper, saving shows a card saying "Evening Reader Helper isn't set up on this Mac yet", with a link to where to get it. Every other part of the extension is still visible: the toolbar button, the right-click items, and the card it draws on the page.
 
 ## The store's ID
 
